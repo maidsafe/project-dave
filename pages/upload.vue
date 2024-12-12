@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { usePrimeVue } from "primevue/config";
 import { useToast } from "primevue/usetoast";
-import { getCurrentDateTimeString } from "public/scripts/utils";
+import { getCurrentDateTimeString } from "~/utils/date";
 
 const $primevue = usePrimeVue();
 const toast = useToast();

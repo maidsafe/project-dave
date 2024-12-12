@@ -25,7 +25,7 @@ const isHamburgerMenuOpen = ref(false);
 
 // Methods
 const handleClickWallet = () => {
-  if (wallet.value.connected) {
+  if (wallet.value.isConnected) {
     // handleDisconnectWallet();
     walletStore.showDisconnectWallet();
   } else {
@@ -34,7 +34,7 @@ const handleClickWallet = () => {
 };
 
 const toggleTokenDropdown = () => {
-  if (!wallet.value.connected) {
+  if (!wallet.value.isConnected) {
     return walletStore.showConnectWallet();
   }
   // Hide hamburger if open
@@ -45,7 +45,7 @@ const toggleTokenDropdown = () => {
 };
 
 const toggleHamburgerMenu = () => {
-  if (!wallet.value.connected) {
+  if (!wallet.value.isConnected) {
     return walletStore.showConnectWallet();
   }
 
@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
         <!-- SEARCH -->
         <div
           :class="`ml-[116px] mr-10 max-w-[672px] transition-all duration-1000 overflow-hidden hidden lg:block ${
-            wallet.connected ? 'w-full' : 'w-0'
+            wallet.isConnected ? 'w-full' : 'w-0'
           }`"
         >
           <IconField v-if="searching">
@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-3">
             <div
               v-tooltip.bottom="
-                wallet.connected ? 'Disconnect Wallet' : 'Connect Wallet'
+                wallet.isConnected ? 'Disconnect Wallet' : 'Connect Wallet'
               "
               class="w-10 h-10 rounded-full bg-autonomi-blue-800 flex items-center justify-center cursor-pointer"
               @click="handleClickWallet"
@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
             <template v-if="address">
               <div
                 :class="`${
-                  wallet.connected ? 'w-[150px]' : 'w-0'
+                  wallet.isConnected ? 'w-[150px]' : 'w-0'
                 } transition-all duration-500 overflow-hidden whitespace-nowrap`"
               >
                 <div class="text-sm font-semibold text-autonomi-text-secondary">
@@ -160,16 +160,6 @@ onBeforeUnmount(() => {
               </div>
             </template>
           </div>
-          <!--          <div class="flex items-center gap-4">-->
-          <!--            <div>-->
-          <!--              <NuxtLink-->
-          <!--                to="/settings"-->
-          <!--                class="flex items-center justify-center w-10 h-10 bg-white rounded-full"-->
-          <!--              >-->
-          <!--                <i class="pi pi-cog text-autonomi-gray-600" />-->
-          <!--              </NuxtLink>-->
-          <!--            </div>-->
-          <!--          </div>-->
         </div>
 
         <!-- MOBILE SETTINGS / DETAILS -->
@@ -195,8 +185,8 @@ onBeforeUnmount(() => {
               :class="{
                 'h-0': !isTokenDropdownOpen,
                 'h-[100px]': isTokenDropdownOpen,
-                'top-[150px]': wallet.connected,
-                'top-[68px]': !wallet.connected,
+                'top-[150px]': wallet.isConnected,
+                'top-[68px]': !wallet.isConnected,
               }"
             >
               <div
@@ -237,8 +227,8 @@ onBeforeUnmount(() => {
               :class="{
                 'h-0': !isHamburgerMenuOpen,
                 'h-[300px]': isHamburgerMenuOpen,
-                'top-[150px]': wallet.connected,
-                'top-[68px]': !wallet.connected,
+                'top-[150px]': wallet.isConnected,
+                'top-[68px]': !wallet.isConnected,
               }"
             >
               <div
@@ -294,13 +284,13 @@ onBeforeUnmount(() => {
       <!-- MOBILE SEARCH -->
       <div
         :class="`px-[30px] lg:px-[62px] ${
-          wallet.connected ? 'w-full' : 'hidden'
+          wallet.isConnected ? 'w-full' : 'hidden'
         } lg:hidden`"
       >
         <!-- SEARCH -->
         <div
           :class="`py-3 max-w-[672px] transition-all duration-1000 overflow-hidden mx-auto ${
-            wallet.connected ? 'w-full' : 'hidden'
+            wallet.isConnected ? 'w-full' : 'hidden'
           }`"
         >
           <IconField v-if="searching">

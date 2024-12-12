@@ -61,7 +61,7 @@ const handleDisconnectWallet = async () => {
         <IconLogo :dark="true" />
 
         <div
-          v-if="pendingDisconnectWallet || !wallet.connected"
+          v-if="pendingDisconnectWallet || !wallet.isConnected"
           class="flex items-center justify-center gap-4 text-autonomi-text-primary"
         >
           <i class="pi pi-spin pi-spinner text-autonomi-red-300" />
