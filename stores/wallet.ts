@@ -1,14 +1,34 @@
-// import { useAccount, useConnect, useDisconnect } from "@wagmi/vue";
-// import { injected } from "@wagmi/connectors";
-import type { Wallet } from "~/types/wallet";
+import { createAppKit } from "@reown/appkit/vue";
+import { arbitrum, mainnet, type AppKitNetwork } from "@reown/appkit/networks";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { useAppKitAccount, useAppKit, useDisconnect } from "@reown/appkit/vue";
+
+const projectId = "c57e0bb001a4dc96b54b9ced656a3cb8";
+
+const metadata = {
+  name: "maidsafe_ike_test",
+  description: "AppKit Example",
+  url: "https://reown.com/appkit", // origin must match your domain & subdomain
+  icons: ["https://assets.reown.com/reown-profile-pic.png"],
+};
+
+const networks: [AppKitNetwork, ...AppKitNetwork[]] = [mainnet];
+
+const wagmiAdapter = new WagmiAdapter({
+  networks,
+  projectId,
+});
+
+const modal = createAppKit({
+  adapters: [wagmiAdapter],
+  networks,
+  projectId,
+  metadata,
+  features: {},
+});
 
 export const useWalletStore = defineStore("wallet", () => {
   // State
-  const wallet = ref<Wallet>({
-    balance: 0,
-    connected: false,
-  });
-
   const pendingConnectWallet = ref(false);
   const pendingDisconnectWallet = ref(false);
   const openConnectWallet = ref(false);
@@ -16,35 +36,30 @@ export const useWalletStore = defineStore("wallet", () => {
   const callbackConnectWallet = ref<Function | null>(null);
   const callbackDisconnectWallet = ref<Function | null>(null);
 
-  // const { connect } = useConnect();
-  // const { disconnect } = useDisconnect();
-  // const { address, isConnected } = useAccount();
-
-  const connect: any = {};
-  const disconnect: any = {};
-  const address: any = ref({});
-  const isConnected = ref(false);
+  const wallet = ref(useAppKitAccount());
+  const { open, close } = useAppKit();
+  const { disconnect } = useDisconnect();
 
   // Actions
   const tryConnectWallet = async () => {
-    if (isConnected.value && address.value) {
-      wallet.value.connected = true;
-    }
+    console.log(">>> RUNNING tryConnectWallet, remove or update me");
   };
 
   const connectWallet = async () => {
     try {
       pendingConnectWallet.value = true;
 
-      await connect({ connector: injected() });
+      const connectResponse = await open();
 
-      wallet.value.connected = true;
+      console.log(">>> Connect response: ", connectResponse);
 
       // Trigger callback if it exists
+      // TODO: Update this callback functionality, do we even need it?
       if (callbackConnectWallet.value) {
         callbackConnectWallet.value();
       }
 
+      // TODO: Fix how to handle a response using appKit
       return {
         success: true,
       };
@@ -63,8 +78,6 @@ export const useWalletStore = defineStore("wallet", () => {
       pendingDisconnectWallet.value = true;
 
       await disconnect();
-
-      wallet.value.connected = false;
 
       console.log("Disconnected wallet");
 
@@ -113,8 +126,6 @@ export const useWalletStore = defineStore("wallet", () => {
     openConnectWallet,
     openDisconnectWallet,
     wallet,
-    address,
-    isConnected,
     // Actions
     tryConnectWallet,
     connectWallet,

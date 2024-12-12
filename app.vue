@@ -4,15 +4,13 @@ const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start te
 // import { useWalletStore } from "~/stores/wallet";
 
 // State
-// const walletStore = useWalletStore();
+const walletStore = useWalletStore();
 // const autonomi = useAutonomiStore();
-// const { openConnectWallet, openDisconnectWallet, wallet } =
-// storeToRefs(walletStore);
+const { openConnectWallet, openDisconnectWallet, wallet } =
+  storeToRefs(walletStore);
 
 const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
-
-const walletStore = ref<any>({}); // TODO: Remove me
 
 // Computed
 
@@ -118,15 +116,15 @@ onMounted(async () => {
           <Toast position="bottom-right" />
         </div>
 
-        <!-- <DialogConnectWallet
+        <DialogConnectWallet
           :visible="openConnectWallet"
           @close-login="walletStore.hideConnectWallet"
-        /> -->
+        />
 
-        <!-- <DialogDisconnectWallet
+        <DialogDisconnectWallet
           :visible="openDisconnectWallet"
           @close-disconnect-wallet="walletStore.hideDisconnectWallet"
-        /> -->
+        />
       </div>
     </NuxtLayout>
   </div>
