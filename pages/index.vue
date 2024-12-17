@@ -26,14 +26,12 @@ const handleGetStarted = () => {
 </script>
 
 <template>
-  <div>
+  <div class="min-h-screen bg-white dark:bg-gray-900 text-black dark:text-white">
     <div class="px-[66px] lg:px-[110px] pt-[70px]" v-if="!wallet.isConnected">
-      <h1
-        class="text-4xl font-semibold leading-[54px] text-autonomi-header-text"
-      >
+      <h1 class="text-4xl font-semibold leading-[54px] text-autonomi-header-text dark:text-white">
         Welcome to Autonomi
       </h1>
-      <p class="mt-4 text-autonomi-text-primary">
+      <p class="mt-4 text-autonomi-text-primary dark:text-gray-300">
         Welcome to the Autonomi vault. This is a secure private data store
         linked to your wallet, accessible from anywhere. You will need to link a
         wallet in order to pay for the upload and gas fees. Once you have linked
@@ -42,7 +40,7 @@ const handleGetStarted = () => {
         below.
       </p>
 
-      <div v-if="!wallet.connected">
+      <div v-if="!wallet.isConnected">
         <CommonButton
           variant="secondary"
           size="medium"
