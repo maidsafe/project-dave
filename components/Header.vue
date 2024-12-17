@@ -89,7 +89,7 @@ onBeforeUnmount(() => {
       class="sticky top-0 min-h-[68px] lg:min-h-[110px] bg-autonomi-gray-50 dark:bg-autonomi-blue-600 transition-all duration-300"
     >
       <div
-        class="flex items-center px-4 lg:px-[62px] h-[68px] lg:h-[110px] bg-white lg:bg-autonomi-gray-50 lg:dark:bg-autonomi-blue-600 rounded-b-2xl"
+        class="flex items-center px-4 lg:px-[62px] h-[68px] lg:h-[110px] bg-white dark:bg-gray-900 lg:bg-autonomi-gray-50 lg:dark:bg-autonomi-blue-600 rounded-b-2xl"
       >
         <div class="flex gap-2 cursor-pointer" @click="navigateTo('/')">
           <IconLogo :dark="false" />
@@ -112,11 +112,11 @@ onBeforeUnmount(() => {
             />
           </IconField>
           <IconField v-else>
-            <InputIcon class="pi pi-search" />
+            <InputIcon class="pi pi-search dark:text-white" />
             <InputText
               v-model="userStore.query"
               placeholder="Search"
-              class="w-full leading-[34px] !rounded-3xl"
+              class="w-full leading-[34px] !rounded-3xl dark:bg-gray-800 dark:text-white dark:placeholder-gray-400"
             />
           </IconField>
         </div>
