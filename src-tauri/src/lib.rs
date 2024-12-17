@@ -1,4 +1,4 @@
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use crate::ant::files::File;
 use crate::ant::payments::PaymentOrderManager;
 
@@ -11,8 +11,9 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn upload_files(app: AppHandle, files: Vec<File>) {
-    ant::files::upload_files(files, "archive_name").await
+async fn upload_files(app: AppHandle, files: Vec<File>, payment_orders: State<'_, PaymentOrderManager>) -> Result<(), ()> {
+    ant::files::upload_files(app, files, "archive_name", payment_orders).await;
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
