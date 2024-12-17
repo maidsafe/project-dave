@@ -1,7 +1,7 @@
-use std::collections::{HashMap};
-use std::sync::{Mutex};
 use autonomi::{Amount, QuoteHash, RewardsAddress};
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use tauri::async_runtime::{channel, Receiver, Sender};
 
 pub type OrderID = String;
@@ -12,7 +12,7 @@ pub struct PaymentOrder {
     pub id: OrderID,
     payments: Vec<Payment>,
     #[serde(skip)]
-    confirmation_sender: Sender<bool>
+    confirmation_sender: Sender<bool>,
 }
 
 impl PaymentOrder {

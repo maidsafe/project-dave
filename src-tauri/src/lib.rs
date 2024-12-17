@@ -1,6 +1,6 @@
-use tauri::{AppHandle, State};
 use crate::ant::files::File;
 use crate::ant::payments::PaymentOrderManager;
+use tauri::{AppHandle, State};
 
 mod ant;
 
@@ -11,7 +11,11 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn upload_files(app: AppHandle, files: Vec<File>, payment_orders: State<'_, PaymentOrderManager>) -> Result<(), ()> {
+async fn upload_files(
+    app: AppHandle,
+    files: Vec<File>,
+    payment_orders: State<'_, PaymentOrderManager>,
+) -> Result<(), ()> {
     ant::files::upload_files(app, files, "archive_name", payment_orders).await;
     Ok(())
 }
