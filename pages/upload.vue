@@ -3,6 +3,10 @@ import { usePrimeVue } from "primevue/config";
 import { useToast } from "primevue/usetoast";
 import { getCurrentDateTimeString } from "~/utils/date";
 
+import { invoke } from "@tauri-apps/api/core";
+import { open } from '@tauri-apps/plugin-dialog';
+import { basename } from '@tauri-apps/api/path';
+
 const $primevue = usePrimeVue();
 const toast = useToast();
 // const autonomi = useAutonomiStore();
@@ -246,6 +250,25 @@ const quoteBreakdownData = computed(() => {
 
   return { freeChunks, chunksAmount, totalPrice, avgChunkPrice };
 });
+
+const openPickerAndUploadFiles = async () => {
+  // Open the file picker.
+  let selected = await open({ multiple: true });
+
+  // User did not select any files in the dialog.
+  if (selected === null) {
+    return;
+  }
+
+  // User might have selected a single file, turn into one-element array.
+  if (!Array.isArray(selected)) {
+    selected = [selected];
+  }
+
+  // Turn into `File` objects, giving the file the name of the filename in the path.
+  const files = await Promise.all(selected.map(async (file) => { return { path: file, name: await basename(file) }; }));
+  await invoke("upload_files", { files });
+};
 </script>
 
 <template>
