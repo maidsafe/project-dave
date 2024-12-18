@@ -1,5 +1,7 @@
 <script lang="ts" setup>
 import { useToast } from "primevue/usetoast";
+import { invoke } from "@tauri-apps/api/core";
+import { onMounted } from "vue";
 type SettingsView = "network-settings" | "receiver-settings" | "syslog" | "other-settings";
 const refSyslogMenu = ref();
 const selectedSyslog = ref<any>(null); // TODO: Replace with actual type
@@ -178,6 +180,18 @@ const handleUpdateEventCollector = () => {
 
   // isEditEventCollector.value = false;
 };
+
+const downloadPath = ref("");
+const bootstrapPeers = ref("");
+const name = ref("");
+async function loadSettings() {
+  let settings = await invoke("settings");
+  downloadPath.value = settings.download_path;
+  bootstrapPeers.value = settings.peers;
+}
+onMounted(async () => {
+  await loadSettings()
+})
 </script>
 
 <template>
@@ -203,8 +217,18 @@ const handleUpdateEventCollector = () => {
           <div class="flex justify-between items-center gap-10">
             <div>
               <h3 class="text-2xl text-autonomi-header-text-dark font-semibold">
-                Bootstrap Peer
+                Bootstrap Peers
               </h3>
+              separated by comma <hr>
+              <Textarea v-model="bootstrapPeers" />
+              <h3 class="text-2xl text-autonomi-header-text-dark font-semibold">
+                Download folder
+              </h3>
+              <InputText
+              v-model="downloadPath"
+                class="font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
+                placeholder="Download folder"
+              />
             </div>
           </div>
         </div>

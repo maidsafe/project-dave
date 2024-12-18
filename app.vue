@@ -99,12 +99,12 @@ onMounted(async () => {
             <NuxtLink :class="`${classesLinks}`" to="/wallet">
               <IconWallet class="w-6 h-6" />
               Wallet
-            </NuxtLink>
+            </NuxtLink> -->
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
               <IconSettings class="w-6 h-6" />
               Settings
-            </NuxtLink> -->
+            </NuxtLink>
           </div>
         </div>
 

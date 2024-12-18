@@ -3,18 +3,54 @@ use std::path::PathBuf;
 use crate::ant::files::File;
 use crate::ant::payments::PaymentOrderManager;
 use ant::files::FileFromVault;
-use autonomi::client::{
-    data::{DataAddr, DataMapChunk},
-    vault::VaultSecretKey,
+use autonomi::{
+    client::{
+        data::{DataAddr, DataMapChunk},
+        vault::VaultSecretKey,
+    },
+    Multiaddr,
 };
-use tauri::{AppHandle, State};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager as _, State};
+use tokio::sync::Mutex;
 
 mod ant;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+#[derive(Default, Serialize, Deserialize)]
+pub struct AppStateInner {
+    pub(crate) settings: Settings,
+}
+type AppState = Mutex<AppStateInner>;
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Settings {
+    pub download_path: Option<PathBuf>,
+    pub peers: Option<Vec<Multiaddr>>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            download_path: dirs_next::download_dir(),
+            peers: None,
+        }
+    }
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+async fn settings(state: State<'_, AppState>) -> Result<Settings, ()> {
+    let state = state.lock().await;
+
+    Ok(state.settings.clone())
+}
+
+#[tauri::command]
+async fn settings_set(state: State<'_, AppState>, settings: Settings) -> Result<(), ()> {
+    let mut state = state.lock().await;
+
+    state.settings = settings;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -52,11 +88,13 @@ async fn download_public_file(addr: DataAddr, to_dest: PathBuf) -> Result<(), ()
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(AppState::default())
         .manage(PaymentOrderManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
+            settings,
+            settings_set,
             upload_files,
             get_files_from_vault,
             download_private_file,
