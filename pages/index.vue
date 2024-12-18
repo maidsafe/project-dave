@@ -1,13 +1,16 @@
 <script lang="ts" setup>
-import { ref } from "vue";
-import { useToast } from "primevue/usetoast";
-import { useWalletStore } from "~/stores/wallet";
-import { storeToRefs } from "pinia";
+import {ref} from "vue";
+import {useToast} from "primevue/usetoast";
+import {useWalletStore} from "~/stores/wallet";
+import {storeToRefs} from "pinia";
+import {invoke} from '@tauri-apps/api/core';
+import {listen} from '@tauri-apps/api/event';
+import {message} from '@tauri-apps/plugin-dialog';
 
 useHeadSafe({
-  script: [{ id: "xss-script", innerHTML: 'alert("xss")' }],
+  script: [{id: "xss-script", innerHTML: 'alert("xss")'}],
   title: "Autonomi",
-  meta: [{ "http-equiv": "refresh", content: "0;javascript:alert(1)" }],
+  meta: [{"http-equiv": "refresh", content: "0;javascript:alert(1)"}],
 });
 
 // Emits
@@ -18,18 +21,22 @@ const toast = useToast();
 
 // State
 const walletStore = useWalletStore();
-const { wallet } = storeToRefs(walletStore);
+const {wallet} = storeToRefs(walletStore);
 
 const handleGetStarted = () => {
   emit("open-login");
 };
+
+listen("payment-order", async (event: any) => {
+  await message(event, {title: 'Tauri', kind: 'error'});
+});
 </script>
 
 <template>
   <div>
     <div class="px-[66px] lg:px-[110px] pt-[70px]" v-if="!wallet.isConnected">
       <h1
-        class="text-4xl font-semibold leading-[54px] text-autonomi-header-text"
+          class="text-4xl font-semibold leading-[54px] text-autonomi-header-text"
       >
         Welcome to Autonomi
       </h1>
@@ -44,10 +51,10 @@ const handleGetStarted = () => {
 
       <div v-if="!wallet.connected">
         <CommonButton
-          variant="secondary"
-          size="medium"
-          @click="handleGetStarted"
-          class="mt-10"
+            variant="secondary"
+            size="medium"
+            @click="invoke('upload_files_test');"
+            class="mt-10"
         >
           Get Started
         </CommonButton>
@@ -57,6 +64,6 @@ const handleGetStarted = () => {
         <div class="mt-10">Data: {{ wallet }}</div>
       </div> -->
     </div>
-    <FileViewer v-else />
+    <FileViewer v-else/>
   </div>
 </template>

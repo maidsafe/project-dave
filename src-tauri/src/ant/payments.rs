@@ -1,22 +1,32 @@
 use autonomi::{Amount, QuoteHash, RewardsAddress};
+use rand::Rng;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::async_runtime::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-pub type OrderID = String;
+pub type OrderID = u16;
 pub type Payment = (QuoteHash, RewardsAddress, Amount);
+
+pub const IDLE_PAYMENT_TIMEOUT_SECS: u64 = 30;
+const CHANEL_SIZE: usize = 128;
+
+pub enum OrderMessage {
+    Cancelled,
+    Completed,
+    KeepAlive,
+}
 
 #[derive(Serialize, Clone)]
 pub struct PaymentOrder {
     pub id: OrderID,
     payments: Vec<Payment>,
     #[serde(skip)]
-    confirmation_sender: Sender<bool>,
+    confirmation_sender: Sender<OrderMessage>,
 }
 
 impl PaymentOrder {
-    pub fn new(payments: Vec<Payment>, confirmation_sender: Sender<bool>) -> Self {
+    pub fn new(payments: Vec<Payment>, confirmation_sender: Sender<OrderMessage>) -> Self {
         Self {
             id: Self::generate_id(),
             payments,
@@ -24,9 +34,8 @@ impl PaymentOrder {
         }
     }
 
-    // todo: implement this
     pub fn generate_id() -> OrderID {
-        "0000".to_string()
+        rand::thread_rng().gen::<u16>()
     }
 
     pub fn to_json(&self) -> String {
@@ -40,13 +49,17 @@ pub struct PaymentOrderManager {
 }
 
 impl PaymentOrderManager {
-    pub fn create_order(&self, payments: Vec<Payment>) -> (PaymentOrder, Receiver<bool>) {
-        let (sender, receiver) = channel(1);
+    pub fn create_order(&self, payments: Vec<Payment>) -> (PaymentOrder, Receiver<OrderMessage>) {
+        let (sender, receiver) = channel(CHANEL_SIZE);
 
         let order = PaymentOrder::new(payments, sender);
-        let mut orders = self.orders.lock().unwrap();
 
-        orders.insert(order.id.clone(), order.clone());
+        // optimization: compare with tokio mutex
+        let mut orders = self.orders.lock().expect("Could not get lock on orders");
+
+        orders.insert(order.id, order.clone());
+
+        drop(orders);
 
         (order, receiver)
     }

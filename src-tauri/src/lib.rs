@@ -16,7 +16,16 @@ async fn upload_files(
     files: Vec<File>,
     payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), ()> {
-    ant::files::upload_files(app, files, "archive_name", payment_orders).await;
+    ant::files::upload_private_files_to_vault(app, files, payment_orders).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn upload_files_test(
+    app: AppHandle,
+    payment_orders: State<'_, PaymentOrderManager>,
+) -> Result<(), ()> {
+    ant::files::payment_test(app, payment_orders).await;
     Ok(())
 }
 
@@ -26,7 +35,11 @@ pub fn run() {
         .manage(PaymentOrderManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet, upload_files])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            upload_files,
+            upload_files_test
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
