@@ -1,7 +1,12 @@
+use std::path::PathBuf;
+
 use crate::ant::files::File;
 use crate::ant::payments::PaymentOrderManager;
 use ant::files::FileFromVault;
-use autonomi::client::vault::VaultSecretKey;
+use autonomi::client::{
+    data::{DataAddr, DataMapChunk},
+    vault::VaultSecretKey,
+};
 use tauri::{AppHandle, State};
 
 mod ant;
@@ -25,7 +30,23 @@ async fn upload_files(
 #[tauri::command]
 async fn get_files_from_vault(vault_key: [u8; 32]) -> Result<Vec<FileFromVault>, ()> {
     let vault_key = VaultSecretKey::from_bytes(vault_key).unwrap();
-    Ok(ant::files::get_files_from_vault(&vault_key).await.unwrap())
+    ant::files::get_files_from_vault(&vault_key)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+}
+
+#[tauri::command]
+async fn download_private_file(data_map: DataMapChunk, to_dest: PathBuf) -> Result<(), ()> {
+    ant::files::download_private_file(data_map, to_dest)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+}
+
+#[tauri::command]
+async fn download_public_file(addr: DataAddr, to_dest: PathBuf) -> Result<(), ()> {
+    ant::files::download_public_file(addr, to_dest)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +59,8 @@ pub fn run() {
             greet,
             upload_files,
             get_files_from_vault,
+            download_private_file,
+            download_public_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
