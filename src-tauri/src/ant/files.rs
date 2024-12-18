@@ -5,7 +5,7 @@ use autonomi::client::files::archive::Metadata;
 use autonomi::client::vault::user_data::UserDataVaultGetError;
 use autonomi::client::vault::VaultSecretKey;
 use autonomi::{Bytes, Chunk};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
 
@@ -82,7 +82,7 @@ pub async fn upload_files(
     todo!()
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PrivateFileFromVault {
     paths: PrivateFileFromVaultPath,
     size: u64,
@@ -92,7 +92,7 @@ pub struct PrivateFileFromVault {
     private_data_access: DataMapChunk,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PrivateFileFromVaultPath {
     local: String,
 }
@@ -131,7 +131,7 @@ pub async fn get_private_files_from_vault(
     Ok(files)
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PublicFileFromVault {
     paths: PublicFileFromVaultPath,
     size: u64,
@@ -141,7 +141,7 @@ pub struct PublicFileFromVault {
     data_addr: [u8; 32],
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PublicFileFromVaultPath {
     local: String,
 }

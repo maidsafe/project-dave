@@ -23,19 +23,19 @@ async fn upload_files(
 }
 
 #[tauri::command]
-pub async fn get_private_files_from_vault(
-    vault_key: &VaultSecretKey,
+async fn get_private_files_from_vault(
+    vault_key: [u8; 32],
 ) -> Result<Vec<PrivateFileFromVault>, ()> {
-    Ok(ant::files::get_private_files_from_vault(vault_key)
+    let vault_key = VaultSecretKey::from_bytes(vault_key).unwrap();
+    Ok(ant::files::get_private_files_from_vault(&vault_key)
         .await
         .unwrap())
 }
 
 #[tauri::command]
-pub async fn get_public_files_from_vault(
-    vault_key: &VaultSecretKey,
-) -> Result<Vec<PublicFileFromVault>, ()> {
-    Ok(ant::files::get_public_files_from_vault(vault_key)
+async fn get_public_files_from_vault(vault_key: [u8; 32]) -> Result<Vec<PublicFileFromVault>, ()> {
+    let vault_key = VaultSecretKey::from_bytes(vault_key).unwrap();
+    Ok(ant::files::get_public_files_from_vault(&vault_key)
         .await
         .unwrap())
 }
@@ -46,7 +46,12 @@ pub fn run() {
         .manage(PaymentOrderManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet, upload_files])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            upload_files,
+            get_private_files_from_vault,
+            get_public_files_from_vault
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
