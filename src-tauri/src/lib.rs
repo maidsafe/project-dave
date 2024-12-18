@@ -1,6 +1,6 @@
 use crate::ant::files::File;
 use crate::ant::payments::PaymentOrderManager;
-use ant::files::{PrivateFileFromVault, PublicFileFromVault};
+use ant::files::FileFromVault;
 use autonomi::client::vault::VaultSecretKey;
 use tauri::{AppHandle, State};
 
@@ -23,21 +23,9 @@ async fn upload_files(
 }
 
 #[tauri::command]
-async fn get_private_files_from_vault(
-    vault_key: [u8; 32],
-) -> Result<Vec<PrivateFileFromVault>, ()> {
+async fn get_files_from_vault(vault_key: [u8; 32]) -> Result<Vec<FileFromVault>, ()> {
     let vault_key = VaultSecretKey::from_bytes(vault_key).unwrap();
-    Ok(ant::files::get_private_files_from_vault(&vault_key)
-        .await
-        .unwrap())
-}
-
-#[tauri::command]
-async fn get_public_files_from_vault(vault_key: [u8; 32]) -> Result<Vec<PublicFileFromVault>, ()> {
-    let vault_key = VaultSecretKey::from_bytes(vault_key).unwrap();
-    Ok(ant::files::get_public_files_from_vault(&vault_key)
-        .await
-        .unwrap())
+    Ok(ant::files::get_files_from_vault(&vault_key).await.unwrap())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -49,8 +37,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             upload_files,
-            get_private_files_from_vault,
-            get_public_files_from_vault
+            get_files_from_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

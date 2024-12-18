@@ -8,6 +8,7 @@ use autonomi::{Bytes, Chunk};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_dialog::MessageDialogButtons;
 
 #[derive(Deserialize)]
 pub struct File {
@@ -82,30 +83,28 @@ pub async fn upload_files(
     todo!()
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct PrivateFileFromVault {
-    paths: PrivateFileFromVaultPath,
-    size: u64,
-    date_created: u64,
-    date_modified: u64,
-    date_uploaded: u64,
-    private_data_access: DataMapChunk,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileFromVault {
+    path: String,
+    metadata: Metadata,
+    file_access: PublicOrPrivateFile,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct PrivateFileFromVaultPath {
-    local: String,
+#[derive(Debug, Serialize, Deserialize)]
+pub enum PublicOrPrivateFile {
+    Public([u8; 32]), // XOR address
+    Private(DataMapChunk),
 }
 
-pub async fn get_private_files_from_vault(
+pub async fn get_files_from_vault(
     secret_key: &VaultSecretKey,
-) -> Result<Vec<PrivateFileFromVault>, UserDataVaultGetError> {
+) -> Result<Vec<FileFromVault>, UserDataVaultGetError> {
     let client = client().await;
 
     // Fetch user data
     let user_data = client.get_user_data_from_vault(secret_key).await?;
 
-    let mut files: Vec<PrivateFileFromVault> = vec![];
+    let mut files: Vec<FileFromVault> = vec![];
 
     for (data_map, name) in user_data.private_file_archives {
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
@@ -113,48 +112,17 @@ pub async fn get_private_files_from_vault(
         // Get private archive
         let archive = client.archive_get(data_map).await?;
 
-        for (filename, (data_map, metadata)) in archive.map() {
-            let filepath = format!("{archive_name}/{}", filename.display());
+        for (filepath, (data_map, metadata)) in archive.map() {
+            let filepath = format!("{archive_name}/{}", filepath.display());
 
-            let file = PrivateFileFromVault {
-                paths: PrivateFileFromVaultPath { local: filepath },
-                size: metadata.size,
-                date_created: metadata.created,
-                date_modified: metadata.modified,
-                date_uploaded: metadata.uploaded,
-                private_data_access: data_map.clone(),
+            let file = FileFromVault {
+                path: filepath,
+                metadata: metadata.clone(),
+                file_access: PublicOrPrivateFile::Private(data_map.clone()),
             };
             files.push(file);
         }
     }
-
-    Ok(files)
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PublicFileFromVault {
-    paths: PublicFileFromVaultPath,
-    size: u64,
-    date_created: u64,
-    date_modified: u64,
-    date_uploaded: u64,
-    data_addr: [u8; 32],
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PublicFileFromVaultPath {
-    local: String,
-}
-
-pub async fn get_public_files_from_vault(
-    secret_key: &VaultSecretKey,
-) -> Result<Vec<PublicFileFromVault>, UserDataVaultGetError> {
-    let client = client().await;
-
-    // Fetch user data
-    let user_data = client.get_user_data_from_vault(secret_key).await?;
-
-    let mut files: Vec<PublicFileFromVault> = vec![];
 
     for (archive_addr, name) in user_data.file_archives {
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
@@ -162,16 +130,13 @@ pub async fn get_public_files_from_vault(
         // Get public archive
         let archive = client.archive_get_public(archive_addr).await?;
 
-        for (filename, (data_addr, metadata)) in archive.map() {
-            let filepath = format!("{archive_name}/{}", filename.display());
+        for (filepath, (data_addr, metadata)) in archive.map() {
+            let filepath = format!("{archive_name}/{}", filepath.display());
 
-            let file = PublicFileFromVault {
-                paths: PublicFileFromVaultPath { local: filepath },
-                size: metadata.size,
-                date_created: metadata.created,
-                date_modified: metadata.modified,
-                date_uploaded: metadata.uploaded,
-                data_addr: data_addr.0,
+            let file = FileFromVault {
+                path: filepath,
+                metadata: metadata.clone(),
+                file_access: PublicOrPrivateFile::Public(data_addr.0),
             };
             files.push(file);
         }
