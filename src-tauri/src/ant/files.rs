@@ -1,7 +1,8 @@
 use crate::ant::client::client;
 use crate::ant::payments::PaymentOrderManager;
-use autonomi::client::data::DataMapChunk;
+use autonomi::client::data::{DataAddr, DataMapChunk};
 use autonomi::client::files::archive::Metadata;
+use autonomi::client::files::fs::DownloadError;
 use autonomi::client::vault::user_data::UserDataVaultGetError;
 use autonomi::client::vault::VaultSecretKey;
 use autonomi::{Bytes, Chunk};
@@ -92,7 +93,7 @@ pub struct FileFromVault {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum PublicOrPrivateFile {
-    Public([u8; 32]), // XOR address
+    Public(DataAddr),
     Private(DataMapChunk),
 }
 
@@ -136,11 +137,28 @@ pub async fn get_files_from_vault(
             let file = FileFromVault {
                 path: filepath,
                 metadata: metadata.clone(),
-                file_access: PublicOrPrivateFile::Public(data_addr.0),
+                file_access: PublicOrPrivateFile::Public(*data_addr),
             };
             files.push(file);
         }
     }
 
     Ok(files)
+}
+
+pub async fn download_private_file(
+    data_map: DataMapChunk,
+    to_dest: PathBuf,
+) -> Result<(), DownloadError> {
+    let client = client().await;
+    client.file_download(data_map, to_dest).await?;
+
+    Ok(())
+}
+
+pub async fn download_public_file(addr: DataAddr, to_dest: PathBuf) -> Result<(), DownloadError> {
+    let client = client().await;
+    client.file_download_public(addr, to_dest).await?;
+
+    Ok(())
 }
