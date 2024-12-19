@@ -184,7 +184,7 @@ const handleUpdateEventCollector = () => {
 
 async function saveSettingsButtonHandler() {
   try {
-    await invoke("settings_set", { settings: { download_path: downloadPath.value, peers: bootstrapPeers.value.split(',') } });
+    await invoke("app_data_store", { appData: { download_path: downloadPath.value, peers: bootstrapPeers.value.split(',') } });
   } catch (e) {
     console.error(e);
     saveSettingsErrorMessage.value = e as any; // TODO: DOES NOT UPDATE?!?! :(
@@ -198,9 +198,9 @@ const bootstrapPeers = ref("");
 const saveSettingsErrorMessage = ref("");
 const name = ref("");
 async function loadSettings() {
-  let settings: any = await invoke("settings");
-  downloadPath.value = settings.download_path;
-  bootstrapPeers.value = settings.peers.join(',');
+  let app_data: any = await invoke("app_data");
+  downloadPath.value = app_data.download_path;
+  bootstrapPeers.value = app_data.peers.join(',');
 }
 onMounted(async () => {
   await loadSettings()
