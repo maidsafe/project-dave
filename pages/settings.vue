@@ -2,6 +2,7 @@
 import { useToast } from "primevue/usetoast";
 import { invoke } from "@tauri-apps/api/core";
 import { onMounted } from "vue";
+import { toRaw } from 'vue'
 type SettingsView = "network-settings" | "receiver-settings" | "syslog" | "other-settings";
 const refSyslogMenu = ref();
 const selectedSyslog = ref<any>(null); // TODO: Replace with actual type
@@ -181,13 +182,25 @@ const handleUpdateEventCollector = () => {
   // isEditEventCollector.value = false;
 };
 
+async function saveSettingsButtonHandler() {
+  try {
+    await invoke("settings_set", { settings: { download_path: downloadPath.value, peers: bootstrapPeers.value.split(',') } });
+  } catch (e) {
+    console.error(e);
+    saveSettingsErrorMessage.value = e as any; // TODO: DOES NOT UPDATE?!?! :(
+  } finally {
+    saveSettingsErrorMessage.value = '';
+  }
+}
+
 const downloadPath = ref("");
 const bootstrapPeers = ref("");
+const saveSettingsErrorMessage = ref("");
 const name = ref("");
 async function loadSettings() {
-  let settings = await invoke("settings");
+  let settings: any = await invoke("settings");
   downloadPath.value = settings.download_path;
-  bootstrapPeers.value = settings.peers;
+  bootstrapPeers.value = settings.peers.join(',');
 }
 onMounted(async () => {
   await loadSettings()
@@ -229,6 +242,9 @@ onMounted(async () => {
                 class="font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
                 placeholder="Download folder"
               />
+              <button @click="saveSettingsButtonHandler">Save settings</button>
+
+              <div>{{ saveSettingsErrorMessage }}</div>
             </div>
           </div>
         </div>

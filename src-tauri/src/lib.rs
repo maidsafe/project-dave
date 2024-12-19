@@ -22,7 +22,7 @@ pub struct AppStateInner {
 }
 type AppState = Mutex<AppStateInner>;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub download_path: Option<PathBuf>,
     pub peers: Option<Vec<Multiaddr>>,
@@ -48,6 +48,7 @@ async fn settings(state: State<'_, AppState>) -> Result<Settings, ()> {
 async fn settings_set(state: State<'_, AppState>, settings: Settings) -> Result<(), ()> {
     let mut state = state.lock().await;
 
+    println!("settings updated: {settings:?}");
     state.settings = settings;
 
     Ok(())
