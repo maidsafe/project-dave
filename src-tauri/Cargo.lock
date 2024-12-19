@@ -6539,6 +6539,7 @@ name = "project-dave"
 version = "0.1.0"
 dependencies = [
  "autonomi",
+ "dirs-next",
  "serde",
  "serde_json",
  "tauri",
