@@ -2,19 +2,50 @@ use std::path::PathBuf;
 
 use crate::ant::files::File;
 use crate::ant::payments::PaymentOrderManager;
-use ant::files::FileFromVault;
-use autonomi::client::{
-    data::{DataAddr, DataMapChunk},
-    vault::VaultSecretKey,
+use ant::{app_data::AppData, files::FileFromVault};
+use autonomi::{
+    client::{
+        data::{DataAddr, DataMapChunk},
+        vault::VaultSecretKey,
+    },
+    Multiaddr,
 };
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
+use tokio::sync::Mutex;
 
 mod ant;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+#[derive(Serialize, Deserialize)]
+pub struct AppStateInner {
+    pub(crate) app_data: AppData,
+}
+
+impl Default for AppStateInner {
+    fn default() -> Self {
+        Self {
+            app_data: AppData::load()
+                .inspect_err(|err| eprintln!("failed to load settings: {err:?}"))
+                .unwrap_or_default(),
+        }
+    }
+}
+type AppState = Mutex<AppStateInner>;
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+async fn app_data(state: State<'_, AppState>) -> Result<AppData, ()> {
+    let state = state.lock().await;
+
+    Ok(state.app_data.clone())
+}
+
+#[tauri::command]
+async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result<(), ()> {
+    let mut state = state.lock().await;
+
+    println!("updating app data: {app_data:?}");
+    state.app_data = app_data;
+    state.app_data.store().map_err(|_err| ()) // TODO: Map to serializable error
 }
 
 #[tauri::command]
@@ -52,15 +83,17 @@ async fn download_public_file(addr: DataAddr, to_dest: PathBuf) -> Result<(), ()
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(AppState::default())
         .manage(PaymentOrderManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             upload_files,
             get_files_from_vault,
             download_private_file,
             download_public_file,
+            app_data,
+            app_data_store,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

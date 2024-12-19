@@ -19,10 +19,13 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 autonomi = { version = "0.2.4", git = "https://github.com/mickvandijke/safe_network", rev = "4df8573b7287d2fb4effcf451a311b8ed4ef5c8b", features = ["full"] }
+dirs-next = "~2.0.0"
+directories = "5.0"
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"
+thiserror = "2.0.8"
+toml = "0.8.19"
 tokio = { version = "1.42.0", features = ["fs"] }
-

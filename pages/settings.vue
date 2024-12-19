@@ -1,5 +1,8 @@
 <script lang="ts" setup>
 import { useToast } from "primevue/usetoast";
+import { invoke } from "@tauri-apps/api/core";
+import { onMounted } from "vue";
+import { toRaw } from 'vue'
 type SettingsView = "network-settings" | "receiver-settings" | "syslog" | "other-settings";
 const refSyslogMenu = ref();
 const selectedSyslog = ref<any>(null); // TODO: Replace with actual type
@@ -178,6 +181,30 @@ const handleUpdateEventCollector = () => {
 
   // isEditEventCollector.value = false;
 };
+
+async function saveSettingsButtonHandler() {
+  try {
+    await invoke("app_data_store", { appData: { download_path: downloadPath.value, peers: bootstrapPeers.value.split(',') } });
+  } catch (e) {
+    console.error(e);
+    saveSettingsErrorMessage.value = e as any; // TODO: DOES NOT UPDATE?!?! :(
+  } finally {
+    saveSettingsErrorMessage.value = '';
+  }
+}
+
+const downloadPath = ref("");
+const bootstrapPeers = ref("");
+const saveSettingsErrorMessage = ref("");
+const name = ref("");
+async function loadSettings() {
+  let app_data: any = await invoke("app_data");
+  downloadPath.value = app_data.download_path;
+  bootstrapPeers.value = app_data.peers.join(',');
+}
+onMounted(async () => {
+  await loadSettings()
+})
 </script>
 
 <template>
@@ -203,8 +230,21 @@ const handleUpdateEventCollector = () => {
           <div class="flex justify-between items-center gap-10">
             <div>
               <h3 class="text-2xl text-autonomi-header-text-dark font-semibold">
-                Bootstrap Peer
+                Bootstrap Peers
               </h3>
+              separated by comma <hr>
+              <Textarea v-model="bootstrapPeers" />
+              <h3 class="text-2xl text-autonomi-header-text-dark font-semibold">
+                Download folder
+              </h3>
+              <InputText
+              v-model="downloadPath"
+                class="font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
+                placeholder="Download folder"
+              />
+              <button @click="saveSettingsButtonHandler">Save settings</button>
+
+              <div>{{ saveSettingsErrorMessage }}</div>
             </div>
           </div>
         </div>
