@@ -13,7 +13,6 @@ use thiserror::Error as ThisError;
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "autonomi";
 const APPLICATION: &str = "dave";
-
 const FILENAME_SETTINGS: &str = "settings.toml";
 
 #[derive(ThisError, Debug)]

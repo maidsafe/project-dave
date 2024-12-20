@@ -18,11 +18,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-autonomi = { version = "0.2.4", git = "https://github.com/mickvandijke/safe_network", rev = "4df8573b7287d2fb4effcf451a311b8ed4ef5c8b", features = ["full"] }
+autonomi = { version = "0.3.0", git = "https://github.com/mickvandijke/safe_network", rev = "45f84262860853c0f42a6fd437709935918bc261", features = ["full"] }
+rand = "0.8.5"
 dirs-next = "~2.0.0"
 directories = "5.0"
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"

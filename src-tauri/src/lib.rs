@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::ant::files::File;
-use crate::ant::payments::PaymentOrderManager;
+use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use ant::{app_data::AppData, files::FileFromVault};
 use autonomi::{
     client::{
@@ -15,6 +15,7 @@ use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 mod ant;
+pub mod logging;
 
 #[derive(Serialize, Deserialize)]
 pub struct AppStateInner {
@@ -52,9 +53,25 @@ async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result
 async fn upload_files(
     app: AppHandle,
     files: Vec<File>,
+    secret_key: String,
     payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), ()> {
-    ant::files::upload_files(app, files, "archive_name", payment_orders).await;
+    println!("{secret_key}");
+
+    let secret_key = VaultSecretKey::from_hex(&secret_key).expect("Invalid secret key"); // todo: fix this
+
+    ant::files::upload_private_files_to_vault(app, files, &secret_key, payment_orders)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+}
+
+#[tauri::command]
+async fn send_payment_order_message(
+    id: OrderID,
+    message: OrderMessage,
+    payment_orders: State<'_, PaymentOrderManager>,
+) -> Result<(), ()> {
+    payment_orders.send_order_message(id, message).await;
     Ok(())
 }
 
@@ -89,6 +106,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             upload_files,
+            send_payment_order_message,
             get_files_from_vault,
             download_private_file,
             download_public_file,
