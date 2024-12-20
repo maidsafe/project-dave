@@ -6,7 +6,6 @@ import IconField from "primevue/iconfield";
 import InputIcon from "primevue/inputicon";
 import {useWalletStore} from "~/stores/wallet";
 import {useUserStore} from "~/stores/user";
-import {useToast} from "primevue/usetoast";
 import {invoke} from '@tauri-apps/api/core';
 
 const value1 = ref("");
@@ -14,8 +13,6 @@ const searching = ref(false);
 const walletStore = useWalletStore();
 const {wallet} = storeToRefs(walletStore);
 const userStore = useUserStore();
-const toast = useToast();
-// const {address} = useAccount();
 
 // Refs
 const refTokenDropdown = ref();
@@ -26,7 +23,6 @@ const isHamburgerMenuOpen = ref(false);
 // Methods
 const handleClickWallet = () => {
   if (wallet.value.isConnected) {
-    // handleDisconnectWallet();
     walletStore.showDisconnectWallet();
   } else {
     walletStore.showConnectWallet();
@@ -171,9 +167,6 @@ onBeforeUnmount(() => {
           >
             <i class="pi pi-plus-circle text-white"/>
           </NuxtLink>
-
-          // Quote payment test
-          <Button @click="invoke('upload_files_test')"></Button>
 
           <!-- TOKEN BALANCE DROPDOWN -->
           <div ref="refTokenDropdown">

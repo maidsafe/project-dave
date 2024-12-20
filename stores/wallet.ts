@@ -1,11 +1,12 @@
-import {useAppKitAccount, useAppKit, useDisconnect} from "@reown/appkit/vue";
-import {writeContract, waitForTransactionReceipt, readContract} from "@wagmi/core";
+import {useAppKit, useAppKitAccount, useDisconnect} from "@reown/appkit/vue";
+import {readContract, waitForTransactionReceipt, writeContract, signMessage} from "@wagmi/core";
 import tokenAbi from "~/assets/abi/PaymentToken.json";
 import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import {wagmiAdapter} from "~/config";
 
 const tokenContractAddress = "0xBE1802c27C324a28aeBcd7eeC7D734246C807194";
 const paymentVaultContractAddress = "0x993C7739f50899A997fEF20860554b8a28113634";
+const VAULT_SECRET_KEY_SEED = "Massive Array of Internet Disks Secure Access For Everyone";
 
 export const useWalletStore = defineStore("wallet", () => {
     // State
@@ -173,6 +174,19 @@ export const useWalletStore = defineStore("wallet", () => {
         }
     };
 
+    const getVaultKey = async (): Promise<string> => {
+        return sign(VAULT_SECRET_KEY_SEED);
+    }
+
+    const sign = async (message: string): Promise<string> => {
+        try {
+            return await signMessage(wagmiAdapter.wagmiConfig, {message});
+        } catch (error) {
+            console.error("Error signing message:", error);
+            throw new Error("Failed to sign message");
+        }
+    };
+
     // Return
     return {
         // State
@@ -190,5 +204,7 @@ export const useWalletStore = defineStore("wallet", () => {
         showDisconnectWallet,
         payForQuotes,
         approveTokens,
+        getVaultKey,
+        sign,
     };
 });

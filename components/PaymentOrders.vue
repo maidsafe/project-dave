@@ -69,6 +69,14 @@ const getProcessingState = (orderId: number): ProcessingState | undefined => {
 
 const calculateRemainingTime = (expires: number) => Math.max(0, Math.floor((expires - Date.now()) / 1000));
 
+const calculateTotalAmount = (payments: [[string, string, string]]): bigint => {
+  return payments.reduce((total, payment) => {
+    const amountHex = payment[2];
+    const amount = BigInt(amountHex);
+    return total + amount;
+  }, BigInt(0));
+};
+
 const pay = async (order: PaymentOrder) => {
   let processingState = getProcessingState(order.id);
 
@@ -90,11 +98,20 @@ const pay = async (order: PaymentOrder) => {
   }
 }
 
-listen<PaymentOrder>("payment-order", async (event: any) => {
-  console.log(">>> Payment order received", event.payload);
+const cancel = async (orderId: number) => {
+  setProcessingState(orderId, ProcessingState.CANCELLED)
+  await invoke("send_payment_order_message", {id: orderId, message: "Cancelled"});
+}
 
-  pendingPayments.value.set(event.payload.id, {
-    order: event.payload,
+listen<PaymentOrder>("payment-order", async (event: any) => {
+  let order: PaymentOrder = JSON.parse(event.payload);
+
+  if (!order) return;
+
+  console.log(">>> Payment order received", order);
+
+  pendingPayments.value.set(order.id, {
+    order,
     expires: Date.now() + 1000 * IDLE_PAYMENT_EXPIRATION_TIME_SECS,
     processing: ProcessingState.PENDING,
   });
@@ -131,7 +148,7 @@ listen<PaymentOrder>("payment-order", async (event: any) => {
             <div class="p-3 border-round border-1 surface-border flex justify-between items-center gap-4">
               <div class="flex flex-col">
                 <p class="text-sm">Order ID: {{ payment.order.id }}</p>
-                <p class="text-sm">Size: {{ payment.order.payments.length }}</p>
+                <p class="text-sm">Total amount: {{ calculateTotalAmount(payment.order.payments) }} ATTO</p>
                 <template
                     v-if="getProcessingState(payment.order.id) === ProcessingState.PENDING || getProcessingState(payment.order.id) === ProcessingState.PROCESSING">
                   <p class="text-sm">Expires in: {{ calculateRemainingTime(payment.expires) }} seconds</p>
@@ -140,6 +157,8 @@ listen<PaymentOrder>("payment-order", async (event: any) => {
 
               <template v-if="getProcessingState(payment.order.id) === ProcessingState.PENDING">
                 <Button label="Pay" icon="pi pi-wallet" class="flex gap-1" @click="pay(payment.order)"/>
+                <Button label="Cancel" icon="pi pi-times" class="flex gap-1" @click="cancel(payment.order.id)"/>
+                >
               </template>
               <template v-if="getProcessingState(payment.order.id) === ProcessingState.PROCESSING">
                 <Button label="Pay" icon="pi pi-wallet" class="flex gap-1" disabled/>

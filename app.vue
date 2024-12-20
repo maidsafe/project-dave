@@ -27,13 +27,13 @@ const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
 
 // Methods
-const handleClickUpload = () => {
+const handleClickUpload = async () => {
   try {
-    if (wallet.value.connected) {
-      navigateTo("/upload");
+    if (wallet.value.isConnected) {
+      await navigateTo("/upload");
     } else {
-      walletStore.showConnectWallet(() => {
-        navigateTo("/upload");
+      walletStore.showConnectWallet(async () => {
+        await navigateTo("/upload");
       });
     }
   } catch (error) {
@@ -43,8 +43,6 @@ const handleClickUpload = () => {
 };
 
 onMounted(async () => {
-  // await autonomi.initWasm();
-
   setTimeout(() => {
     isFadeOut.value = true;
 
@@ -98,22 +96,8 @@ onMounted(async () => {
               Home
             </NuxtLink>
 
-            <!-- <NuxtLink :class="`${classesLinks}`" to="/nodes">
-              <div
-                class="w-6 h-6 bg-autonomi-red-300 text-white flex items-center justify-center rounded-full"
-              >
-                <i class="pi pi-server text-xs" />
-              </div>
-              Nodes
-            </NuxtLink>
-
-            <NuxtLink :class="`${classesLinks}`" to="/wallet">
-              <IconWallet class="w-6 h-6" />
-              Wallet
-            </NuxtLink> -->
-
             <NuxtLink :class="`${classesLinks}`" to="/settings">
-              <IconSettings class="w-6 h-6" />
+              <IconSettings class="w-6 h-6"/>
               Settings
             </NuxtLink>
           </div>

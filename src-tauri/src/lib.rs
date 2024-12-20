@@ -53,19 +53,16 @@ async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result
 async fn upload_files(
     app: AppHandle,
     files: Vec<File>,
+    secret_key: String,
     payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), ()> {
-    ant::files::upload_private_files_to_vault(app, files, payment_orders).await;
-    Ok(())
-}
+    println!("{secret_key}");
 
-#[tauri::command]
-async fn upload_files_test(
-    app: AppHandle,
-    payment_orders: State<'_, PaymentOrderManager>,
-) -> Result<(), ()> {
-    ant::files::payment_test(app, payment_orders).await;
-    Ok(())
+    let secret_key = VaultSecretKey::from_hex(&secret_key).expect("Invalid secret key"); // todo: fix this
+
+    ant::files::upload_private_files_to_vault(app, files, &secret_key, payment_orders)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
 }
 
 #[tauri::command]
@@ -109,7 +106,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             upload_files,
-            upload_files_test,
             send_payment_order_message,
             get_files_from_vault,
             download_private_file,

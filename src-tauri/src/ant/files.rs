@@ -5,14 +5,13 @@ use autonomi::client::files::archive::Metadata;
 use autonomi::client::files::fs::DownloadError;
 use autonomi::client::quote::StoreQuote;
 use autonomi::client::vault::user_data::UserDataVaultGetError;
-use autonomi::client::vault::VaultSecretKey;
+use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
 use autonomi::{Amount, Bytes, Chunk};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
-use tauri_plugin_dialog::MessageDialogButtons;
+use thiserror::Error as ThisError;
 use tokio::time::timeout;
 
 #[derive(Deserialize)]
@@ -21,56 +20,52 @@ pub struct File {
     path: PathBuf,
 }
 
-pub struct FileEncrypted {
-    name: String,
-    metadata: Metadata,
-    datamap: Chunk,
-    chunks: Vec<Chunk>,
+#[derive(ThisError, Debug)]
+pub enum UploadError {
+    #[error("Could not read file: {0:?}")]
+    Read(PathBuf),
+    #[error("Failed to encrypt data: {0}")]
+    Encryption(String),
+    #[error("Failed to retrieve store quotes: {0}")]
+    StoreQuote(String),
+    #[error("Failed to get or create scratchpad: {0}")]
+    Scratchpad(String),
+    #[error("Failed to emit payment order: {0}")]
+    EmitEvent(String),
 }
 
-pub async fn read_file_to_bytes(file_path: PathBuf) -> Bytes {
-    Bytes::from(
-        tokio::fs::read(file_path)
-            .await
-            .expect("Failed to read file"),
-    )
+pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError> {
+    tokio::fs::read(file_path.clone())
+        .await
+        .map(Bytes::from)
+        .map_err(|_| UploadError::Read(file_path))
 }
 
 pub async fn upload_private_files_to_vault(
     app: AppHandle,
     files: Vec<File>,
+    secret_key: &VaultSecretKey,
     payment_orders: State<'_, PaymentOrderManager>,
-) {
+) -> Result<(), UploadError> {
     let client = client().await;
 
-    let mut encrypted_files = vec![];
-
-    for file in files {
-        let bytes: Bytes = read_file_to_bytes(file.path).await;
-        let metadata = Metadata::new_with_size(bytes.len() as u64);
-        let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).unwrap();
-
-        encrypted_files.push(FileEncrypted {
-            name: file.name,
-            metadata,
-            datamap,
-            chunks,
-        })
-    }
-
+    let mut aggregated_chunks: Vec<Chunk> = vec![];
     let mut aggregated_store_quote = StoreQuote(Default::default());
-
     let mut private_archive = autonomi::PrivateArchive::new();
 
-    for file in &encrypted_files {
+    for file in files {
+        let bytes: Bytes = read_file_to_bytes(file.path).await?;
+        let metadata = Metadata::new_with_size(bytes.len() as u64);
+        let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+            .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
         private_archive.add_file(
             PathBuf::from(&file.name),
-            DataMapChunk::from(file.datamap.clone()),
-            file.metadata.clone(),
+            DataMapChunk::from(datamap.clone()),
+            metadata.clone(),
         );
 
-        let chunk_addresses: Vec<_> = file
-            .chunks
+        let chunk_addresses: Vec<_> = chunks
             .iter()
             .map(|chunk| *chunk.address.xorname())
             .collect();
@@ -78,19 +73,23 @@ pub async fn upload_private_files_to_vault(
         let store_quote = client
             .get_store_quotes(chunk_addresses.into_iter())
             .await
-            .unwrap();
+            .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
         for (xor_name, quotes) in store_quote.0 {
             aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
+        }
+
+        for chunk in chunks {
+            aggregated_chunks.push(chunk);
         }
     }
 
     let (private_archive_datamap, private_archive_chunks) = autonomi::self_encryption::encrypt(
         private_archive
             .to_bytes()
-            .expect("Could not produce bytes from private archive"),
+            .map_err(|err| UploadError::Encryption(err.to_string()))?,
     )
-    .unwrap();
+    .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
     let private_archive_chunk_addresses: Vec<_> = private_archive_chunks
         .iter()
@@ -100,9 +99,34 @@ pub async fn upload_private_files_to_vault(
     let private_archive_store_quote = client
         .get_store_quotes(private_archive_chunk_addresses.into_iter())
         .await
-        .unwrap();
+        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
     for (xor_name, quotes) in private_archive_store_quote.0 {
+        aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
+    }
+
+    for chunk in private_archive_chunks {
+        aggregated_chunks.push(chunk);
+    }
+
+    let mut user_data = client
+        .get_user_data_from_vault(secret_key)
+        .await
+        .unwrap_or(UserData::new());
+
+    let _ = user_data.add_private_file_archive(DataMapChunk::from(private_archive_datamap));
+
+    let (scratch_pad, _is_new) = client
+        .get_or_create_scratchpad(secret_key, app_name_to_vault_content_type("UserData"))
+        .await
+        .map_err(|err| UploadError::Scratchpad(err.to_string()))?;
+
+    let scratch_pad_store_quote = client
+        .get_store_quotes(vec![scratch_pad.name()].into_iter())
+        .await
+        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+    for (xor_name, quotes) in scratch_pad_store_quote.0 {
         aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
     }
 
@@ -114,85 +138,10 @@ pub async fn upload_private_files_to_vault(
 
     let (order, mut confirmation_receiver) = payment_orders.create_order(payments).await;
 
-    // let the frontend know that a payment has to be made
-    app.emit("payment-order", order.to_json()).unwrap();
+    app.emit("payment-order", order.to_json())
+        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    let order_successful = tokio::spawn(async move {
-        loop {
-            let result = timeout(
-                Duration::from_secs(IDLE_PAYMENT_TIMEOUT_SECS),
-                confirmation_receiver.recv(),
-            )
-            .await;
-
-            match result {
-                Ok(Some(order_message)) => match order_message {
-                    OrderMessage::KeepAlive => {
-                        continue;
-                    }
-                    OrderMessage::Completed => {
-                        return true;
-                    }
-                    OrderMessage::Cancelled => {
-                        return false;
-                    }
-                },
-                _ => {
-                    return false;
-                }
-            };
-        }
-    })
-    .await;
-
-    // upload chunks and archive
-
-    todo!()
-}
-
-pub async fn payment_test(app: AppHandle, payment_orders: State<'_, PaymentOrderManager>) {
-    println!("Running test!");
-
-    println!("Connecting to client..");
-
-    let client = client().await;
-
-    println!("Client connected!");
-
-    let bytes: Vec<u8> = (0..1024).map(|_| rand::thread_rng().gen()).collect();
-
-    println!("Encrypting bytes..");
-
-    let (_datamap, chunks) = autonomi::self_encryption::encrypt(Bytes::from(bytes)).unwrap();
-
-    println!("Got chunks!");
-
-    let chunk_addresses: Vec<_> = chunks
-        .iter()
-        .map(|chunk| *chunk.address.xorname())
-        .collect();
-
-    println!("Getting quotes..");
-
-    let store_quote = client
-        .get_store_quotes(chunk_addresses.into_iter())
-        .await
-        .unwrap();
-
-    println!("Got quotes!");
-
-    let payments = store_quote
-        .payments()
-        .into_iter()
-        .filter(|(_, _, amount)| *amount > Amount::ZERO)
-        .collect();
-
-    let (payment_order, mut confirmation_receiver) = payment_orders.create_order(payments).await;
-
-    // let the frontend know that a payment has to be made
-    app.emit("payment-order", payment_order).unwrap();
-
-    println!("Chunks: {chunks:?}");
+    let secret_key = secret_key.clone();
 
     tokio::spawn(async move {
         let order_successful = loop {
@@ -208,25 +157,29 @@ pub async fn payment_test(app: AppHandle, payment_orders: State<'_, PaymentOrder
             }
         };
 
-        println!("Order paid: {order_successful}");
+        tracing::debug!("Order paid: {order_successful}");
 
         if order_successful {
-            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+            let receipt =
+                autonomi::client::payment::receipt_from_store_quotes(aggregated_store_quote);
 
-            println!("Uploading chunks..");
+            tracing::debug!("Uploading chunks..");
 
-            for chunk in &chunks {
-                let proof_of_payment = receipt.get(chunk.address.xorname());
-                println!("Chunk: {chunk:?}, Proof of payment: {proof_of_payment:?}");
-            }
-
-            let result = client
-                .upload_chunks_with_retries(chunks.iter().collect(), &receipt)
+            let failed_uploads = client
+                .upload_chunks_with_retries(aggregated_chunks.iter().collect(), &receipt)
                 .await;
 
-            println!("Upload result: {result:?}");
+            tracing::debug!("Failed uploads: {}", failed_uploads.len());
+
+            let result = client
+                .put_user_data_to_vault(&secret_key, receipt.into(), user_data)
+                .await;
+
+            tracing::debug!("Update vault result: {:?}", result);
         }
     });
+
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
