@@ -27,9 +27,9 @@ const openPickerAndUploadFiles = async () => {
     return {path: file, name: await basename(file)};
   }));
 
-  let secretKey = await walletStore.getVaultKey();
+  let vaultKeySignature = await walletStore.getVaultKeySignature();
 
-  await invoke("upload_files", {files, secretKey});
+  await invoke("upload_files", {files, vaultKeySignature});
 };
 </script>
 
