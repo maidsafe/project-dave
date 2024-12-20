@@ -24,6 +24,7 @@
     "nuxt": "^3.14.1592",
     "primeicons": "^7.0.0",
     "primevue": "^4.1.0",
+    "tailwindcss-primeui": "^0.3.4",
     "viem": "^2.21.54",
     "vue": "^3.3.4",
     "vue-router": "latest"
