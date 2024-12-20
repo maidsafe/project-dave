@@ -204,7 +204,7 @@ export const useWalletStore = defineStore("wallet", () => {
         showDisconnectWallet,
         payForQuotes,
         approveTokens,
-        getVaultKey,
+        getVaultKeySignature: getVaultKey,
         sign,
     };
 });

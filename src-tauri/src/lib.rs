@@ -3,13 +3,7 @@ use std::path::PathBuf;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use ant::{app_data::AppData, files::FileFromVault};
-use autonomi::{
-    client::{
-        data::{DataAddr, DataMapChunk},
-        vault::VaultSecretKey,
-    },
-    Multiaddr,
-};
+use autonomi::client::data::{DataAddr, DataMapChunk};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
@@ -53,12 +47,13 @@ async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result
 async fn upload_files(
     app: AppHandle,
     files: Vec<File>,
-    secret_key: String,
+    vault_key_signature: String,
     payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), ()> {
-    println!("{secret_key}");
-
-    let secret_key = VaultSecretKey::from_hex(&secret_key).expect("Invalid secret key"); // todo: fix this
+    let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    )
+    .expect("Invalid vault key signature");
 
     ant::files::upload_private_files_to_vault(app, files, &secret_key, payment_orders)
         .await
@@ -76,9 +71,13 @@ async fn send_payment_order_message(
 }
 
 #[tauri::command]
-async fn get_files_from_vault(vault_key: [u8; 32]) -> Result<Vec<FileFromVault>, ()> {
-    let vault_key = VaultSecretKey::from_bytes(vault_key).unwrap();
-    ant::files::get_files_from_vault(&vault_key)
+async fn get_files_from_vault(vault_key_signature: String) -> Result<Vec<FileFromVault>, ()> {
+    let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    )
+    .expect("Invalid vault key signature");
+
+    ant::files::get_files_from_vault(&secret_key)
         .await
         .map_err(|_err| ()) // TODO: Map to serializable error
 }
