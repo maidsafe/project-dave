@@ -768,7 +768,7 @@ dependencies = [
 [[package]]
 name = "ant-bootstrap"
 version = "0.1.0"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "ant-logging",
  "ant-protocol",
@@ -790,8 +790,8 @@ dependencies = [
 
 [[package]]
 name = "ant-build-info"
-version = "0.1.19"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.1.20"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "chrono",
  "tracing",
@@ -800,8 +800,8 @@ dependencies = [
 
 [[package]]
 name = "ant-evm"
-version = "0.1.4"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.1.5"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "custom_debug",
  "evmlib",
@@ -823,8 +823,8 @@ dependencies = [
 
 [[package]]
 name = "ant-logging"
-version = "0.2.40"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.2.41"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "chrono",
  "dirs-next",
@@ -840,8 +840,8 @@ dependencies = [
 
 [[package]]
 name = "ant-networking"
-version = "0.19.5"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.3.0"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "aes-gcm-siv",
  "ant-bootstrap",
@@ -880,8 +880,8 @@ dependencies = [
 
 [[package]]
 name = "ant-protocol"
-version = "0.17.15"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.3.0"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "ant-build-info",
  "ant-evm",
@@ -909,8 +909,8 @@ dependencies = [
 
 [[package]]
 name = "ant-registers"
-version = "0.4.3"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.4.4"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "blsttc",
  "crdts",
@@ -1359,8 +1359,8 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "autonomi"
-version = "0.2.4"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.3.0"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "ant-bootstrap",
  "ant-evm",
@@ -1381,6 +1381,7 @@ dependencies = [
  "js-sys",
  "libp2p",
  "rand 0.8.5",
+ "rayon",
  "rmp-serde",
  "self_encryption",
  "serde",
@@ -2969,8 +2970,8 @@ dependencies = [
 
 [[package]]
 name = "evmlib"
-version = "0.1.4"
-source = "git+https://github.com/mickvandijke/safe_network?rev=4df8573b7287d2fb4effcf451a311b8ed4ef5c8b#4df8573b7287d2fb4effcf451a311b8ed4ef5c8b"
+version = "0.1.5"
+source = "git+https://github.com/mickvandijke/safe_network?rev=45f84262860853c0f42a6fd437709935918bc261#45f84262860853c0f42a6fd437709935918bc261"
 dependencies = [
  "alloy",
  "dirs-next",
@@ -6547,6 +6548,8 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-shell",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

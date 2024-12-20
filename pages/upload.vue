@@ -1,14 +1,17 @@
 <script lang="ts" setup>
-import { usePrimeVue } from "primevue/config";
-import { useToast } from "primevue/usetoast";
-import { getCurrentDateTimeString } from "~/utils/date";
+import {usePrimeVue} from "primevue/config";
+import {useToast} from "primevue/usetoast";
+import {getCurrentDateTimeString} from "~/utils/date";
 
-import { invoke } from "@tauri-apps/api/core";
-import { open } from '@tauri-apps/plugin-dialog';
-import { basename } from '@tauri-apps/api/path';
+import {invoke} from "@tauri-apps/api/core";
+import {open} from '@tauri-apps/plugin-dialog';
+import {basename} from '@tauri-apps/api/path';
+import {listen} from "@tauri-apps/api/event";
+import {useWalletStore} from "~/stores/wallet";
 
 const $primevue = usePrimeVue();
 const toast = useToast();
+const walletStore = useWalletStore();
 // const autonomi = useAutonomiStore();
 
 const totalSize = ref(0);
@@ -99,7 +102,7 @@ const readFileToBytes = (file) => {
 
     reader.onerror = function (event) {
       reject(
-        new Error("File could not be read! Code " + event.target.error.code)
+          new Error("File could not be read! Code " + event.target.error.code)
       );
     };
   });
@@ -126,8 +129,8 @@ const fetchQuotesForFiles = async (): Promise<{
     } = autonomi.encryptData(fileBytes);
 
     // Get quotes
-    const { quotes, quotePayments, freeChunks } =
-      await autonomi.getQuotesForContentAddrs(dataChunkAddresses);
+    const {quotes, quotePayments, freeChunks} =
+        await autonomi.getQuotesForContentAddrs(dataChunkAddresses);
 
     quotes.forEach((v, k) => combinedQuotes.set(k, v));
     combinedQuotePayments = combinedQuotePayments.concat(quotePayments);
@@ -145,9 +148,9 @@ const handleGenerateQuote = async () => {
   isGeneratingQuote.value = true;
 
   try {
-    const { quotes, quotePayments, freeChunks } = await fetchQuotesForFiles();
+    const {quotes, quotePayments, freeChunks} = await fetchQuotesForFiles();
 
-    quotesResult.value = { quotes, quotePayments, freeChunks };
+    quotesResult.value = {quotes, quotePayments, freeChunks};
 
     isVisibleQuoteGen.value = true;
 
@@ -243,17 +246,17 @@ const quoteBreakdownData = computed(() => {
   let freeChunks = quotesResult.value.freeChunks;
   let chunksAmount = quotesResult.value.quotes.size;
   let totalPrice = quotesResult.value.quotePayments.reduce(
-    (acc, v) => acc + Number(v[2]),
-    0
+      (acc, v) => acc + Number(v[2]),
+      0
   );
   let avgChunkPrice = totalPrice / chunksAmount;
 
-  return { freeChunks, chunksAmount, totalPrice, avgChunkPrice };
+  return {freeChunks, chunksAmount, totalPrice, avgChunkPrice};
 });
 
 const openPickerAndUploadFiles = async () => {
   // Open the file picker.
-  let selected = await open({ multiple: true });
+  let selected = await open({multiple: true});
 
   // User did not select any files in the dialog.
   if (selected === null) {
@@ -266,8 +269,10 @@ const openPickerAndUploadFiles = async () => {
   }
 
   // Turn into `File` objects, giving the file the name of the filename in the path.
-  const files = await Promise.all(selected.map(async (file) => { return { path: file, name: await basename(file) }; }));
-  await invoke("upload_files", { files });
+  const files = await Promise.all(selected.map(async (file) => {
+    return {path: file, name: await basename(file)};
+  }));
+  await invoke("upload_files", {files});
 };
 </script>
 
@@ -275,15 +280,15 @@ const openPickerAndUploadFiles = async () => {
   <div>
     <!-- UPLOADER PAGE -->
     <div
-      class="autonomi-uploader px-[100px] py-[70px]"
-      :class="`${
+        class="autonomi-uploader px-[100px] py-[70px]"
+        :class="`${
         !isGeneratingQuote ? '' : 'hidden'
       } transition-all duration-300`"
     >
       <!-- <Toast /> -->
 
       <div
-        :class="`${
+          :class="`${
           files.length ? 'h-[80px]' : 'h-0'
         } overflow-hidden transition-all duration-300 flex items-start`"
       >
@@ -293,25 +298,25 @@ const openPickerAndUploadFiles = async () => {
       </div>
 
       <FileUpload
-        name="demo[]"
-        url="/api/upload"
-        @upload="onAdvancedUpload($event)"
-        :multiple="true"
-        @select="onSelectedFiles"
-        @error="handleUploadError"
-        ref="fileupload"
+          name="demo[]"
+          url="/api/upload"
+          @upload="onAdvancedUpload($event)"
+          :multiple="true"
+          @select="onSelectedFiles"
+          @error="handleUploadError"
+          ref="fileupload"
       >
         <template
-          #header="{ chooseCallback, uploadCallback, clearCallback, files }"
+            #header="{ chooseCallback, uploadCallback, clearCallback, files }"
         >
           <div class="flex flex-wrap justify-between items-center flex-1 gap-4">
             <div class="flex gap-2">
               <Button
-                @click="chooseCallback()"
-                icon="pi pi-images"
-                rounded
-                outlined
-                severity="secondary"
+                  @click="chooseCallback()"
+                  icon="pi pi-images"
+                  rounded
+                  outlined
+                  severity="secondary"
               ></Button>
               <!-- <Button
                 @click="uploadEvent(uploadCallback)"
@@ -322,12 +327,12 @@ const openPickerAndUploadFiles = async () => {
                 :disabled="!files || files.length === 0"
               ></Button> -->
               <Button
-                @click="handleClearUploads(clearCallback)"
-                icon="pi pi-times"
-                rounded
-                outlined
-                severity="danger"
-                :disabled="!files || files.length === 0"
+                  @click="handleClearUploads(clearCallback)"
+                  icon="pi pi-times"
+                  rounded
+                  outlined
+                  severity="danger"
+                  :disabled="!files || files.length === 0"
               ></Button>
             </div>
             <!-- <ProgressBar
@@ -340,7 +345,7 @@ const openPickerAndUploadFiles = async () => {
           </div>
         </template>
         <template
-          #content="{
+            #content="{
             files,
             messages,
             uploadedFiles,
@@ -352,8 +357,8 @@ const openPickerAndUploadFiles = async () => {
           <div class="flex flex-col gap-8 pt-4">
             <div v-if="messages?.length">
               <div
-                v-for="message in messages"
-                class="text-xs bg-red-400 text-white py-2 px-6 rounded-lg border border-red-600"
+                  v-for="message in messages"
+                  class="text-xs bg-red-400 text-white py-2 px-6 rounded-lg border border-red-600"
               >
                 {{ message }}
               </div>
@@ -366,38 +371,38 @@ const openPickerAndUploadFiles = async () => {
               </h5> -->
               <div class="flex flex-wrap gap-4">
                 <div
-                  v-for="(file, index) of files"
-                  :key="file.name + file.type + file.size"
-                  class="p-8 rounded-border flex flex-col border border-surface items-center gap-4"
+                    v-for="(file, index) of files"
+                    :key="file.name + file.type + file.size"
+                    class="p-8 rounded-border flex flex-col border border-surface items-center gap-4"
                 >
                   <div>
                     <i
-                      v-if="file?.type === 'application/pdf'"
-                      class="pi pi-file-pdf text-5xl"
+                        v-if="file?.type === 'application/pdf'"
+                        class="pi pi-file-pdf text-5xl"
                     />
                     <img
-                      v-else
-                      role="presentation"
-                      :alt="file.name"
-                      :src="file.objectURL"
-                      width="100"
-                      height="50"
+                        v-else
+                        role="presentation"
+                        :alt="file.name"
+                        :src="file.objectURL"
+                        width="100"
+                        height="50"
                     />
                   </div>
                   <span
-                    class="font-semibold text-ellipsis max-w-60 whitespace-nowrap overflow-hidden mt-auto"
-                    >{{ file.name }}
+                      class="font-semibold text-ellipsis max-w-60 whitespace-nowrap overflow-hidden mt-auto"
+                  >{{ file.name }}
                   </span>
                   <div>{{ formatSize(file.size) }}</div>
-                  <Badge value="Pending" severity="warn" />
+                  <Badge value="Pending" severity="warn"/>
                   <Button
-                    icon="pi pi-times"
-                    @click="
+                      icon="pi pi-times"
+                      @click="
                       onRemoveTemplatingFile(file, removeFileCallback, index)
                     "
-                    outlined
-                    rounded
-                    severity="danger"
+                      outlined
+                      rounded
+                      severity="danger"
                   />
                 </div>
               </div>
@@ -407,31 +412,31 @@ const openPickerAndUploadFiles = async () => {
               <h5>Completed</h5>
               <div class="flex flex-wrap gap-4">
                 <div
-                  v-for="(file, index) of uploadedFiles"
-                  :key="file.name + file.type + file.size"
-                  class="p-8 rounded-border flex flex-col border border-surface items-center gap-4"
+                    v-for="(file, index) of uploadedFiles"
+                    :key="file.name + file.type + file.size"
+                    class="p-8 rounded-border flex flex-col border border-surface items-center gap-4"
                 >
                   <div>
                     <img
-                      role="presentation"
-                      :alt="file.name"
-                      :src="file.objectURL"
-                      width="100"
-                      height="50"
+                        role="presentation"
+                        :alt="file.name"
+                        :src="file.objectURL"
+                        width="100"
+                        height="50"
                     />
                   </div>
                   <span
-                    class="font-semibold text-ellipsis max-w-60 whitespace-nowrap overflow-hidden"
-                    >{{ file.name }}</span
+                      class="font-semibold text-ellipsis max-w-60 whitespace-nowrap overflow-hidden"
+                  >{{ file.name }}</span
                   >
                   <div>{{ formatSize(file.size) }}</div>
-                  <Badge value="Completed" class="mt-4" severity="success" />
+                  <Badge value="Completed" class="mt-4" severity="success"/>
                   <Button
-                    icon="pi pi-times"
-                    @click="removeUploadedFileCallback(index)"
-                    outlined
-                    rounded
-                    severity="danger"
+                      icon="pi pi-times"
+                      @click="removeUploadedFileCallback(index)"
+                      outlined
+                      rounded
+                      severity="danger"
                   />
                 </div>
               </div>
@@ -448,10 +453,10 @@ const openPickerAndUploadFiles = async () => {
         <template #empty="{ chooseCallback }">
           <div class="flex items-center justify-center flex-col h-full">
             <i
-              class="pi pi-cloud-upload !border-0 !rounded-full !p-8 !text-[100px] !text-autonomi-gray-500"
+                class="pi pi-cloud-upload !border-0 !rounded-full !p-8 !text-[100px] !text-autonomi-gray-500"
             />
             <p
-              class="mt-2 mb-0 text-4xl font-semibold text-autonomi-text-primary"
+                class="mt-2 mb-0 text-4xl font-semibold text-autonomi-text-primary"
             >
               <span class="lg:hidden">upload files</span>
               <span class="hidden lg:block">Drag & Drop files here</span>
@@ -459,10 +464,10 @@ const openPickerAndUploadFiles = async () => {
 
             <div class="mt-6 lg:hidden">
               <button
-                @click="handleChooseUpload"
-                class="bg-autonomi-red-300 text-white px-8 py-2 rounded-full"
+                  @click="handleChooseUpload"
+                  class="bg-autonomi-red-300 text-white px-8 py-2 rounded-full"
               >
-                <i class="pi pi-plus-circle" /> Upload
+                <i class="pi pi-plus-circle"/> Upload
               </button>
             </div>
           </div>
@@ -470,7 +475,7 @@ const openPickerAndUploadFiles = async () => {
       </FileUpload>
 
       <div
-        :class="`${
+          :class="`${
           files.length ? 'h-[80px]' : 'h-0'
         } overflow-hidden transition-all duration-300 flex items-start mt-10`"
       >
@@ -482,12 +487,12 @@ const openPickerAndUploadFiles = async () => {
 
     <!-- GENERATING NOTICE -->
     <div
-      class="px-[100px] py-[70px] items-center justify-center gap-10 min-h-[560px]"
-      :class="`${
+        class="px-[100px] py-[70px] items-center justify-center gap-10 min-h-[560px]"
+        :class="`${
         isGeneratingQuote ? 'flex flex-col' : 'hidden'
       } transition-all duration-300`"
     >
-      <i class="pi pi-spin pi-spinner text-6xl text-autonomi-gray-200" />
+      <i class="pi pi-spin pi-spinner text-6xl text-autonomi-gray-200"/>
       <div class="text-autonomi-text-primary text-4xl font-semibold">
         Gathering your quote
       </div>
@@ -495,10 +500,10 @@ const openPickerAndUploadFiles = async () => {
 
     <!-- QUOTE DRAWER -->
     <Drawer
-      v-model:visible="isVisibleQuoteGen"
-      header="Quote Breakdown"
-      position="right"
-      class="!h-auto !w-[380px] rounded-l-2xl"
+        v-model:visible="isVisibleQuoteGen"
+        header="Quote Breakdown"
+        position="right"
+        class="!h-auto !w-[380px] rounded-l-2xl"
     >
       <!--      <p>-->
       <!--        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod-->
@@ -514,7 +519,7 @@ const openPickerAndUploadFiles = async () => {
             {{ quoteBreakdownData?.chunksAmount }}
           </div>
         </div>
-        <div class="border-t border-autonomi-text-primary/30 my-4" />
+        <div class="border-t border-autonomi-text-primary/30 my-4"/>
         <div>
           <div class="text-aut text-autonomi-text-secondary">
             Avg. Price per chunk
@@ -523,7 +528,7 @@ const openPickerAndUploadFiles = async () => {
             {{ quoteBreakdownData?.avgChunkPrice }} Atto
           </div>
         </div>
-        <div class="border-t border-autonomi-text-primary/30 my-4" />
+        <div class="border-t border-autonomi-text-primary/30 my-4"/>
         <div>
           <div class="text-aut text-autonomi-text-secondary">
             Total Price (Ex. gas fee)
@@ -532,7 +537,7 @@ const openPickerAndUploadFiles = async () => {
             {{ quoteBreakdownData?.totalPrice }} Atto
           </div>
         </div>
-        <div class="border-t border-autonomi-text-primary/30 my-4" />
+        <div class="border-t border-autonomi-text-primary/30 my-4"/>
       </div>
 
       <div class="flex items-center justify-center mt-8 gap-4">
@@ -547,10 +552,10 @@ const openPickerAndUploadFiles = async () => {
 
     <!-- PAY & UPLOAD DRAWER -->
     <Drawer
-      v-model:visible="isVisiblePayAndUpload"
-      header="Uploading File(s)"
-      position="right"
-      class="!h-auto !w-[380px] rounded-l-2xl"
+        v-model:visible="isVisiblePayAndUpload"
+        header="Uploading File(s)"
+        position="right"
+        class="!h-auto !w-[380px] rounded-l-2xl"
     >
       <template v-if="autonomi.uploadStep === 'network'">
         <p class="text-xs font-semibold">Connecting to network..</p>

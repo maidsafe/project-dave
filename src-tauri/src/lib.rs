@@ -1,5 +1,5 @@
 use crate::ant::files::File;
-use crate::ant::payments::PaymentOrderManager;
+use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use tauri::{AppHandle, State};
 
 mod ant;
@@ -30,6 +30,16 @@ async fn upload_files_test(
     Ok(())
 }
 
+#[tauri::command]
+async fn send_payment_order_message(
+    id: OrderID,
+    message: OrderMessage,
+    payment_orders: State<'_, PaymentOrderManager>,
+) -> Result<(), ()> {
+    payment_orders.send_order_message(id, message).await;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -39,7 +49,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             upload_files,
-            upload_files_test
+            upload_files_test,
+            send_payment_order_message
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

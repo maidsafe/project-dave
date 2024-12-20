@@ -1,16 +1,17 @@
 use autonomi::{Amount, QuoteHash, RewardsAddress};
 use rand::Rng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
 
 pub type OrderID = u16;
 pub type Payment = (QuoteHash, RewardsAddress, Amount);
 
-pub const IDLE_PAYMENT_TIMEOUT_SECS: u64 = 30;
+pub const IDLE_PAYMENT_TIMEOUT_SECS: u64 = 600;
 const CHANEL_SIZE: usize = 128;
 
+#[derive(Serialize, Deserialize, Clone)]
 pub enum OrderMessage {
     Cancelled,
     Completed,
@@ -18,9 +19,10 @@ pub enum OrderMessage {
 }
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PaymentOrder {
     pub id: OrderID,
-    payments: Vec<Payment>,
+    pub payments: Vec<Payment>,
     #[serde(skip)]
     confirmation_sender: Sender<OrderMessage>,
 }
@@ -49,18 +51,26 @@ pub struct PaymentOrderManager {
 }
 
 impl PaymentOrderManager {
-    pub fn create_order(&self, payments: Vec<Payment>) -> (PaymentOrder, Receiver<OrderMessage>) {
+    pub async fn create_order(
+        &self,
+        payments: Vec<Payment>,
+    ) -> (PaymentOrder, Receiver<OrderMessage>) {
         let (sender, receiver) = channel(CHANEL_SIZE);
 
         let order = PaymentOrder::new(payments, sender);
 
-        // optimization: compare with tokio mutex
-        let mut orders = self.orders.lock().expect("Could not get lock on orders");
+        let mut orders = self.orders.lock().await;
 
         orders.insert(order.id, order.clone());
 
-        drop(orders);
-
         (order, receiver)
+    }
+
+    pub async fn send_order_message(&self, id: OrderID, message: OrderMessage) {
+        let mut orders = self.orders.lock().await;
+
+        let order = orders.get_mut(&id).expect("Order not found");
+
+        let _ = order.confirmation_sender.send(message).await;
     }
 }

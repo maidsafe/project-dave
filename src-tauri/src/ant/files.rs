@@ -3,7 +3,7 @@ use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEO
 use autonomi::client::data::DataMapChunk;
 use autonomi::client::files::archive::Metadata;
 use autonomi::client::quote::StoreQuote;
-use autonomi::{Bytes, Chunk};
+use autonomi::{Amount, Bytes, Chunk};
 use rand::Rng;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -83,7 +83,7 @@ pub async fn upload_private_files_to_vault(
 
     let (private_archive_datamap, private_archive_chunks) = autonomi::self_encryption::encrypt(
         private_archive
-            .into_bytes()
+            .to_bytes()
             .expect("Could not produce bytes from private archive"),
     )
     .unwrap();
@@ -102,7 +102,13 @@ pub async fn upload_private_files_to_vault(
         aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
     }
 
-    let (order, mut confirmation_receiver) = payment_orders.create_order(vec![]);
+    let payments = aggregated_store_quote
+        .payments()
+        .into_iter()
+        .filter(|(_, _, amount)| *amount > Amount::ZERO)
+        .collect();
+
+    let (order, mut confirmation_receiver) = payment_orders.create_order(payments).await;
 
     // let the frontend know that a payment has to be made
     app.emit("payment-order", order.to_json()).unwrap();
@@ -171,40 +177,50 @@ pub async fn payment_test(app: AppHandle, payment_orders: State<'_, PaymentOrder
 
     println!("Got quotes!");
 
-    let (payment_order, mut confirmation_receiver) =
-        payment_orders.create_order(store_quote.payments());
+    let payments = store_quote
+        .payments()
+        .into_iter()
+        .filter(|(_, _, amount)| *amount > Amount::ZERO)
+        .collect();
+
+    let (payment_order, mut confirmation_receiver) = payment_orders.create_order(payments).await;
 
     // let the frontend know that a payment has to be made
-    app.emit("payment-order", payment_order.to_json()).unwrap();
+    app.emit("payment-order", payment_order).unwrap();
 
-    let order_successful = tokio::spawn(async move {
-        loop {
-            let result = timeout(
+    println!("Chunks: {chunks:?}");
+
+    tokio::spawn(async move {
+        let order_successful = loop {
+            match timeout(
                 Duration::from_secs(IDLE_PAYMENT_TIMEOUT_SECS),
                 confirmation_receiver.recv(),
             )
-            .await;
+            .await
+            {
+                Ok(Some(OrderMessage::KeepAlive)) => continue,
+                Ok(Some(OrderMessage::Completed)) => break true,
+                _ => break false,
+            }
+        };
 
-            match result {
-                Ok(Some(order_message)) => match order_message {
-                    OrderMessage::KeepAlive => {
-                        continue;
-                    }
-                    OrderMessage::Completed => {
-                        return true;
-                    }
-                    OrderMessage::Cancelled => {
-                        return false;
-                    }
-                },
-                _ => {
-                    return false;
-                }
-            };
+        println!("Order paid: {order_successful}");
+
+        if order_successful {
+            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+
+            println!("Uploading chunks..");
+
+            for chunk in &chunks {
+                let proof_of_payment = receipt.get(chunk.address.xorname());
+                println!("Chunk: {chunk:?}, Proof of payment: {proof_of_payment:?}");
+            }
+
+            let result = client
+                .upload_chunks_with_retries(chunks.iter().collect(), &receipt)
+                .await;
+
+            println!("Upload result: {result:?}");
         }
-    })
-    .await
-    .unwrap();
-
-    println!("Order paid: {order_successful}");
+    });
 }
