@@ -3,6 +3,7 @@ use crate::ant::payments::PaymentOrderManager;
 use tauri::{AppHandle, State};
 
 mod ant;
+pub mod logging;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
