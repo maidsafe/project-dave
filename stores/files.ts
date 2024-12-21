@@ -1,6 +1,9 @@
+import { invoke } from '@tauri-apps/api/core';
 import type { IFolder } from "~/types/folder";
+import {useWalletStore} from "~/stores/wallet";
 
 export const useFileStore = defineStore("files", () => {
+  const walletStore = useWalletStore();
   // const autonomi = useAutonomiStore();
 
   // Class
@@ -133,9 +136,11 @@ export const useFileStore = defineStore("files", () => {
   };
 
   const getAllFiles = async () => {
+    console.log(">>> Getting files from vault...");
     try {
       pendingGetAllFiles.value = true;
-      files.value = await autonomi.getPrivateFilesFromVault();
+      let vaultKeySignature = await walletStore.getVaultKeySignature();
+      files.value = await invoke("get_files_from_vault", { vaultKeySignature });
     } catch (error) {
       // TODO: Handle error
       console.log(">>> ERROR: Failed to get files:", error);
@@ -147,7 +152,6 @@ export const useFileStore = defineStore("files", () => {
       buildRootDirectory();
     }
   };
-
   // Return
   return {
     files,
