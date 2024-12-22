@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { IFolder } from "~/types/folder";
+import type { IFolder, IFile } from "~/types/folder";
 import {useWalletStore} from "~/stores/wallet";
 
 export const useFileStore = defineStore("files", () => {
@@ -62,7 +62,7 @@ export const useFileStore = defineStore("files", () => {
   }
 
   // State
-  const files = ref<any[]>([]);
+  const files = ref<IFile[]>([]);
   const rootDirectory = ref<IFolder | null>(null);
   const currentDirectory = ref<IFolder | null>(null);
   const pendingGetAllFiles = ref(false);
@@ -91,7 +91,7 @@ export const useFileStore = defineStore("files", () => {
 
       files.value.forEach((file) => {
         // TODO: Change Parents to a name that will not be used as a folder name
-        const paths = file.paths.local.split("/");
+        const paths = file.path.split("/");
         let current: any = rootDirectory.value;
 
         paths.forEach((path: string, index: number) => {

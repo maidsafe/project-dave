@@ -203,7 +203,13 @@ async function loadSettings() {
   bootstrapPeers.value = app_data.peers.join(',');
 }
 onMounted(async () => {
-  await loadSettings()
+  try {
+    const response = await loadSettings()
+    console.log('>>> Settings response: ', response)
+  }
+  catch (e) {
+    console.log('>>> Error loading settings: ', e)
+  }
 })
 </script>
 

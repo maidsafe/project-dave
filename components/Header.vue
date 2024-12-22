@@ -247,7 +247,11 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div
-                  class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300"
+                  @click="() => {
+                    toggleHamburgerMenu();
+                    navigateTo('/');
+                  }"
+                  class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300 cursor-pointer"
               >
                 <div>
                   <div class="text-2xl font-semibold text-autonomi-header-text">
@@ -262,7 +266,11 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div
-                  class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300"
+                  @click="() => {
+                    toggleHamburgerMenu();
+                    navigateTo('/settings');
+                  }"
+                  class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300 cursor-pointer"
               >
                 <div>
                   <div class="text-2xl font-semibold text-autonomi-header-text">
