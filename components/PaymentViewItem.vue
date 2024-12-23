@@ -61,7 +61,7 @@ onUnmounted(() => {
       <div>
         <i
           v-if="payment.processing === ProcessingState.COMPLETED"
-          class="pi pi-check-circle"
+          class="pi pi-check-circle text-green-600"
         />
         <i
           v-else-if="payment.processing === ProcessingState.CANCELLED"

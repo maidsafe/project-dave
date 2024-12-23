@@ -31,6 +31,7 @@ export const usePaymentStore = defineStore("payments", () => {
   const showPayments = ref(false);
   const paymentView = ref<PaymentViews>("list");
   const showPaymentDrawer = ref(false);
+  const signPaymentPending = ref(false);
 
   const pendingPaymentsCount = computed(
     () =>
@@ -49,6 +50,7 @@ export const usePaymentStore = defineStore("payments", () => {
 
   // Methods
   const openPaymentDrawer = () => {
+    setPaymentView("list");
     showPaymentDrawer.value = true;
   };
 
@@ -136,10 +138,18 @@ export const usePaymentStore = defineStore("payments", () => {
     }
 
     try {
+      console.log(">>> Attempting to pay for order", order);
+      // Set payment pending - flag to show notification
+      signPaymentPending.value = true;
+
       await invoke("send_payment_order_message", {
         id: order.id,
         message: "KeepAlive",
       });
+
+      // Set sign pending false - flag to remove notification
+      signPaymentPending.value = false;
+
       setProcessingState(order.id, ProcessingState.PROCESSING);
       resetExpirationTime(order.id);
       await walletStore.payForQuotes(order.payments);
@@ -148,8 +158,13 @@ export const usePaymentStore = defineStore("payments", () => {
         id: order.id,
         message: "Completed",
       });
+      console.log(">>> Payment complete");
     } catch (err) {
       console.error(">>> Error paying for quote", err);
+
+      // Set sign pending false - flag to remove notification
+      signPaymentPending.value = false;
+
       setProcessingState(order.id, ProcessingState.CANCELLED);
       await invoke("send_payment_order_message", {
         id: order.id,
@@ -176,6 +191,7 @@ export const usePaymentStore = defineStore("payments", () => {
     IDLE_PAYMENT_EXPIRATION_TIME_SECS,
     pendingPayments,
     pendingPaymentsCount,
+    signPaymentPending,
     showPaymentDrawer,
     sortedPendingPayments,
     paymentView,

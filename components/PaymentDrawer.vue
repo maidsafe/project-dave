@@ -2,6 +2,8 @@
 import { usePaymentStore } from "~/stores/payments";
 import { storeToRefs } from "pinia";
 
+const emit = defineEmits(["show-notify", "hide-notify"]);
+
 const paymentStore = usePaymentStore();
 const {
   currentPayment,
@@ -9,6 +11,7 @@ const {
   paymentView,
   pendingPayments,
   pendingPaymentsCount,
+  signPaymentPending,
   sortedPendingPayments,
 } = storeToRefs(paymentStore);
 const handleSelectPayment = (payment: any) => {
@@ -22,13 +25,24 @@ const handleSelectPayment = (payment: any) => {
   paymentStore.setCurrentPayment(payment);
 
   // Set view to payment
-  //   paymentView.value = "payment";
   paymentStore.setPaymentView("payment");
 };
 
 const handlePayment = () => {
   paymentStore.pay(currentPayment.value.order);
 };
+
+watchEffect(() => {
+  if (signPaymentPending.value) {
+    emit("show-notify", {
+      title: "Payment request",
+      details: "Please sign the payment request in your wallet app.",
+      notifyType: "info",
+    });
+  } else {
+    emit("hide-notify");
+  }
+});
 </script>
 
 <template>

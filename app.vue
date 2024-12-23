@@ -167,7 +167,10 @@ onMounted(async () => {
           @close-notification="handleHideNotification"
         />
 
-        <PaymentDrawer />
+        <PaymentDrawer
+          @show-notify="handleShowNotification"
+          @hide-notify="handleHideNotification"
+        />
       </div>
     </NuxtLayout>
   </div>

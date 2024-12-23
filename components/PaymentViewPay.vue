@@ -36,8 +36,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-1 text-xs p-4">
-    <div class="text-sm font-semibold">
+  <div class="flex flex-col gap-1 text-xs p-4 w-full">
+    <div
+      class="text-sm font-semibold"
+      v-if="payment.processing !== ProcessingState.COMPLETED"
+    >
       Pay using your wallet app before the timer runs out.
     </div>
     <div class="font-semibold text-sm mt-4">
@@ -57,7 +60,7 @@ onUnmounted(() => {
     </div>
     <div class="mt-10 flex items-center justify-center gap-6">
       <template v-if="payment.processing === ProcessingState.COMPLETED">
-        <div class="flex gap-2 items-center font-semibold">
+        <div class="flex gap-2 items-center font-semibold text-green-600">
           <i class="pi pi-check-circle" />
           Payment Complete
         </div>
