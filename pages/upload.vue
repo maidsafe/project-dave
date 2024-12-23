@@ -7,6 +7,7 @@ import {useWalletStore} from "~/stores/wallet";
 
 const walletStore = useWalletStore();
 const toast = useToast();
+const emit = defineEmits(["show-notify", "hide-notify"]);
 
 const openPickerAndUploadFiles = async () => {
   // Open the file picker.
@@ -27,9 +28,31 @@ const openPickerAndUploadFiles = async () => {
     return {path: file, name: await basename(file)};
   }));
 
-  let vaultKeySignature = await walletStore.getVaultKeySignature();
-
-  await invoke("upload_files", {files, vaultKeySignature});
+  try {
+    console.log('>>> UPLOD.VUE GETTING VAULT KEY SIGNATURE')
+    emit("show-notify", {notifyType: 'info', title: 'Sign upload required', details: 'Please sign the upload request in your wallet.'})
+    let vaultKeySignature = await walletStore.getVaultKeySignature();
+  
+    // TODO: Show list of selected files
+    // TODO: Allow user to select multiple files from different directories
+    // TODO: Move invoke to a separate function. Give user the option to upload files
+    console.log('>>> UPLOAD.VUE INVOKING UPLOAD_FILES')
+    emit('show-notify', {notifyType: 'info', title: 'Uploading files', details: 'Please wait while we upload your files.'})
+    const uploadResponse = await invoke("upload_files", {files, vaultKeySignature});
+    console.log('>>> UPLOAD RESPONSE: ', uploadResponse)
+    console.log('>>> UPLOAD.VUE INVOKED UPLOAD_FILES COMPLETE')
+  }
+  catch (error: any) {
+    toast.add({
+      severity: "error",
+      summary: "Error uploading files",
+      detail: error.message,
+      life: 3000,
+    });
+  }
+  finally {
+    emit("hide-notify");
+  }
 };
 </script>
 
