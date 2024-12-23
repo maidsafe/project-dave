@@ -147,17 +147,16 @@ export const usePaymentStore = defineStore("payments", () => {
         message: "KeepAlive",
       });
 
-      // Set sign pending false - flag to remove notification
-      signPaymentPending.value = false;
-
       setProcessingState(order.id, ProcessingState.PROCESSING);
       resetExpirationTime(order.id);
+
       await walletStore.payForQuotes(order.payments);
       setProcessingState(order.id, ProcessingState.COMPLETED);
       await invoke("send_payment_order_message", {
         id: order.id,
         message: "Completed",
       });
+      signPaymentPending.value = false;
       console.log(">>> Payment complete");
     } catch (err) {
       console.error(">>> Error paying for quote", err);
