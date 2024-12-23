@@ -55,7 +55,6 @@ const handlePayment = () => {
       <template v-else>
         <!-- DEFAULT LIST VIEW -->
         <div class="w-full">
-          <div>{{ paymentView }} ---</div>
           <div
             v-if="sortedPendingPayments?.length > 0"
             class="flex flex-col gap-4"
