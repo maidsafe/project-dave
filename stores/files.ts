@@ -5,6 +5,7 @@ import {useWalletStore} from "~/stores/wallet";
 export const useFileStore = defineStore("files", () => {
   const walletStore = useWalletStore();
   // const autonomi = useAutonomiStore();
+  const toast = useToast();
 
   // Class
   class Folder {
@@ -65,6 +66,7 @@ export const useFileStore = defineStore("files", () => {
   const files = ref<IFile[]>([]);
   const rootDirectory = ref<IFolder | null>(null);
   const currentDirectory = ref<IFolder | null>(null);
+  const pendingFilesSignature = ref(false);
   const pendingGetAllFiles = ref(false);
 
   // Computed
@@ -138,14 +140,31 @@ export const useFileStore = defineStore("files", () => {
   const getAllFiles = async () => {
     console.log(">>> Getting files from vault...");
     try {
-      pendingGetAllFiles.value = true;
+      // Get vault key signature
+      pendingFilesSignature.value = true;
       let vaultKeySignature = await walletStore.getVaultKeySignature();
+
+      // Got signature
+      pendingFilesSignature.value = false;
+
+      // Set loading files
+      pendingGetAllFiles.value = true;
       files.value = await invoke("get_files_from_vault", { vaultKeySignature });
-    } catch (error) {
+    } catch (error: any) {
       // TODO: Handle error
       console.log(">>> ERROR: Failed to get files:", error);
+      const message = error?.message || "There was an error getting your files.";
+
+      toast.add({
+        severity: "error",
+        summary: "Failed to get files",
+        detail: message,
+        life: 3000,
+      });
+
       throw new Error("Failed to get files");
     } finally {
+      pendingFilesSignature.value = false;
       pendingGetAllFiles.value = false;
 
       // Build Root Directory
@@ -158,6 +177,7 @@ export const useFileStore = defineStore("files", () => {
     rootDirectory,
     currentDirectory,
     currentDirectoryFiles,
+    pendingFilesSignature,
     pendingGetAllFiles,
     // Methods
     changeDirectory,

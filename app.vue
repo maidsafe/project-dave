@@ -1,6 +1,8 @@
 <script lang="ts" setup>
-import {createAppKit} from "@reown/appkit/vue";
-import {networks, projectId, wagmiAdapter} from "~/config";
+import { createAppKit } from "@reown/appkit/vue";
+import { networks, projectId, wagmiAdapter } from "~/config";
+import { useFileStore } from "~/stores/files";
+import { storeToRefs } from "pinia";
 
 // Initialize AppKit
 createAppKit({
@@ -8,21 +10,27 @@ createAppKit({
   networks,
   projectId,
   metadata: {
-    name: 'AppKit Vue Example',
-    description: 'AppKit Vue Example',
-    url: 'https://reown.com/appkit',
-    icons: ['https://avatars.githubusercontent.com/u/179229932?s=200&v=4']
-  }
+    name: "AppKit Vue Example",
+    description: "AppKit Vue Example",
+    url: "https://reown.com/appkit",
+    icons: ["https://avatars.githubusercontent.com/u/179229932?s=200&v=4"],
+  },
 });
 
 const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer`;
 
 // State
+const fileStore = useFileStore();
 const walletStore = useWalletStore();
 // const autonomi = useAutonomiStore();
-const {openConnectWallet, openDisconnectWallet, wallet} =
-    storeToRefs(walletStore);
+const { pendingFilesSignature } = storeToRefs(fileStore);
 
+const { openConnectWallet, openDisconnectWallet, wallet } =
+  storeToRefs(walletStore);
+const notifyType = ref<"info" | "warning">("info");
+const notifyTitle = ref("");
+const notifyDetails = ref("");
+const showNotification = ref(false);
 const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
 
@@ -42,6 +50,34 @@ const handleClickUpload = async () => {
   }
 };
 
+const handleShowNotification = (payload: any) => {
+  console.log(">>> Notification payload:", payload);
+
+  notifyType.value = payload.notifyType || "info";
+  notifyTitle.value = payload.title || "";
+  notifyDetails.value = payload.details;
+
+  showNotification.value = true;
+};
+
+const handleHideNotification = () => {
+  console.log(">>> Notification closed");
+  showNotification.value = false;
+};
+
+watchEffect(() => {
+  if (pendingFilesSignature.value) {
+    handleShowNotification({
+      notifyType: "info",
+      title: "Sign file request",
+      details:
+        "To view your files please sign the file request in your wallet.",
+    });
+  } else {
+    handleHideNotification();
+  }
+});
+
 onMounted(async () => {
   setTimeout(() => {
     isFadeOut.value = true;
@@ -57,47 +93,47 @@ onMounted(async () => {
 <template>
   <div class="min-h-screen flex flex-col bg-autonomi-gray-50 relative">
     <div
-        v-if="!removeSplashScreen"
-        class="absolute w-full h-full bg-white top-0 left-0 z-50 transition-all duration-1000"
-        :class="{
+      v-if="!removeSplashScreen"
+      class="absolute w-full h-full bg-white top-0 left-0 z-50 transition-all duration-1000"
+      :class="{
         'opacity-100': !isFadeOut,
         'opacity-0': isFadeOut,
       }"
     >
       <div class="flex items-center justify-center h-full">
-        <IconLogo/>
+        <IconLogo />
       </div>
     </div>
     <NuxtLayout>
       <div class="sticky top-0 z-20">
-        <Header/>
+        <Header />
       </div>
       <div class="flex flex-1">
         <!-- SideBar -->
         <div
-            class="pb-4 w-[290px] transition-all duration-300 hidden lg:flex flex-col rounded-tr-2xl bg-white overflow-hidden items-center pt-[35px] shrink-0"
+          class="pb-4 w-[290px] transition-all duration-300 hidden lg:flex flex-col rounded-tr-2xl bg-white overflow-hidden items-center pt-[35px] shrink-0"
         >
           <div class="mb-11">
             <CommonButton
-                variant="primary"
-                size="large"
-                @click="handleClickUpload"
-                class="flex"
+              variant="primary"
+              size="large"
+              @click="handleClickUpload"
+              class="flex"
             >
-              <i class="pi pi-plus-circle"/><span aria-label="Upload">
+              <i class="pi pi-plus-circle" /><span aria-label="Upload">
                 Upload</span
-            >
+              >
             </CommonButton>
           </div>
 
           <div class="flex flex-col justify-start">
             <NuxtLink :class="`${classesLinks}`" to="/">
-              <IconFiles class="w-6 h-6"/>
+              <IconFiles class="w-6 h-6" />
               Home
             </NuxtLink>
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
-              <IconSettings class="w-6 h-6"/>
+              <IconSettings class="w-6 h-6" />
               Settings
             </NuxtLink>
           </div>
@@ -105,21 +141,33 @@ onMounted(async () => {
 
         <div class="flex-1">
           <NuxtPage
-              @open-login="walletStore.showConnectWallet"
-              @close-login="walletStore.hideConnectWallet"
+            @open-login="walletStore.showConnectWallet"
+            @close-login="walletStore.hideConnectWallet"
+            @show-notify="handleShowNotification"
+            @hide-notify="handleHideNotification"
           />
-          <Toast position="bottom-right"/>
+          <Toast position="bottom-right" />
         </div>
 
         <DialogConnectWallet
-            :visible="openConnectWallet"
-            @close-login="walletStore.hideConnectWallet"
+          :visible="openConnectWallet"
+          @close-login="walletStore.hideConnectWallet"
         />
 
         <DialogDisconnectWallet
-            :visible="openDisconnectWallet"
-            @close-disconnect-wallet="walletStore.hideDisconnectWallet"
+          :visible="openDisconnectWallet"
+          @close-disconnect-wallet="walletStore.hideDisconnectWallet"
         />
+
+        <DialogNotification
+          :visible="showNotification"
+          :notify-type="notifyType"
+          :title="notifyTitle"
+          :details="notifyDetails"
+          @close-notification="handleHideNotification"
+        />
+
+        <PaymentDrawer />
       </div>
     </NuxtLayout>
   </div>
