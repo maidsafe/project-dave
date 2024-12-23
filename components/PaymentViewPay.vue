@@ -56,26 +56,40 @@ onUnmounted(() => {
       Expires in: {{ remainingTime }}
     </div>
     <div class="mt-10 flex items-center justify-center gap-6">
-      <CommonButton
-        label="Pay"
-        icon="pi pi-wallet"
-        class="flex gap-1"
-        variant="secondary"
-        @click="emit('payment-pay', payment)"
-      >
-        <i class="pi pi-wallet" />
-        Pay
-      </CommonButton>
-      <CommonButton
-        label="Cancel"
-        icon="pi pi-times"
-        class="flex gap-1"
-        variant="tertiary"
-        @click="emit('payment-cancel', payment)"
-      >
-        <i class="pi pi-times" />
-        Cancel
-      </CommonButton>
+      <template v-if="payment.processing === ProcessingState.COMPLETED">
+        <div class="flex gap-2 items-center font-semibold">
+          <i class="pi pi-check-circle" />
+          Payment Complete
+        </div>
+      </template>
+      <template v-else-if="payment.processing === ProcessingState.CANCELLED">
+        <div class="flex gap-2 items-center font-semibold text-red-600">
+          <i class="pi pi-times text-red-600" />
+          Payment Cancelled
+        </div>
+      </template>
+      <template v-else>
+        <CommonButton
+          label="Pay"
+          icon="pi pi-wallet"
+          class="flex gap-1"
+          variant="secondary"
+          @click="emit('payment-pay', payment)"
+        >
+          <i class="pi pi-wallet" />
+          Pay
+        </CommonButton>
+        <CommonButton
+          label="Cancel"
+          icon="pi pi-times"
+          class="flex gap-1"
+          variant="tertiary"
+          @click="emit('payment-cancel', payment)"
+        >
+          <i class="pi pi-times" />
+          Cancel
+        </CommonButton>
+      </template>
     </div>
   </div>
 </template>

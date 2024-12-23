@@ -59,7 +59,15 @@ onUnmounted(() => {
         </div>
       </div>
       <div>
-        <i class="pi pi-spin pi-spinner-dotted" />
+        <i
+          v-if="payment.processing === ProcessingState.COMPLETED"
+          class="pi pi-check-circle"
+        />
+        <i
+          v-else-if="payment.processing === ProcessingState.CANCELLED"
+          class="pi pi-times text-red-600"
+        />
+        <i v-else class="pi pi-spin pi-spinner-dotted" />
       </div>
     </div>
   </div>
