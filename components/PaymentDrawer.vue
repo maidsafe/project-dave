@@ -8,7 +8,6 @@ const paymentStore = usePaymentStore();
 const {
   currentPayment,
   showPaymentDrawer,
-  paymentView,
   pendingPayments,
   pendingPaymentsCount,
   signPaymentPending,
@@ -58,31 +57,21 @@ watchEffect(() => {
     <div
       class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[95%] mx-auto"
     >
-      <template v-if="paymentView === 'payment'">
-        <!-- PAYMENT VIEW -->
-        <PaymentViewPay
-          :payment="currentPayment"
-          @payment-pay="handlePayment"
-          @payment-cancel="paymentStore.cancel(currentPayment.order.id)"
-        />
-      </template>
-      <template v-else>
-        <!-- DEFAULT LIST VIEW -->
-        <div class="w-full">
-          <div
-            v-if="sortedPendingPayments?.length > 0"
-            class="flex flex-col gap-4"
-          >
-            <PaymentViewItem
-              v-for="payment in sortedPendingPayments"
-              :key="payment.order.id"
-              :payment="payment"
-              @select-payment="handleSelectPayment"
-            />
-          </div>
-          <div v-else>No current payment requests.</div>
+      <div class="w-full">
+        <div
+          v-if="sortedPendingPayments?.length > 0"
+          class="flex flex-col gap-4"
+        >
+          <PaymentViewItem
+            v-for="payment in sortedPendingPayments"
+            :key="payment.order.id"
+            :payment="payment"
+            @payment-pay="handlePayment"
+            @payment-cancel="paymentStore.cancel(currentPayment.order.id)"
+          />
         </div>
-      </template>
+        <div v-else>No current payment requests.</div>
+      </div>
     </div>
   </Drawer>
 </template>
