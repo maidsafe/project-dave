@@ -25,7 +25,6 @@ const refUploadMenu = ref();
 const selectedDownloadItem = ref<any>();
 const selectedFileItem = ref<any>();
 const selectedUploadItem = ref<any>();
-
 const filteredFiles = computed(() => {
   try {
     if (!currentDirectory.value?.children?.length) {
@@ -528,13 +527,13 @@ onMounted(() => {
             v-for="file in filteredFiles"
             class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 hover:bg-white"
             @click="handleChangeDirectory(file)"
-            :class="{ 'cursor-pointer': !file.paths }"
+            :class="{ 'cursor-pointer': !file.path }"
           >
             <!-- Folder/File Name -->
             <div
               class="col-span-11 md:col-span-9 pl-[80px] lg:pl-[110px] flex items-center"
             >
-              <template v-if="file?.paths">
+              <template v-if="file?.path">
                 <!-- This is the file -->
                 <i
                   v-if="/\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
@@ -564,14 +563,14 @@ onMounted(() => {
               class="hidden xl:block xl:col-span-2 text-autonomi-text-primary"
             >
               {{
-                file.dateUploaded
-                  ? secondsToDate(file.dateUploaded).toLocaleString()
+                file?.metadata?.uploaded
+                  ? secondsToDate(file.metadata.uploaded).toLocaleString()
                   : ""
               }}
             </div>
 
             <!-- Menu -->
-            <template v-if="file.paths">
+            <template v-if="file.path">
               <div class="col-span-1">
                 <i
                   class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600"
@@ -619,14 +618,14 @@ onMounted(() => {
             <div
               v-for="file in filteredFiles"
               class="col-span-6 md:col-span-4 xl:col-span-3 aspect-square max-h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary transition-all duration-500"
-              :class="{ 'cursor-pointer': !file.paths }"
+              :class="{ 'cursor-pointer': !file.path }"
               @click="handleChangeDirectory(file)"
             >
               <div
                 class="flex flex-col items-center justify-center w-full h-full p-2"
               >
                 <!-- Menu -->
-                <template v-if="file.paths">
+                <template v-if="file.path">
                   <div class="self-end">
                     <i
                       class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
@@ -645,7 +644,7 @@ onMounted(() => {
                 <div
                   class="flex flex-col flex-1 items-center justify-center gap-3"
                 >
-                  <template v-if="file?.paths">
+                  <template v-if="file?.path">
                     <!-- This is the file -->
                     <i
                       v-if="
