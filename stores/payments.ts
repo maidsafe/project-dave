@@ -19,8 +19,6 @@ export type PendingPayment = {
   processing: ProcessingState;
 };
 
-type PaymentViews = "list" | "payment";
-
 export const usePaymentStore = defineStore("payments", () => {
   const walletStore = useWalletStore();
 
@@ -29,7 +27,6 @@ export const usePaymentStore = defineStore("payments", () => {
   const currentPayment = ref<any>(null);
   const pendingPayments: Ref<Map<number, PendingPayment>> = ref(new Map());
   const showPayments = ref(false);
-  const paymentView = ref<PaymentViews>("list");
   const showPaymentDrawer = ref(false);
   const signPaymentPending = ref(false);
 
@@ -50,12 +47,10 @@ export const usePaymentStore = defineStore("payments", () => {
 
   // Methods
   const openPaymentDrawer = () => {
-    setPaymentView("list");
     showPaymentDrawer.value = true;
   };
 
   const closePaymentDrawer = () => {
-    setPaymentView("list");
     showPaymentDrawer.value = false;
   };
 
@@ -180,10 +175,6 @@ export const usePaymentStore = defineStore("payments", () => {
     });
   };
 
-  const setPaymentView = (view: PaymentViews) => {
-    paymentView.value = view;
-  };
-
   // Return values
   return {
     currentPayment,
@@ -193,7 +184,6 @@ export const usePaymentStore = defineStore("payments", () => {
     signPaymentPending,
     showPaymentDrawer,
     sortedPendingPayments,
-    paymentView,
     addPendingPayment,
     calculateRemainingTime,
     calculateTotalAmount,
@@ -202,7 +192,6 @@ export const usePaymentStore = defineStore("payments", () => {
     openPaymentDrawer,
     resetExpirationTime,
     setCurrentPayment,
-    setPaymentView,
     pay,
     cancel,
   };

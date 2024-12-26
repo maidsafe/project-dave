@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import {useToast} from "primevue/usetoast";
-import {invoke} from "@tauri-apps/api/core";
-import {open} from '@tauri-apps/plugin-dialog';
-import {basename} from '@tauri-apps/api/path';
-import {useWalletStore} from "~/stores/wallet";
+import { useToast } from "primevue/usetoast";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { basename } from "@tauri-apps/api/path";
+import { useWalletStore } from "~/stores/wallet";
 
 const walletStore = useWalletStore();
 const toast = useToast();
@@ -11,7 +11,7 @@ const emit = defineEmits(["show-notify", "hide-notify"]);
 
 const openPickerAndUploadFiles = async () => {
   // Open the file picker.
-  let selected = await open({multiple: true});
+  let selected = await open({ multiple: true });
 
   // User did not select any files in the dialog.
   if (selected === null) {
@@ -24,33 +24,43 @@ const openPickerAndUploadFiles = async () => {
   }
 
   // Turn into `File` objects, giving the file the name of the filename in the path.
-  const files = await Promise.all(selected.map(async (file) => {
-    return {path: file, name: await basename(file)};
-  }));
+  const files = await Promise.all(
+    selected.map(async (file) => {
+      return { path: file, name: await basename(file) };
+    })
+  );
 
   try {
-    console.log('>>> UPLOD.VUE GETTING VAULT KEY SIGNATURE')
-    emit("show-notify", {notifyType: 'info', title: 'Sign upload required', details: 'Please sign the upload request in your wallet.'})
+    console.log(">>> UPLOD.VUE GETTING VAULT KEY SIGNATURE");
+    emit("show-notify", {
+      notifyType: "info",
+      title: "Sign upload required",
+      details: "Please sign the upload request in your wallet.",
+    });
     let vaultKeySignature = await walletStore.getVaultKeySignature();
-  
+
     // TODO: Show list of selected files
     // TODO: Allow user to select multiple files from different directories
-    // TODO: Move invoke to a separate function. Give user the option to upload files
-    console.log('>>> UPLOAD.VUE INVOKING UPLOAD_FILES')
-    emit('show-notify', {notifyType: 'info', title: 'Uploading files', details: 'Please wait while we upload your files.'})
-    const uploadResponse = await invoke("upload_files", {files, vaultKeySignature});
-    console.log('>>> UPLOAD RESPONSE: ', uploadResponse)
-    console.log('>>> UPLOAD.VUE INVOKED UPLOAD_FILES COMPLETE')
-  }
-  catch (error: any) {
+    // TODO: Move invoke to a separate function. Give user the option to upload files???
+    console.log(">>> UPLOAD.VUE INVOKING UPLOAD_FILES");
+    emit("show-notify", {
+      notifyType: "info",
+      title: "Invoice",
+      details: "Please wait - fetching invoice details.",
+    });
+    const uploadResponse = await invoke("upload_files", {
+      files,
+      vaultKeySignature,
+    });
+    console.log(">>> UPLOAD.VUE INVOKED UPLOAD_FILES COMPLETE");
+  } catch (error: any) {
     toast.add({
       severity: "error",
       summary: "Error uploading files",
       detail: error.message,
       life: 3000,
     });
-  }
-  finally {
+  } finally {
     emit("hide-notify");
   }
 };
@@ -59,9 +69,7 @@ const openPickerAndUploadFiles = async () => {
 <template>
   <div>
     <!-- UPLOADER PAGE -->
-    <div
-        class="autonomi-uploader px-[100px] py-[70px]"
-    >
+    <div class="autonomi-uploader px-[100px] py-[70px]">
       <!-- <Toast /> -->
 
       <CommonButton variant="secondary" @click="openPickerAndUploadFiles">

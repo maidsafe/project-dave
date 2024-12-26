@@ -57,7 +57,7 @@ const handleGoBack = (target: any) => {
 };
 
 const handleChangeDirectory = (target: any) => {
-  if (target?.paths) {
+  if (!target?.children) {
     // This is a file
     // toast.add({
     //   severity: "info",
@@ -206,36 +206,46 @@ const handleMoveFile = () => {
 };
 
 const handleDownloadFile = async () => {
-  const file = selectedFileItem.value;
-  let fileBytes = new Uint8Array();
+  try {
+    toast.add({
+      severity: "info",
+      summary: "File Download",
+      detail: "Update me handleDownloadFile in FileViewer.vue",
+      life: 6000,
+    });
+    const file = selectedFileItem.value;
+    let fileBytes = new Uint8Array();
 
-  if (file.privateDataAccess) {
-    fileBytes = await autonomi.getPrivateData(file.privateDataAccess);
-  } else if (file.dataMapAddress) {
-    fileBytes = await autonomi.getData(file.dataMapAddress);
-  } else {
-    // TODO: return error
-    return;
+    if (file.privateDataAccess) {
+      fileBytes = await autonomi.getPrivateData(file.privateDataAccess);
+    } else if (file.dataMapAddress) {
+      fileBytes = await autonomi.getData(file.dataMapAddress);
+    } else {
+      // TODO: return error
+      return;
+    }
+
+    // Create a Blob from the bytes
+    const blob = new Blob([fileBytes], { type: "application/octet-stream" });
+
+    // Create a URL for the Blob
+    const url = URL.createObjectURL(blob);
+
+    // Create an <a> element and set the download attribute
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+
+    // Trigger the download by clicking the <a> element
+    document.body.appendChild(a); // Append <a> to the DOM
+    a.click();
+    document.body.removeChild(a); // Clean up
+
+    // Release the URL after the download
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.log(">>> Error in FileViewer.vue >> handleDownloadFile: ", error);
   }
-
-  // Create a Blob from the bytes
-  const blob = new Blob([fileBytes], { type: "application/octet-stream" });
-
-  // Create a URL for the Blob
-  const url = URL.createObjectURL(blob);
-
-  // Create an <a> element and set the download attribute
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = file.name;
-
-  // Trigger the download by clicking the <a> element
-  document.body.appendChild(a); // Append <a> to the DOM
-  a.click();
-  document.body.removeChild(a); // Clean up
-
-  // Release the URL after the download
-  URL.revokeObjectURL(url);
 };
 
 const handleDeleteFile = () => {
@@ -315,6 +325,7 @@ onMounted(() => {
     console.log(">>> Filtered files: ", filteredFiles);
   } catch (err) {
     // TODO: Handle error
+    console.log(">>> Error getting files: ", err);
   }
 });
 </script>
@@ -332,6 +343,14 @@ onMounted(() => {
         @click="handleGoBack(currentDirectory.parent)"
       >
         <i class="pi pi-reply -scale-x-100 translate" />
+      </div>
+
+      <div
+        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+        v-tooltip.bottom="'Refresh files'"
+        @click="fileStore.getAllFiles()"
+      >
+        <i class="pi pi-refresh" />
       </div>
 
       <div
@@ -507,11 +526,11 @@ onMounted(() => {
         class="grid grid-cols-12 font-semibold mb-10"
       >
         <div
-          class="col-span-11 md:col-span-9 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
+          class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
         >
           Name
         </div>
-        <div class="hidden xl:block xl:col-span-2 text-autonomi-red-300">
+        <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
           Upload Date
         </div>
         <div class="col-span-1 text-autonomi-red-300">
@@ -531,7 +550,7 @@ onMounted(() => {
           >
             <!-- Folder/File Name -->
             <div
-              class="col-span-11 md:col-span-9 pl-[80px] lg:pl-[110px] flex items-center"
+              class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] flex items-center"
             >
               <template v-if="file?.path">
                 <!-- This is the file -->
@@ -560,7 +579,7 @@ onMounted(() => {
 
             <!-- Upload Date -->
             <div
-              class="hidden xl:block xl:col-span-2 text-autonomi-text-primary"
+              class="hidden xl:block xl:col-span-3 text-autonomi-text-primary"
             >
               {{
                 file?.metadata?.uploaded
@@ -963,19 +982,21 @@ onMounted(() => {
         <!--          </div>-->
         <!--        </div>-->
 
-        <!--        <div class="py-3">-->
-        <!--          <div>Storage used</div>-->
-        <!--          <div class="text-autonomi-text-primary">-->
-        <!--            {{ selectedFileItem.storage }}-->
-        <!--          </div>-->
-        <!--        </div>-->
+        <div class="py-3">
+          <div>Size</div>
+          <div class="text-autonomi-text-primary">
+            {{ selectedFileItem?.metadata?.size }}
+          </div>
+        </div>
 
         <div class="py-3">
           <div>Modified</div>
           <div class="text-autonomi-text-primary">
             {{
-              selectedFileItem.dateModified
-                ? secondsToDate(selectedFileItem.dateModified).toLocaleString()
+              selectedFileItem?.metadata?.modified
+                ? secondsToDate(
+                    selectedFileItem.metadata.modified
+                  ).toLocaleString()
                 : ""
             }}
           </div>
@@ -992,8 +1013,10 @@ onMounted(() => {
           <div>Created</div>
           <div class="text-autonomi-text-primary">
             {{
-              selectedFileItem.dateCreated
-                ? secondsToDate(selectedFileItem.dateCreated).toLocaleString()
+              selectedFileItem?.metadata?.created
+                ? secondsToDate(
+                    selectedFileItem.metadata.created
+                  ).toLocaleString()
                 : ""
             }}
           </div>
