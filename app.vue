@@ -1,28 +1,47 @@
 <script lang="ts" setup>
+import { createAppKit } from "@reown/appkit/vue";
+import { networks, projectId, wagmiAdapter } from "~/config";
+import { useFileStore } from "~/stores/files";
+import { storeToRefs } from "pinia";
+
+// Initialize AppKit
+createAppKit({
+  adapters: [wagmiAdapter],
+  networks,
+  projectId,
+  metadata: {
+    name: "AppKit Vue Example",
+    description: "AppKit Vue Example",
+    url: "https://reown.com/appkit",
+    icons: ["https://avatars.githubusercontent.com/u/179229932?s=200&v=4"],
+  },
+});
+
 const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer`;
-// const openLogin = ref(false);
-// import { useWalletStore } from "~/stores/wallet";
 
 // State
+const fileStore = useFileStore();
 const walletStore = useWalletStore();
 // const autonomi = useAutonomiStore();
+const { pendingFilesSignature } = storeToRefs(fileStore);
+
 const { openConnectWallet, openDisconnectWallet, wallet } =
   storeToRefs(walletStore);
-
+const notifyType = ref<"info" | "warning">("info");
+const notifyTitle = ref("");
+const notifyDetails = ref("");
+const showNotification = ref(false);
 const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
 
-// Computed
-
 // Methods
-const handleClickUpload = () => {
+const handleClickUpload = async () => {
   try {
-    return console.log(">>> TODO: handleClickUpload");
-    if (wallet.value.connected) {
-      navigateTo("/upload");
+    if (wallet.value.isConnected) {
+      await navigateTo("/upload");
     } else {
-      walletStore.showConnectWallet(() => {
-        navigateTo("/upload");
+      walletStore.showConnectWallet(async () => {
+        await navigateTo("/upload");
       });
     }
   } catch (error) {
@@ -31,9 +50,35 @@ const handleClickUpload = () => {
   }
 };
 
-onMounted(async () => {
-  // await autonomi.initWasm();
+const handleShowNotification = (payload: any) => {
+  console.log(">>> Notification payload:", payload);
 
+  notifyType.value = payload.notifyType || "info";
+  notifyTitle.value = payload.title || "";
+  notifyDetails.value = payload.details;
+
+  showNotification.value = true;
+};
+
+const handleHideNotification = () => {
+  console.log(">>> Notification closed");
+  showNotification.value = false;
+};
+
+watchEffect(() => {
+  if (pendingFilesSignature.value) {
+    handleShowNotification({
+      notifyType: "info",
+      title: "Sign file request",
+      details:
+        "To view your files please sign the file request in your wallet.",
+    });
+  } else {
+    handleHideNotification();
+  }
+});
+
+onMounted(async () => {
   setTimeout(() => {
     isFadeOut.value = true;
 
@@ -87,24 +132,10 @@ onMounted(async () => {
               Home
             </NuxtLink>
 
-            <!-- <NuxtLink :class="`${classesLinks}`" to="/nodes">
-              <div
-                class="w-6 h-6 bg-autonomi-red-300 text-white flex items-center justify-center rounded-full"
-              >
-                <i class="pi pi-server text-xs" />
-              </div>
-              Nodes
-            </NuxtLink>
-
-            <NuxtLink :class="`${classesLinks}`" to="/wallet">
-              <IconWallet class="w-6 h-6" />
-              Wallet
-            </NuxtLink>
-
             <NuxtLink :class="`${classesLinks}`" to="/settings">
               <IconSettings class="w-6 h-6" />
               Settings
-            </NuxtLink> -->
+            </NuxtLink>
           </div>
         </div>
 
@@ -112,6 +143,8 @@ onMounted(async () => {
           <NuxtPage
             @open-login="walletStore.showConnectWallet"
             @close-login="walletStore.hideConnectWallet"
+            @show-notify="handleShowNotification"
+            @hide-notify="handleHideNotification"
           />
           <Toast position="bottom-right" />
         </div>
@@ -124,6 +157,19 @@ onMounted(async () => {
         <DialogDisconnectWallet
           :visible="openDisconnectWallet"
           @close-disconnect-wallet="walletStore.hideDisconnectWallet"
+        />
+
+        <DialogNotification
+          :visible="showNotification"
+          :notify-type="notifyType"
+          :title="notifyTitle"
+          :details="notifyDetails"
+          @close-notification="handleHideNotification"
+        />
+
+        <PaymentDrawer
+          @show-notify="handleShowNotification"
+          @hide-notify="handleHideNotification"
         />
       </div>
     </NuxtLayout>

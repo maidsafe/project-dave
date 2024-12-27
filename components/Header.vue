@@ -6,16 +6,23 @@ import IconField from "primevue/iconfield";
 import InputIcon from "primevue/inputicon";
 import { useWalletStore } from "~/stores/wallet";
 import { useUserStore } from "~/stores/user";
-import { useToast } from "primevue/usetoast";
-// import { useAccount } from "@wagmi/vue";
+import { usePaymentStore } from "~/stores/payments";
+import type { PaymentOrder } from "~/stores/payments";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { storeToRefs } from "pinia";
 
 const value1 = ref("");
 const searching = ref(false);
 const walletStore = useWalletStore();
 const { wallet } = storeToRefs(walletStore);
 const userStore = useUserStore();
-const toast = useToast();
-// const { address } = useAccount();
+const paymentStore = usePaymentStore();
+const {
+  IDLE_PAYMENT_EXPIRATION_TIME_SECS,
+  pendingPayments,
+  pendingPaymentsCount,
+} = storeToRefs(paymentStore);
 
 // Refs
 const refTokenDropdown = ref();
@@ -26,7 +33,6 @@ const isHamburgerMenuOpen = ref(false);
 // Methods
 const handleClickWallet = () => {
   if (wallet.value.isConnected) {
-    // handleDisconnectWallet();
     walletStore.showDisconnectWallet();
   } else {
     walletStore.showConnectWallet();
@@ -57,9 +63,6 @@ const toggleHamburgerMenu = () => {
 };
 
 onMounted(() => {
-  // Try to auto connect the wallet without a popup
-  walletStore.tryConnectWallet();
-
   // Close dropdown on click outside
   document.addEventListener("click", (event) => {
     if (
@@ -75,6 +78,25 @@ onMounted(() => {
     ) {
       isHamburgerMenuOpen.value = false;
     }
+  });
+
+  listen<PaymentOrder>("payment-order", async (event: any) => {
+    let order: PaymentOrder = JSON.parse(event.payload);
+
+    if (!order) return;
+
+    console.log(">>> PAYMENT ORDER RECEIVED HEADER", order);
+
+    paymentStore.addPendingPayment(order.id, {
+      order,
+      expires: Date.now() + 1000 * IDLE_PAYMENT_EXPIRATION_TIME_SECS.value,
+      processing: ProcessingState.PENDING,
+    });
+
+    console.log(
+      ">>> LISTENING PAYMENT ORDER FROM HEADER:",
+      pendingPayments.value
+    );
   });
 });
 
@@ -159,6 +181,18 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </template>
+
+            <!-- PAYMENT ORDERS -->
+            <!-- <PaymentOrders/> -->
+            <Button
+              class="hidden lg:flex gap-1"
+              type="button"
+              icon="pi pi-receipt"
+              label="Pay"
+              :severity="pendingPaymentsCount > 0 ? 'info' : 'secondary'"
+              :badge="pendingPaymentsCount.toString()"
+              @click="paymentStore.openPaymentDrawer()"
+            />
           </div>
         </div>
 
@@ -213,6 +247,17 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <!-- PAYMENT ORDERS -->
+          <!-- MOBILE -->
+          <Button
+            class="flex lg:hidden gap-1"
+            type="button"
+            icon="pi pi-receipt"
+            :severity="pendingPaymentsCount > 0 ? 'info' : 'secondary'"
+            :badge="pendingPaymentsCount.toString()"
+            @click="paymentStore.openPaymentDrawer()"
+          />
+
           <!-- HAMBURGER MENU -->
           <div ref="refHamburgerMenu">
             <button
@@ -247,7 +292,13 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div
-                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300"
+                @click="
+                  () => {
+                    toggleHamburgerMenu();
+                    navigateTo('/');
+                  }
+                "
+                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300 cursor-pointer"
               >
                 <div>
                   <div class="text-2xl font-semibold text-autonomi-header-text">
@@ -262,7 +313,13 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div
-                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300"
+                @click="
+                  () => {
+                    toggleHamburgerMenu();
+                    navigateTo('/settings');
+                  }
+                "
+                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300 cursor-pointer"
               >
                 <div>
                   <div class="text-2xl font-semibold text-autonomi-header-text">

@@ -1,7 +1,9 @@
 <script lang="ts" setup>
-import { useFileStore } from "~/stores/files";
-import { useToast } from "primevue/usetoast";
-import { useUserStore } from "~/stores/user";
+import { useFileStore } from '~/stores/files';
+import { useToast } from 'primevue/usetoast';
+import { useUserStore } from '~/stores/user';
+import { invoke } from '@tauri-apps/api/core';
+import { downloadDir } from '@tauri-apps/api/path';
 
 const toast = useToast();
 const fileStore = useFileStore();
@@ -14,8 +16,8 @@ const {
 const userStore = useUserStore();
 // const autonomi = useAutonomiStore();
 const { query } = storeToRefs(userStore);
-const view = ref<"vault">("vault");
-const viewTypeVault = ref<"grid" | "list">("list");
+const view = ref<'vault'>('vault');
+const viewTypeVault = ref<'grid' | 'list'>('list');
 const breadcrumbs = ref<any[]>([]);
 const isVisibleFileInfo = ref(false);
 const refFilesMenu = ref();
@@ -25,7 +27,6 @@ const refUploadMenu = ref();
 const selectedDownloadItem = ref<any>();
 const selectedFileItem = ref<any>();
 const selectedUploadItem = ref<any>();
-
 const filteredFiles = computed(() => {
   try {
     if (!currentDirectory.value?.children?.length) {
@@ -37,11 +38,11 @@ const filteredFiles = computed(() => {
         // TODO: Change "parents" folder name
         return (
           folder.name.toLowerCase().includes(query.value.toLowerCase()) &&
-          folder.name !== "parents"
+          folder.name !== 'parents'
         );
       }
 
-      return folder.name !== "parents";
+      return folder.name !== 'parents';
     });
   } catch (error) {
     // TODO: Handle error
@@ -58,7 +59,7 @@ const handleGoBack = (target: any) => {
 };
 
 const handleChangeDirectory = (target: any) => {
-  if (target?.paths) {
+  if (!target?.children) {
     // This is a file
     // toast.add({
     //   severity: "info",
@@ -77,9 +78,7 @@ const handleChangeDirectory = (target: any) => {
 
 const handleClickBreadcrumb = (crumb: any) => {
   // Remove all breadcrumbs after the clicked one
-  const index = breadcrumbs.value.findIndex(
-    (breadcrumb) => breadcrumb === crumb
-  );
+  const index = breadcrumbs.value.findIndex(breadcrumb => breadcrumb === crumb);
 
   breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
 
@@ -88,90 +87,90 @@ const handleClickBreadcrumb = (crumb: any) => {
 
 const handleStartUpload = () => {
   toast.add({
-    severity: "info",
-    summary: "Upload",
-    detail: "TODO: Handle Start Upload",
+    severity: 'info',
+    summary: 'Upload',
+    detail: 'TODO: Handle Start Upload',
     life: 6000,
   });
 };
 
 const handlePauseUpload = () => {
   toast.add({
-    severity: "info",
-    summary: "Upload",
-    detail: "TODO: Handle Pause Upload",
+    severity: 'info',
+    summary: 'Upload',
+    detail: 'TODO: Handle Pause Upload',
     life: 6000,
   });
 };
 
 const handleCancelUpload = () => {
   toast.add({
-    severity: "info",
-    summary: "Upload",
-    detail: "TODO: Handle Cancel Upload",
+    severity: 'info',
+    summary: 'Upload',
+    detail: 'TODO: Handle Cancel Upload',
     life: 6000,
   });
 };
 
 const handleStartDownload = () => {
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "TODO: Handle Start Download",
+    severity: 'info',
+    summary: 'Download',
+    detail: 'TODO: Handle Start Download',
     life: 6000,
   });
 };
 
 const handlePauseDownload = () => {
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "TODO: Handle Pause Download",
+    severity: 'info',
+    summary: 'Download',
+    detail: 'TODO: Handle Pause Download',
     life: 6000,
   });
 };
 
 const handleCancelDownload = () => {
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "TODO: Handle Cancel Download",
+    severity: 'info',
+    summary: 'Download',
+    detail: 'TODO: Handle Cancel Download',
     life: 6000,
   });
 };
 
 const menuUploads = ref([
   {
-    label: "Start",
-    icon: "pi pi-check",
+    label: 'Start',
+    icon: 'pi pi-check',
     command: handleStartUpload,
   },
   {
-    label: "Pause",
-    icon: "pi pi-pause",
+    label: 'Pause',
+    icon: 'pi pi-pause',
     command: handlePauseUpload,
   },
   {
-    label: "Cancel",
-    icon: "pi pi-times",
+    label: 'Cancel',
+    icon: 'pi pi-times',
     command: handleCancelUpload,
   },
 ]);
 
 const menuDownloads = ref([
   {
-    label: "Start",
-    icon: "pi pi-check",
+    label: 'Start',
+    icon: 'pi pi-check',
     command: handleStartDownload,
   },
   {
-    label: "Pause",
-    icon: "pi pi-pause",
+    label: 'Pause',
+    icon: 'pi pi-pause',
     command: handlePauseDownload,
   },
   {
-    label: "Cancel",
-    icon: "pi pi-times",
+    label: 'Cancel',
+    icon: 'pi pi-times',
     command: handleCancelDownload,
   },
 ]);
@@ -190,60 +189,77 @@ const handleToggleFileMenu = (event: any) => {
 
 const handleRenameFile = () => {
   toast.add({
-    severity: "info",
-    summary: "File",
-    detail: "TODO: Handle Rename File",
+    severity: 'info',
+    summary: 'File',
+    detail: 'TODO: Handle Rename File',
     life: 6000,
   });
 };
 
 const handleMoveFile = () => {
   toast.add({
-    severity: "info",
-    summary: "File",
-    detail: "TODO: Handle Move File",
+    severity: 'info',
+    summary: 'File',
+    detail: 'TODO: Handle Move File',
     life: 6000,
   });
 };
 
 const handleDownloadFile = async () => {
-  const file = selectedFileItem.value;
-  let fileBytes = new Uint8Array();
+  try {
+    toast.add({
+      severity: 'info',
+      summary: 'File Download',
+      detail:
+        'Downloading file...check your downloads folder (this may take some time)',
+      life: 6000,
+    });
+    const file = selectedFileItem.value;
+    let fileBytes = new Uint8Array();
 
-  if (file.privateDataAccess) {
-    fileBytes = await autonomi.getPrivateData(file.privateDataAccess);
-  } else if (file.dataMapAddress) {
-    fileBytes = await autonomi.getData(file.dataMapAddress);
-  } else {
-    // TODO: return error
-    return;
+    const downloadsPath = await downloadDir();
+    const downloadPrivateFileArgs = {
+      dataMap: file.file_access.Private,
+      toDest: `${downloadsPath}/${file.name}`,
+    };
+
+    try {
+      fileBytes = await invoke(
+        'download_private_file',
+        downloadPrivateFileArgs,
+      );
+    } catch (error) {
+      console.error('Error downloading file:', error);
+    }
+
+    // Create a Blob from the bytes
+    const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
+
+    // Create a URL for the Blob
+    const url = URL.createObjectURL(blob);
+
+    // Create an <a> element and set the download attribute
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+
+    // Trigger the download by clicking the <a> element
+    document.body.appendChild(a); // Append <a> to the DOM
+    a.click();
+    document.body.removeChild(a); // Clean up
+
+    // Release the URL after the download
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.log('>>> Error in FileViewer.vue >> handleDownloadFile: ', error);
   }
-
-  // Create a Blob from the bytes
-  const blob = new Blob([fileBytes], { type: "application/octet-stream" });
-
-  // Create a URL for the Blob
-  const url = URL.createObjectURL(blob);
-
-  // Create an <a> element and set the download attribute
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = file.name;
-
-  // Trigger the download by clicking the <a> element
-  document.body.appendChild(a); // Append <a> to the DOM
-  a.click();
-  document.body.removeChild(a); // Clean up
-
-  // Release the URL after the download
-  URL.revokeObjectURL(url);
 };
 
 const handleDeleteFile = () => {
   toast.add({
-    severity: "info",
-    summary: "File",
-    detail: "TODO: Handle Delete File",
+    severity: 'info',
+    summary: 'File',
+    detail: 'TODO: Handle Delete File',
     life: 6000,
   });
 };
@@ -254,8 +270,8 @@ const handleInfoFile = () => {
 
 const menuFiles = ref([
   {
-    label: "Download",
-    icon: "pi pi-download",
+    label: 'Download',
+    icon: 'pi pi-download',
     command: handleDownloadFile,
   },
   // {
@@ -269,29 +285,29 @@ const menuFiles = ref([
   //   command: handleDeleteFile,
   // },
   {
-    label: "Info",
-    icon: "pi pi-info-circle",
+    label: 'Info',
+    icon: 'pi pi-info-circle',
     command: handleInfoFile,
   },
 ]);
 
 const handleShowListView = () => {
-  viewTypeVault.value = "list";
+  viewTypeVault.value = 'list';
 };
 
 const handleShowGridView = () => {
-  viewTypeVault.value = "grid";
+  viewTypeVault.value = 'grid';
 };
 
 const menuFilesView = ref([
   {
-    label: "List",
-    icon: "pi pi-list",
+    label: 'List',
+    icon: 'pi pi-list',
     command: handleShowListView,
   },
   {
-    label: "Grid",
-    icon: "pi pi-th-large",
+    label: 'Grid',
+    icon: 'pi pi-th-large',
     command: handleShowGridView,
   },
 ]);
@@ -309,13 +325,14 @@ onMounted(() => {
     // TODO: Check user / wallet permissions and details
     fileStore.getAllFiles();
 
-    console.log(">>> Local Drive: ", rootDirectory);
-    console.log(">>> Current directory: ", currentDirectory);
-    console.log(">>> Current directory files: ", currentDirectoryFiles);
+    console.log('>>> Local Drive: ', rootDirectory);
+    console.log('>>> Current directory: ', currentDirectory);
+    console.log('>>> Current directory files: ', currentDirectoryFiles);
 
-    console.log(">>> Filtered files: ", filteredFiles);
+    console.log('>>> Filtered files: ', filteredFiles);
   } catch (err) {
     // TODO: Handle error
+    console.log('>>> Error getting files: ', err);
   }
 });
 </script>
@@ -337,8 +354,16 @@ onMounted(() => {
 
       <div
         class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+        v-tooltip.bottom="'Refresh files'"
+        @click="fileStore.getAllFiles()"
+      >
+        <i class="pi pi-refresh" />
+      </div>
+
+      <div
+        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
         @click="
-          ($event) => {
+          $event => {
             handleToggleFilesViewMenu($event);
           }
         "
@@ -508,11 +533,11 @@ onMounted(() => {
         class="grid grid-cols-12 font-semibold mb-10"
       >
         <div
-          class="col-span-11 md:col-span-9 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
+          class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
         >
           Name
         </div>
-        <div class="hidden xl:block xl:col-span-2 text-autonomi-red-300">
+        <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
           Upload Date
         </div>
         <div class="col-span-1 text-autonomi-red-300">
@@ -528,13 +553,13 @@ onMounted(() => {
             v-for="file in filteredFiles"
             class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 hover:bg-white"
             @click="handleChangeDirectory(file)"
-            :class="{ 'cursor-pointer': !file.paths }"
+            :class="{ 'cursor-pointer': !file.path }"
           >
             <!-- Folder/File Name -->
             <div
-              class="col-span-11 md:col-span-9 pl-[80px] lg:pl-[110px] flex items-center"
+              class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] flex items-center"
             >
-              <template v-if="file?.paths">
+              <template v-if="file?.path">
                 <!-- This is the file -->
                 <i
                   v-if="/\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
@@ -561,22 +586,22 @@ onMounted(() => {
 
             <!-- Upload Date -->
             <div
-              class="hidden xl:block xl:col-span-2 text-autonomi-text-primary"
+              class="hidden xl:block xl:col-span-3 text-autonomi-text-primary"
             >
               {{
-                file.dateUploaded
-                  ? secondsToDate(file.dateUploaded).toLocaleString()
-                  : ""
+                file?.metadata?.uploaded
+                  ? secondsToDate(file.metadata.uploaded).toLocaleString()
+                  : ''
               }}
             </div>
 
             <!-- Menu -->
-            <template v-if="file.paths">
+            <template v-if="file.path">
               <div class="col-span-1">
                 <i
                   class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600"
                   @click="
-                    ($event) => {
+                    $event => {
                       // TODO: Update key:values to match api
                       selectedFileItem = file;
                       handleToggleFileMenu($event);
@@ -619,19 +644,19 @@ onMounted(() => {
             <div
               v-for="file in filteredFiles"
               class="col-span-6 md:col-span-4 xl:col-span-3 aspect-square max-h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary transition-all duration-500"
-              :class="{ 'cursor-pointer': !file.paths }"
+              :class="{ 'cursor-pointer': !file.path }"
               @click="handleChangeDirectory(file)"
             >
               <div
                 class="flex flex-col items-center justify-center w-full h-full p-2"
               >
                 <!-- Menu -->
-                <template v-if="file.paths">
+                <template v-if="file.path">
                   <div class="self-end">
                     <i
                       class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                       @click="
-                        ($event) => {
+                        $event => {
                           // TODO: Update key:values to match api
                           selectedFileItem = file;
                           handleToggleFileMenu($event);
@@ -645,7 +670,7 @@ onMounted(() => {
                 <div
                   class="flex flex-col flex-1 items-center justify-center gap-3"
                 >
-                  <template v-if="file?.paths">
+                  <template v-if="file?.path">
                     <!-- This is the file -->
                     <i
                       v-if="
@@ -705,7 +730,7 @@ onMounted(() => {
                   <i
                     class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                     @click="
-                      ($event) => {
+                      $event => {
                         selectedUploadItem = item;
                         handleToggleUploadMenu($event);
                       }
@@ -752,7 +777,7 @@ onMounted(() => {
               <i
                 class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                 @click="
-                  ($event) => {
+                  $event => {
                     selectedUploadItem = item;
                     handleToggleUploadMenu($event);
                   }
@@ -778,7 +803,7 @@ onMounted(() => {
                   <i
                     class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                     @click="
-                      ($event) => {
+                      $event => {
                         selectedDownloadItem = item;
                         handleToggleDownloadMenu($event);
                       }
@@ -827,7 +852,7 @@ onMounted(() => {
               <i
                 class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                 @click="
-                  ($event) => {
+                  $event => {
                     selectedDownloadItem = item;
                     handleToggleDownloadMenu($event);
                   }
@@ -964,20 +989,22 @@ onMounted(() => {
         <!--          </div>-->
         <!--        </div>-->
 
-        <!--        <div class="py-3">-->
-        <!--          <div>Storage used</div>-->
-        <!--          <div class="text-autonomi-text-primary">-->
-        <!--            {{ selectedFileItem.storage }}-->
-        <!--          </div>-->
-        <!--        </div>-->
+        <div class="py-3">
+          <div>Size</div>
+          <div class="text-autonomi-text-primary">
+            {{ selectedFileItem?.metadata?.size }}
+          </div>
+        </div>
 
         <div class="py-3">
           <div>Modified</div>
           <div class="text-autonomi-text-primary">
             {{
-              selectedFileItem.dateModified
-                ? secondsToDate(selectedFileItem.dateModified).toLocaleString()
-                : ""
+              selectedFileItem?.metadata?.modified
+                ? secondsToDate(
+                    selectedFileItem.metadata.modified,
+                  ).toLocaleString()
+                : ''
             }}
           </div>
         </div>
@@ -993,9 +1020,11 @@ onMounted(() => {
           <div>Created</div>
           <div class="text-autonomi-text-primary">
             {{
-              selectedFileItem.dateCreated
-                ? secondsToDate(selectedFileItem.dateCreated).toLocaleString()
-                : ""
+              selectedFileItem?.metadata?.created
+                ? secondsToDate(
+                    selectedFileItem.metadata.created,
+                  ).toLocaleString()
+                : ''
             }}
           </div>
         </div>
