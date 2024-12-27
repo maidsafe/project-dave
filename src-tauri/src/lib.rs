@@ -16,6 +16,11 @@ pub struct AppStateInner {
     pub(crate) app_data: AppData,
 }
 
+#[derive(Debug, serde::Serialize)]
+struct CommandError {
+    message: String,
+}
+
 impl Default for AppStateInner {
     fn default() -> Self {
         Self {
@@ -83,10 +88,15 @@ async fn get_files_from_vault(vault_key_signature: String) -> Result<Vec<FileFro
 }
 
 #[tauri::command]
-async fn download_private_file(data_map: DataMapChunk, to_dest: PathBuf) -> Result<(), ()> {
+async fn download_private_file(
+    data_map: DataMapChunk,
+    to_dest: PathBuf,
+) -> Result<(), CommandError> {
     ant::files::download_private_file(data_map, to_dest)
         .await
-        .map_err(|_err| ()) // TODO: Map to serializable error
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
 }
 
 #[tauri::command]

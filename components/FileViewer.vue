@@ -1,7 +1,9 @@
 <script lang="ts" setup>
-import { useFileStore } from "~/stores/files";
-import { useToast } from "primevue/usetoast";
-import { useUserStore } from "~/stores/user";
+import { useFileStore } from '~/stores/files';
+import { useToast } from 'primevue/usetoast';
+import { useUserStore } from '~/stores/user';
+import { invoke } from '@tauri-apps/api/core';
+import { downloadDir } from '@tauri-apps/api/path';
 
 const toast = useToast();
 const fileStore = useFileStore();
@@ -14,8 +16,8 @@ const {
 const userStore = useUserStore();
 // const autonomi = useAutonomiStore();
 const { query } = storeToRefs(userStore);
-const view = ref<"vault">("vault");
-const viewTypeVault = ref<"grid" | "list">("list");
+const view = ref<'vault'>('vault');
+const viewTypeVault = ref<'grid' | 'list'>('list');
 const breadcrumbs = ref<any[]>([]);
 const isVisibleFileInfo = ref(false);
 const refFilesMenu = ref();
@@ -36,11 +38,11 @@ const filteredFiles = computed(() => {
         // TODO: Change "parents" folder name
         return (
           folder.name.toLowerCase().includes(query.value.toLowerCase()) &&
-          folder.name !== "parents"
+          folder.name !== 'parents'
         );
       }
 
-      return folder.name !== "parents";
+      return folder.name !== 'parents';
     });
   } catch (error) {
     // TODO: Handle error
@@ -76,9 +78,7 @@ const handleChangeDirectory = (target: any) => {
 
 const handleClickBreadcrumb = (crumb: any) => {
   // Remove all breadcrumbs after the clicked one
-  const index = breadcrumbs.value.findIndex(
-    (breadcrumb) => breadcrumb === crumb
-  );
+  const index = breadcrumbs.value.findIndex(breadcrumb => breadcrumb === crumb);
 
   breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
 
@@ -87,90 +87,90 @@ const handleClickBreadcrumb = (crumb: any) => {
 
 const handleStartUpload = () => {
   toast.add({
-    severity: "info",
-    summary: "Upload",
-    detail: "TODO: Handle Start Upload",
+    severity: 'info',
+    summary: 'Upload',
+    detail: 'TODO: Handle Start Upload',
     life: 6000,
   });
 };
 
 const handlePauseUpload = () => {
   toast.add({
-    severity: "info",
-    summary: "Upload",
-    detail: "TODO: Handle Pause Upload",
+    severity: 'info',
+    summary: 'Upload',
+    detail: 'TODO: Handle Pause Upload',
     life: 6000,
   });
 };
 
 const handleCancelUpload = () => {
   toast.add({
-    severity: "info",
-    summary: "Upload",
-    detail: "TODO: Handle Cancel Upload",
+    severity: 'info',
+    summary: 'Upload',
+    detail: 'TODO: Handle Cancel Upload',
     life: 6000,
   });
 };
 
 const handleStartDownload = () => {
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "TODO: Handle Start Download",
+    severity: 'info',
+    summary: 'Download',
+    detail: 'TODO: Handle Start Download',
     life: 6000,
   });
 };
 
 const handlePauseDownload = () => {
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "TODO: Handle Pause Download",
+    severity: 'info',
+    summary: 'Download',
+    detail: 'TODO: Handle Pause Download',
     life: 6000,
   });
 };
 
 const handleCancelDownload = () => {
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "TODO: Handle Cancel Download",
+    severity: 'info',
+    summary: 'Download',
+    detail: 'TODO: Handle Cancel Download',
     life: 6000,
   });
 };
 
 const menuUploads = ref([
   {
-    label: "Start",
-    icon: "pi pi-check",
+    label: 'Start',
+    icon: 'pi pi-check',
     command: handleStartUpload,
   },
   {
-    label: "Pause",
-    icon: "pi pi-pause",
+    label: 'Pause',
+    icon: 'pi pi-pause',
     command: handlePauseUpload,
   },
   {
-    label: "Cancel",
-    icon: "pi pi-times",
+    label: 'Cancel',
+    icon: 'pi pi-times',
     command: handleCancelUpload,
   },
 ]);
 
 const menuDownloads = ref([
   {
-    label: "Start",
-    icon: "pi pi-check",
+    label: 'Start',
+    icon: 'pi pi-check',
     command: handleStartDownload,
   },
   {
-    label: "Pause",
-    icon: "pi pi-pause",
+    label: 'Pause',
+    icon: 'pi pi-pause',
     command: handlePauseDownload,
   },
   {
-    label: "Cancel",
-    icon: "pi pi-times",
+    label: 'Cancel',
+    icon: 'pi pi-times',
     command: handleCancelDownload,
   },
 ]);
@@ -189,18 +189,18 @@ const handleToggleFileMenu = (event: any) => {
 
 const handleRenameFile = () => {
   toast.add({
-    severity: "info",
-    summary: "File",
-    detail: "TODO: Handle Rename File",
+    severity: 'info',
+    summary: 'File',
+    detail: 'TODO: Handle Rename File',
     life: 6000,
   });
 };
 
 const handleMoveFile = () => {
   toast.add({
-    severity: "info",
-    summary: "File",
-    detail: "TODO: Handle Move File",
+    severity: 'info',
+    summary: 'File',
+    detail: 'TODO: Handle Move File',
     life: 6000,
   });
 };
@@ -208,31 +208,39 @@ const handleMoveFile = () => {
 const handleDownloadFile = async () => {
   try {
     toast.add({
-      severity: "info",
-      summary: "File Download",
-      detail: "Update me handleDownloadFile in FileViewer.vue",
+      severity: 'info',
+      summary: 'File Download',
+      detail: 'Update me handleDownloadFile in FileViewer.vue',
       life: 6000,
     });
     const file = selectedFileItem.value;
+    console.log('>>> file: ', file);
     let fileBytes = new Uint8Array();
 
-    if (file.privateDataAccess) {
-      fileBytes = await autonomi.getPrivateData(file.privateDataAccess);
-    } else if (file.dataMapAddress) {
-      fileBytes = await autonomi.getData(file.dataMapAddress);
-    } else {
-      // TODO: return error
-      return;
+    const downloadsPath = await downloadDir();
+    const downloadPrivateFileArgs = {
+      dataMap: file.file_access.Private,
+      toDest: `${downloadsPath}/${file.name}`,
+    };
+
+    try {
+      fileBytes = await invoke(
+        'download_private_file',
+        downloadPrivateFileArgs,
+      );
+    } catch (error) {
+      console.error('Error downloading file:', error);
     }
+    console.log('>>> fileBytes: ', fileBytes);
 
     // Create a Blob from the bytes
-    const blob = new Blob([fileBytes], { type: "application/octet-stream" });
+    const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
 
     // Create a URL for the Blob
     const url = URL.createObjectURL(blob);
 
     // Create an <a> element and set the download attribute
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
     a.download = file.name;
 
@@ -244,15 +252,15 @@ const handleDownloadFile = async () => {
     // Release the URL after the download
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.log(">>> Error in FileViewer.vue >> handleDownloadFile: ", error);
+    console.log('>>> Error in FileViewer.vue >> handleDownloadFile: ', error);
   }
 };
 
 const handleDeleteFile = () => {
   toast.add({
-    severity: "info",
-    summary: "File",
-    detail: "TODO: Handle Delete File",
+    severity: 'info',
+    summary: 'File',
+    detail: 'TODO: Handle Delete File',
     life: 6000,
   });
 };
@@ -263,8 +271,8 @@ const handleInfoFile = () => {
 
 const menuFiles = ref([
   {
-    label: "Download",
-    icon: "pi pi-download",
+    label: 'Download',
+    icon: 'pi pi-download',
     command: handleDownloadFile,
   },
   // {
@@ -278,29 +286,29 @@ const menuFiles = ref([
   //   command: handleDeleteFile,
   // },
   {
-    label: "Info",
-    icon: "pi pi-info-circle",
+    label: 'Info',
+    icon: 'pi pi-info-circle',
     command: handleInfoFile,
   },
 ]);
 
 const handleShowListView = () => {
-  viewTypeVault.value = "list";
+  viewTypeVault.value = 'list';
 };
 
 const handleShowGridView = () => {
-  viewTypeVault.value = "grid";
+  viewTypeVault.value = 'grid';
 };
 
 const menuFilesView = ref([
   {
-    label: "List",
-    icon: "pi pi-list",
+    label: 'List',
+    icon: 'pi pi-list',
     command: handleShowListView,
   },
   {
-    label: "Grid",
-    icon: "pi pi-th-large",
+    label: 'Grid',
+    icon: 'pi pi-th-large',
     command: handleShowGridView,
   },
 ]);
@@ -318,14 +326,14 @@ onMounted(() => {
     // TODO: Check user / wallet permissions and details
     fileStore.getAllFiles();
 
-    console.log(">>> Local Drive: ", rootDirectory);
-    console.log(">>> Current directory: ", currentDirectory);
-    console.log(">>> Current directory files: ", currentDirectoryFiles);
+    console.log('>>> Local Drive: ', rootDirectory);
+    console.log('>>> Current directory: ', currentDirectory);
+    console.log('>>> Current directory files: ', currentDirectoryFiles);
 
-    console.log(">>> Filtered files: ", filteredFiles);
+    console.log('>>> Filtered files: ', filteredFiles);
   } catch (err) {
     // TODO: Handle error
-    console.log(">>> Error getting files: ", err);
+    console.log('>>> Error getting files: ', err);
   }
 });
 </script>
@@ -356,7 +364,7 @@ onMounted(() => {
       <div
         class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
         @click="
-          ($event) => {
+          $event => {
             handleToggleFilesViewMenu($event);
           }
         "
@@ -584,7 +592,7 @@ onMounted(() => {
               {{
                 file?.metadata?.uploaded
                   ? secondsToDate(file.metadata.uploaded).toLocaleString()
-                  : ""
+                  : ''
               }}
             </div>
 
@@ -594,7 +602,7 @@ onMounted(() => {
                 <i
                   class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600"
                   @click="
-                    ($event) => {
+                    $event => {
                       // TODO: Update key:values to match api
                       selectedFileItem = file;
                       handleToggleFileMenu($event);
@@ -649,7 +657,7 @@ onMounted(() => {
                     <i
                       class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                       @click="
-                        ($event) => {
+                        $event => {
                           // TODO: Update key:values to match api
                           selectedFileItem = file;
                           handleToggleFileMenu($event);
@@ -723,7 +731,7 @@ onMounted(() => {
                   <i
                     class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                     @click="
-                      ($event) => {
+                      $event => {
                         selectedUploadItem = item;
                         handleToggleUploadMenu($event);
                       }
@@ -770,7 +778,7 @@ onMounted(() => {
               <i
                 class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                 @click="
-                  ($event) => {
+                  $event => {
                     selectedUploadItem = item;
                     handleToggleUploadMenu($event);
                   }
@@ -796,7 +804,7 @@ onMounted(() => {
                   <i
                     class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                     @click="
-                      ($event) => {
+                      $event => {
                         selectedDownloadItem = item;
                         handleToggleDownloadMenu($event);
                       }
@@ -845,7 +853,7 @@ onMounted(() => {
               <i
                 class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
                 @click="
-                  ($event) => {
+                  $event => {
                     selectedDownloadItem = item;
                     handleToggleDownloadMenu($event);
                   }
@@ -995,9 +1003,9 @@ onMounted(() => {
             {{
               selectedFileItem?.metadata?.modified
                 ? secondsToDate(
-                    selectedFileItem.metadata.modified
+                    selectedFileItem.metadata.modified,
                   ).toLocaleString()
-                : ""
+                : ''
             }}
           </div>
         </div>
@@ -1015,9 +1023,9 @@ onMounted(() => {
             {{
               selectedFileItem?.metadata?.created
                 ? secondsToDate(
-                    selectedFileItem.metadata.created
+                    selectedFileItem.metadata.created,
                   ).toLocaleString()
-                : ""
+                : ''
             }}
           </div>
         </div>
