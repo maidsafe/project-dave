@@ -210,11 +210,11 @@ const handleDownloadFile = async () => {
     toast.add({
       severity: 'info',
       summary: 'File Download',
-      detail: 'Update me handleDownloadFile in FileViewer.vue',
+      detail:
+        'Downloading file...check your downloads folder (this may take some time)',
       life: 6000,
     });
     const file = selectedFileItem.value;
-    console.log('>>> file: ', file);
     let fileBytes = new Uint8Array();
 
     const downloadsPath = await downloadDir();
@@ -231,7 +231,6 @@ const handleDownloadFile = async () => {
     } catch (error) {
       console.error('Error downloading file:', error);
     }
-    console.log('>>> fileBytes: ', fileBytes);
 
     // Create a Blob from the bytes
     const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
