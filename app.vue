@@ -1,19 +1,21 @@
 <script lang="ts" setup>
-import { createAppKit } from "@reown/appkit/vue";
-import { networks, projectId, wagmiAdapter } from "~/config";
-import { useFileStore } from "~/stores/files";
-import { storeToRefs } from "pinia";
+import { createAppKit } from '@reown/appkit/vue';
+import { networks, projectId, wagmiAdapter } from '~/config';
+import { useFileStore } from '~/stores/files';
+import { storeToRefs } from 'pinia';
+import { updater } from './src/lib/updater';
 
+updater();
 // Initialize AppKit
 createAppKit({
   adapters: [wagmiAdapter],
   networks,
   projectId,
   metadata: {
-    name: "AppKit Vue Example",
-    description: "AppKit Vue Example",
-    url: "https://reown.com/appkit",
-    icons: ["https://avatars.githubusercontent.com/u/179229932?s=200&v=4"],
+    name: 'AppKit Vue Example',
+    description: 'AppKit Vue Example',
+    url: 'https://reown.com/appkit',
+    icons: ['https://avatars.githubusercontent.com/u/179229932?s=200&v=4'],
   },
 });
 
@@ -27,9 +29,9 @@ const { pendingFilesSignature } = storeToRefs(fileStore);
 
 const { openConnectWallet, openDisconnectWallet, wallet } =
   storeToRefs(walletStore);
-const notifyType = ref<"info" | "warning">("info");
-const notifyTitle = ref("");
-const notifyDetails = ref("");
+const notifyType = ref<'info' | 'warning'>('info');
+const notifyTitle = ref('');
+const notifyDetails = ref('');
 const showNotification = ref(false);
 const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
@@ -38,40 +40,40 @@ const removeSplashScreen = ref(false);
 const handleClickUpload = async () => {
   try {
     if (wallet.value.isConnected) {
-      await navigateTo("/upload");
+      await navigateTo('/upload');
     } else {
       walletStore.showConnectWallet(async () => {
-        await navigateTo("/upload");
+        await navigateTo('/upload');
       });
     }
   } catch (error) {
     // TODO: Handle error
-    console.error(">>> Error: handleClickUpload");
+    console.error('>>> Error: handleClickUpload');
   }
 };
 
 const handleShowNotification = (payload: any) => {
-  console.log(">>> Notification payload:", payload);
+  console.log('>>> Notification payload:', payload);
 
-  notifyType.value = payload.notifyType || "info";
-  notifyTitle.value = payload.title || "";
+  notifyType.value = payload.notifyType || 'info';
+  notifyTitle.value = payload.title || '';
   notifyDetails.value = payload.details;
 
   showNotification.value = true;
 };
 
 const handleHideNotification = () => {
-  console.log(">>> Notification closed");
+  console.log('>>> Notification closed');
   showNotification.value = false;
 };
 
 watchEffect(() => {
   if (pendingFilesSignature.value) {
     handleShowNotification({
-      notifyType: "info",
-      title: "Sign file request",
+      notifyType: 'info',
+      title: 'Sign file request',
       details:
-        "To view your files please sign the file request in your wallet.",
+        'To view your files please sign the file request in your wallet.',
     });
   } else {
     handleHideNotification();
