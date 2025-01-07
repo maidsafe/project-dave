@@ -39,6 +39,16 @@ const handleClickWallet = () => {
   }
 };
 
+const handleClickUpload = ()=> {
+  if (wallet.value.isConnected) {
+    navigateTo('/upload');
+  } else {
+    walletStore.showConnectWallet(() => {
+      navigateTo('/upload');
+    });
+  }
+};
+
 const toggleTokenDropdown = () => {
   if (!wallet.value.isConnected) {
     return walletStore.showConnectWallet();
@@ -199,17 +209,25 @@ onBeforeUnmount(() => {
         <!-- MOBILE SETTINGS / DETAILS -->
         <div class="ml-auto flex gap-2 items-center lg:hidden">
           <NuxtLink
-            to="/upload"
+            to="/"
+            class="w-10 h-10 bg-autonomi-gray-200 flex items-center justify-center rounded-full cursor-pointer"
+            v-tooltip.bottom="'Files'"
+           >
+           <IconFiles class="w-5 h-5" />
+          </NuxtLink>
+          <div
+          @click="handleClickUpload"
             class="w-10 h-10 bg-autonomi-red-300 flex items-center justify-center rounded-full cursor-pointer"
+            v-tooltip.bottom="'Upload'"
           >
             <i class="pi pi-plus-circle text-white" />
-          </NuxtLink>
+        </div>
 
           <!-- TOKEN BALANCE DROPDOWN -->
           <div ref="refTokenDropdown">
             <button
               class="w-10 h-10 bg-autonomi-blue-800 flex items-center justify-center rounded-full cursor-pointer"
-              @click="toggleTokenDropdown"
+              @click="handleClickWallet"
             >
               <i class="pi pi-wallet text-white" />
             </button>
@@ -271,47 +289,11 @@ onBeforeUnmount(() => {
               class="bg-autonomi-gray-200 dark:bg-autonomi-blue-800 absolute right-0 w-full max-w-[400px] rounded-b-3xl overflow-hidden transition-all duration-500"
               :class="{
                 'h-0': !isHamburgerMenuOpen,
-                'h-[300px]': isHamburgerMenuOpen,
+                'h-[100px]': isHamburgerMenuOpen,
                 'top-[150px]': wallet.isConnected,
                 'top-[68px]': !wallet.isConnected,
               }"
             >
-              <div
-                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300"
-              >
-                <div>
-                  <div class="text-2xl font-semibold text-autonomi-header-text">
-                    Wallet
-                  </div>
-                  <div class="text-xs font-semibold text-autonomi-gray-500">
-                    Balance 436.06
-                  </div>
-                </div>
-                <div>
-                  <IconWallet class="w-12 h-12" />
-                </div>
-              </div>
-              <div
-                @click="
-                  () => {
-                    toggleHamburgerMenu();
-                    navigateTo('/');
-                  }
-                "
-                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300 cursor-pointer"
-              >
-                <div>
-                  <div class="text-2xl font-semibold text-autonomi-header-text">
-                    Files
-                  </div>
-                  <div class="text-xs font-semibold text-autonomi-gray-500">
-                    Current 369GB
-                  </div>
-                </div>
-                <div>
-                  <IconFiles class="w-12 h-12" />
-                </div>
-              </div>
               <div
                 @click="
                   () => {
@@ -323,11 +305,11 @@ onBeforeUnmount(() => {
               >
                 <div>
                   <div class="text-2xl font-semibold text-autonomi-header-text">
-                    Settings
+                    Support
                   </div>
-                  <div class="text-xs font-semibold text-autonomi-gray-500">
+                  <!-- <div class="text-xs font-semibold text-autonomi-gray-500">
                     Current: Default
-                  </div>
+                  </div> -->
                 </div>
                 <div>
                   <IconSettings class="w-12 h-12" />
