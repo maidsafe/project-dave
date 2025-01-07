@@ -23,7 +23,6 @@ const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start te
 // State
 const fileStore = useFileStore();
 const walletStore = useWalletStore();
-// const autonomi = useAutonomiStore();
 const { pendingFilesSignature } = storeToRefs(fileStore);
 
 const { openConnectWallet, openDisconnectWallet, wallet } =
