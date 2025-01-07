@@ -196,6 +196,7 @@ export const useWalletStore = defineStore("wallet", () => {
         openDisconnectWallet,
         wallet,
         // Actions
+        callbackConnectWallet,
         connectWallet,
         disconnectWallet,
         hideConnectWallet,

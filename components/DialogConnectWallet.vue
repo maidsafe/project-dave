@@ -10,7 +10,7 @@ const props = defineProps<{
 const emit = defineEmits(["close-login"]);
 const toast = useToast();
 const walletStore = useWalletStore();
-const { pendingConnectWallet, wallet } = storeToRefs(walletStore);
+const { pendingConnectWallet, wallet, callbackConnectWallet } = storeToRefs(walletStore);
 
 const { visible } = props;
 
@@ -33,6 +33,10 @@ const handleLogIn = async () => {
         detail: "TEST: Logged in successfully",
         life: 3000,
       });
+
+      if (callbackConnectWallet.value) {
+        callbackConnectWallet.value();
+      }
     } else {
       throw new Error("Failed to log in");
     }
