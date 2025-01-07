@@ -135,7 +135,7 @@ onMounted(async () => {
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
               <IconSettings class="w-6 h-6" />
-              Settings
+              Support
             </NuxtLink>
           </div>
         </div>

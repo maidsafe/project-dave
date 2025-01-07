@@ -2,8 +2,12 @@
 import { useToast } from "primevue/usetoast";
 import { invoke } from "@tauri-apps/api/core";
 import { onMounted } from "vue";
-import { toRaw } from 'vue'
-type SettingsView = "network-settings" | "receiver-settings" | "syslog" | "other-settings";
+import { toRaw } from "vue";
+type SettingsView =
+  | "network-settings"
+  | "receiver-settings"
+  | "syslog"
+  | "other-settings";
 const refSyslogMenu = ref();
 const selectedSyslog = ref<any>(null); // TODO: Replace with actual type
 const view = ref<SettingsView>("network-settings");
@@ -184,12 +188,17 @@ const handleUpdateEventCollector = () => {
 
 async function saveSettingsButtonHandler() {
   try {
-    await invoke("app_data_store", { appData: { download_path: downloadPath.value, peers: bootstrapPeers.value.split(',') } });
+    await invoke("app_data_store", {
+      appData: {
+        download_path: downloadPath.value,
+        peers: bootstrapPeers.value.split(","),
+      },
+    });
   } catch (e) {
     console.error(e);
     saveSettingsErrorMessage.value = e as any; // TODO: DOES NOT UPDATE?!?! :(
   } finally {
-    saveSettingsErrorMessage.value = '';
+    saveSettingsErrorMessage.value = "";
   }
 }
 
@@ -200,22 +209,21 @@ const name = ref("");
 async function loadSettings() {
   let app_data: any = await invoke("app_data");
   downloadPath.value = app_data.download_path;
-  bootstrapPeers.value = app_data.peers.join(',');
+  bootstrapPeers.value = app_data.peers.join(",");
 }
 onMounted(async () => {
   try {
-    const response = await loadSettings()
-    console.log('>>> Settings response: ', response)
+    const response = await loadSettings();
+    console.log(">>> Settings response: ", response);
+  } catch (e) {
+    console.log(">>> Error loading settings: ", e);
   }
-  catch (e) {
-    console.log('>>> Error loading settings: ', e)
-  }
-})
+});
 </script>
 
 <template>
   <div class="pr-[66px] pl-[110px] mt-10">
-    <div class="text-2xl font-semibold flex gap-20">
+    <!-- <div class="text-2xl font-semibold flex gap-20">
       <template v-for="button in navButtons" :key="button.name">
         <button
           @click="button.command"
@@ -226,12 +234,12 @@ onMounted(async () => {
           {{ button.name }}
         </button>
       </template>
-    </div>
+    </div> -->
 
     <!-- Views -->
     <div class="-mr-[66px] -ml-[110px] mt-10">
       <!-- View: Other settings -->
-      <div v-if="view === 'network-settings'">
+      <!-- <div v-if="view === 'network-settings'">
         <div class="pr-[66px] pl-[110px] py-7">
           <div class="flex justify-between items-center gap-10">
             <div>
@@ -254,7 +262,7 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-      </div>
+      </div> -->
 
       <!-- View: Receiver Settings -->
       <div v-if="view === 'receiver-settings'">
@@ -571,11 +579,11 @@ onMounted(async () => {
           Help and support
         </h3>
 
-        <div class="flex gap-6 mt-7">
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-7">
           <NuxtLink
             v-for="link in supportLinks"
             to="#"
-            class="text-autonomi-text-primary font-semibold underline"
+            class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3"
           >
             <i :class="`${link.icon} text-autonomi-blue-600 mr-1`" />
             {{ link.name }}
