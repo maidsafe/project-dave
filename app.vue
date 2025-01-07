@@ -5,7 +5,6 @@ import { useFileStore } from '~/stores/files';
 import { storeToRefs } from 'pinia';
 import { updater } from './src/lib/updater';
 
-updater();
 // Initialize AppKit
 createAppKit({
   adapters: [wagmiAdapter],
@@ -89,6 +88,7 @@ onMounted(async () => {
       removeSplashScreen.value = true;
     }, 2000);
   }, 2000);
+  updater();
 });
 </script>
 
