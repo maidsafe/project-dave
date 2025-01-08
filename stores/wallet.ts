@@ -1,5 +1,5 @@
 import {useAppKit, useAppKitAccount, useDisconnect} from "@reown/appkit/vue";
-import {readContract, waitForTransactionReceipt, writeContract, signMessage} from "@wagmi/core";
+import {readContract, signMessage, waitForTransactionReceipt, writeContract} from "@wagmi/core";
 import tokenAbi from "~/assets/abi/PaymentToken.json";
 import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import {wagmiAdapter} from "~/config";
@@ -16,6 +16,7 @@ export const useWalletStore = defineStore("wallet", () => {
     const openDisconnectWallet = ref(false);
     const callbackConnectWallet = ref<Function | null>(null);
     const callbackDisconnectWallet = ref<Function | null>(null);
+    const cachedVaultKey = ref<string>();
 
     const wallet = useAppKitAccount();
     const {open} = useAppKit();
@@ -174,8 +175,12 @@ export const useWalletStore = defineStore("wallet", () => {
         }
     };
 
-    const getVaultKey = async (): Promise<string> => {
-        return sign(VAULT_SECRET_KEY_SEED);
+    const getVaultKeySignature = async (): Promise<string> => {
+        if (!cachedVaultKey.value) {
+            cachedVaultKey.value = await sign(VAULT_SECRET_KEY_SEED);
+        }
+
+        return cachedVaultKey.value;
     }
 
     const sign = async (message: string): Promise<string> => {
@@ -196,6 +201,7 @@ export const useWalletStore = defineStore("wallet", () => {
         openDisconnectWallet,
         wallet,
         // Actions
+        callbackConnectWallet,
         connectWallet,
         disconnectWallet,
         hideConnectWallet,
@@ -204,7 +210,7 @@ export const useWalletStore = defineStore("wallet", () => {
         showDisconnectWallet,
         payForQuotes,
         approveTokens,
-        getVaultKeySignature: getVaultKey,
+        getVaultKeySignature,
         sign,
     };
 });

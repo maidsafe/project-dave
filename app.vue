@@ -3,7 +3,7 @@ import { createAppKit } from '@reown/appkit/vue';
 import { networks, projectId, wagmiAdapter } from '~/config';
 import { useFileStore } from '~/stores/files';
 import { storeToRefs } from 'pinia';
-import { updater } from './src/lib/updater';
+import { updater } from './lib/updater';
 
 // Initialize AppKit
 createAppKit({
@@ -135,7 +135,7 @@ onMounted(async () => {
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
               <IconSettings class="w-6 h-6" />
-              Settings
+              Support
             </NuxtLink>
           </div>
         </div>

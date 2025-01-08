@@ -1,75 +1,89 @@
-# Nuxt Minimal Starter
+# Project Dave
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Project Dave is a web application built with Rust, Tauri, Vue.js, and Nuxt.js that demonstrates the core functionality of the Autonomi network. It provides a user-friendly interface for interacting with the Autonomi network to upload data, and view and download uploaded data.
 
-## Setup
+## Getting Started
 
-Make sure to install dependencies:
+### Prerequisites
 
-```bash
-# npm
-npm install
+- Node.js 16.x or later
+- npm package manager
+- Rust 1.70.0 or later
+- rustc (Rust compiler)
+- cargo (Rust package manager)
 
-# pnpm
-pnpm install
+### Installation
 
-# yarn
-yarn install
+1. Clone the repository: `git clone https://github.com/maidsafe/project-dave.git`
 
-# bun
-bun install
-```
+2. Navigate into the top level of the repo: `cd project-dave`
+
+3. Install Node.js dependencies: `npm install`
 
 ## Development Server
 
-Start the development server on `http://localhost:3000`:
+Start the application for development `npm run tauri dev`
 
-```bash
-# npm
-npm run dev
+## Contributing
 
-# pnpm
-pnpm dev
+We welcome contributions! Here's how you can help:
 
-# yarn
-yarn dev
+1. Fork the repository
+2. Create your feature branch (git checkout -b feat/amazing-feature)
+3. Commit your changes (git commit -m 'adds amazing feature'). <br>Please ensure that your commit messages clearly describe the changes you have made and use the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+4. Push to the branch (git push origin feat/amazing-feature)
+5. Open a Pull Request to the `development` branch instead of the `main` branch
 
-# bun
-bun run dev
+You can also visit the [Autonomi Website](https://autonomi.com/) if you would like to learn more and please join our
+online community through our [Discord server](https://discord.com/invite/autonomi) or [forum](https://forum.autonomi.community/).
+
+## Development Guidelines
+
+1. Follow the existing code style and conventions
+2. Write meaningful commit messages
+3. Add tests for new features
+4. Update documentation as needed
+
+## Project Structure
+
+```
+project-dave
+├─ README.md
+├─ app.vue
+├─ assets
+│  ├─ abi
+│  └─ css
+├─ components
+│  ├─ Common
+│  ├─ Icon
+├─ config
+├─ lib
+├─ nuxt.config.ts
+├─ package-lock.json
+├─ package.json
+├─ pages
+├─ plugins
+├─ public
+├─ src-tauri
+│  ├─ Cargo.lock
+│  ├─ Cargo.toml
+│  ├─ capabilities
+│  ├─ gen
+│  │  └─ schemas
+│  ├─ icons
+│  │  ├─ android
+│  │  └─ ios
+│  ├─ src
+│  │  ├─ ant
+│  ├─ target
+│  └─ tauri.conf.json
+├─ stores
+├─ types
+├─ utils
+└─ vite.config.ts
 ```
 
-## Production
+## License
 
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+This repository is licensed under the General Public License (GPL), version
+3 ([LICENSE](http://www.gnu.org/licenses/gpl-3.0.en.html)).
