@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use ant::{app_data::AppData, files::FileFromVault};
@@ -53,6 +54,7 @@ async fn upload_files(
     app: AppHandle,
     files: Vec<File>,
     vault_key_signature: String,
+    shared_client: State<'_, SharedClient>,
     payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), ()> {
     let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
@@ -60,9 +62,15 @@ async fn upload_files(
     )
     .expect("Invalid vault key signature");
 
-    ant::files::upload_private_files_to_vault(app, files, &secret_key, payment_orders)
-        .await
-        .map_err(|_err| ()) // TODO: Map to serializable error
+    ant::files::upload_private_files_to_vault(
+        app,
+        files,
+        &secret_key,
+        shared_client,
+        payment_orders,
+    )
+    .await
+    .map_err(|_err| ()) // TODO: Map to serializable error
 }
 
 #[tauri::command]
@@ -76,13 +84,16 @@ async fn send_payment_order_message(
 }
 
 #[tauri::command]
-async fn get_files_from_vault(vault_key_signature: String) -> Result<Vec<FileFromVault>, ()> {
+async fn get_files_from_vault(
+    vault_key_signature: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<Vec<FileFromVault>, ()> {
     let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
         vault_key_signature.trim_start_matches("0x"),
     )
     .expect("Invalid vault key signature");
 
-    ant::files::get_files_from_vault(&secret_key)
+    ant::files::get_files_from_vault(&secret_key, shared_client)
         .await
         .map_err(|_err| ()) // TODO: Map to serializable error
 }
@@ -91,8 +102,9 @@ async fn get_files_from_vault(vault_key_signature: String) -> Result<Vec<FileFro
 async fn download_private_file(
     data_map: DataMapChunk,
     to_dest: PathBuf,
+    shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
-    ant::files::download_private_file(data_map, to_dest)
+    ant::files::download_private_file(data_map, to_dest, shared_client)
         .await
         .map_err(|err| CommandError {
             message: err.to_string(),
@@ -100,17 +112,24 @@ async fn download_private_file(
 }
 
 #[tauri::command]
-async fn download_public_file(addr: DataAddr, to_dest: PathBuf) -> Result<(), ()> {
-    ant::files::download_public_file(addr, to_dest)
+async fn download_public_file(
+    addr: DataAddr,
+    to_dest: PathBuf,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), ()> {
+    ant::files::download_public_file(addr, to_dest, shared_client)
         .await
         .map_err(|_err| ()) // TODO: Map to serializable error
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub async fn run() {
+    let shared_client = SharedClient::init().await;
+
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
+        .manage(shared_client)
         .manage(PaymentOrderManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
