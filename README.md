@@ -85,5 +85,5 @@ project-dave
 
 ## License
 
-This Safe Network repository is licensed under the General Public License (GPL), version
+This repository is licensed under the General Public License (GPL), version
 3 ([LICENSE](http://www.gnu.org/licenses/gpl-3.0.en.html)).
