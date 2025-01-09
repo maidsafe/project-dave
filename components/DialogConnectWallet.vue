@@ -27,13 +27,6 @@ const handleLogIn = async () => {
     console.log(">>> Response", response);
 
     if (response.success) {
-      toast.add({
-        severity: "success",
-        summary: "Success",
-        detail: "TEST: Logged in successfully",
-        life: 3000,
-      });
-
       if (callbackConnectWallet.value) {
         callbackConnectWallet.value();
       }
