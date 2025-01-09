@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
               >
                 <div>
                   <div class="text-2xl font-semibold text-autonomi-header-text">
-                    Support
+                    About us
                   </div>
                   <!-- <div class="text-xs font-semibold text-autonomi-gray-500">
                     Current: Default

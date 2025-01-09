@@ -30,6 +30,7 @@ const { openConnectWallet, openDisconnectWallet, wallet } =
 const notifyType = ref<'info' | 'warning'>('info');
 const notifyTitle = ref('');
 const notifyDetails = ref('');
+const notifyCancelEnabled = ref(false);
 const showNotification = ref(false);
 const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
@@ -56,13 +57,15 @@ const handleShowNotification = (payload: any) => {
   notifyType.value = payload.notifyType || 'info';
   notifyTitle.value = payload.title || '';
   notifyDetails.value = payload.details;
+  notifyCancelEnabled.value = payload.enabledCancel || false;
 
   showNotification.value = true;
 };
 
 const handleHideNotification = () => {
-  console.log('>>> Notification closed');
   showNotification.value = false;
+  pendingFilesSignature.value = false;
+  notifyCancelEnabled.value = false;
 };
 
 watchEffect(() => {
@@ -72,6 +75,7 @@ watchEffect(() => {
       title: 'Sign file request',
       details:
         'To view your files please sign the file request in your wallet.',
+        enabledCancel: true,
     });
   } else {
     handleHideNotification();
@@ -135,7 +139,7 @@ onMounted(async () => {
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
               <IconSettings class="w-6 h-6" />
-              Support
+              About us
             </NuxtLink>
           </div>
         </div>
@@ -165,7 +169,8 @@ onMounted(async () => {
           :notify-type="notifyType"
           :title="notifyTitle"
           :details="notifyDetails"
-          @close-notification="handleHideNotification"
+          :can-cancel="notifyCancelEnabled"
+          @close-notify="handleHideNotification"
         />
 
         <PaymentDrawer
