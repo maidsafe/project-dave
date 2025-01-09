@@ -11,10 +11,14 @@ createAppKit({
   networks,
   projectId,
   metadata: {
-    name: 'AppKit Vue Example',
-    description: 'AppKit Vue Example',
+    name: 'Autonomi',
+    description: 'Autonomi',
     url: 'https://reown.com/appkit',
     icons: ['https://avatars.githubusercontent.com/u/179229932?s=200&v=4'],
+  },
+  features: {
+    email: false,
+    socials: false,
   },
 });
 
