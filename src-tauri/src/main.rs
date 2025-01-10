@@ -4,6 +4,7 @@
 use project_dave_lib::logging;
 
 fn main() {
+    let _ = fix_path_env::fix();
     logging::setup_logging();
     project_dave_lib::run()
 }
