@@ -35,7 +35,7 @@ watchEffect(() => {
   if (signPaymentPending.value) {
     emit("show-notify", {
       title: "Payment request",
-      details: "Please sign the payment request in your wallet app.",
+      details: "Please sign the payment request in your mobile wallet app.",
       notifyType: "info",
     });
   } else {

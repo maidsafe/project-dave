@@ -158,7 +158,7 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-3">
             <div
               v-tooltip.bottom="
-                wallet.isConnected ? 'Disconnect Wallet' : 'Connect Wallet'
+                wallet.isConnected ? 'Disconnect Mobile Wallet' : 'Connect Mobile Wallet'
               "
               class="w-10 h-10 rounded-full bg-autonomi-blue-800 flex items-center justify-center cursor-pointer"
               @click="handleClickWallet"
@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
               >
                 <div
                   class="w-10 h-10 bg-autonomi-blue-800 flex items-center justify-center rounded-full cursor-pointer"
-                  v-tooltip.bottom="'Disconnect Wallet'"
+                  v-tooltip.bottom="'Disconnect Mobile Wallet'"
                   @click="handleClickWallet"
                 >
                   <i class="pi pi-wallet text-white" />

@@ -1,10 +1,8 @@
-use crate::ant::client::client;
+use crate::ant::client::SharedClient;
 use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEOUT_SECS};
 use autonomi::client::data::{DataAddr, DataMapChunk};
 use autonomi::client::files::archive::Metadata;
-use autonomi::client::files::fs::DownloadError;
 use autonomi::client::quote::StoreQuote;
-use autonomi::client::vault::user_data::UserDataVaultGetError;
 use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
 use autonomi::{Amount, Bytes, Chunk};
 use serde::{Deserialize, Serialize};
@@ -22,6 +20,8 @@ pub struct File {
 
 #[derive(ThisError, Debug)]
 pub enum UploadError {
+    #[error("Could not connect to the network: {0:?}")]
+    Connect(#[from] autonomi::client::ConnectError),
     #[error("Could not read file: {0:?}")]
     Read(PathBuf),
     #[error("Failed to encrypt data: {0}")]
@@ -32,6 +32,24 @@ pub enum UploadError {
     Scratchpad(String),
     #[error("Failed to emit payment order: {0}")]
     EmitEvent(String),
+}
+
+#[derive(ThisError, Debug)]
+pub enum VaultError {
+    #[error("Could not connect to the network: {0:?}")]
+    Connect(#[from] autonomi::client::ConnectError),
+    #[error("Could not retrieve user data: {0:?}")]
+    UserDataGet(#[from] autonomi::client::vault::user_data::UserDataVaultGetError),
+    #[error("Could not retrieve data: {0:?}")]
+    DataGet(#[from] autonomi::client::data::GetError),
+}
+
+#[derive(ThisError, Debug)]
+pub enum DownloadError {
+    #[error("Could not connect to the network: {0:?}")]
+    Connect(#[from] autonomi::client::ConnectError),
+    #[error("Could not download file: {0:?}")]
+    Download(#[from] autonomi::client::files::fs::DownloadError),
 }
 
 pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError> {
@@ -45,9 +63,10 @@ pub async fn upload_private_files_to_vault(
     app: AppHandle,
     files: Vec<File>,
     secret_key: &VaultSecretKey,
+    shared_client: State<'_, SharedClient>,
     payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), UploadError> {
-    let client = client().await;
+    let client = shared_client.get_client().await?;
 
     let mut aggregated_chunks: Vec<Chunk> = vec![];
     let mut aggregated_store_quote = StoreQuote(Default::default());
@@ -197,8 +216,9 @@ pub enum PublicOrPrivateFile {
 
 pub async fn get_files_from_vault(
     secret_key: &VaultSecretKey,
-) -> Result<Vec<FileFromVault>, UserDataVaultGetError> {
-    let client = client().await;
+    shared_client: State<'_, SharedClient>,
+) -> Result<Vec<FileFromVault>, VaultError> {
+    let client = shared_client.get_client().await?;
 
     // Fetch user data
     let user_data = client.get_user_data_from_vault(secret_key).await?;
@@ -247,16 +267,19 @@ pub async fn get_files_from_vault(
 pub async fn download_private_file(
     data_map: DataMapChunk,
     to_dest: PathBuf,
+    shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
-    let client = client().await;
+    let client = shared_client.get_client().await?;
     client.file_download(data_map, to_dest).await?;
-
     Ok(())
 }
 
-pub async fn download_public_file(addr: DataAddr, to_dest: PathBuf) -> Result<(), DownloadError> {
-    let client = client().await;
+pub async fn download_public_file(
+    addr: DataAddr,
+    to_dest: PathBuf,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), DownloadError> {
+    let client = shared_client.get_client().await?;
     client.file_download_public(addr, to_dest).await?;
-
     Ok(())
 }
