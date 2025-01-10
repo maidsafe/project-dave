@@ -22,8 +22,6 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
                 const mobileDownloadLinks = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('w3m-mobile-download-links')?.shadowRoot?.querySelector('wui-cta-button');
                 const getStartedLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-guide');
 
-                console.log('>>> get started links: ', getStartedLink)
-
                 if (mobileTabHeader) {
                     mobileTabHeader.hidden = true;
                 }
