@@ -47,7 +47,6 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
 
         const observer = new MutationObserver((mutationsList) => {
             mutationsList.forEach((mutation) => {
-                console.log('>>> Mutation: ', mutation)
                 hideModalElements()
             })
         })
