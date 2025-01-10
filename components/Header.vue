@@ -61,10 +61,6 @@ const toggleTokenDropdown = () => {
 };
 
 const toggleHamburgerMenu = () => {
-  if (!wallet.value.isConnected) {
-    return walletStore.showConnectWallet();
-  }
-
   // Hide token dropdown if open
   isTokenDropdownOpen.value = false;
 
@@ -228,6 +224,9 @@ onBeforeUnmount(() => {
             <button
               class="w-10 h-10 bg-autonomi-blue-800 flex items-center justify-center rounded-full cursor-pointer"
               @click="handleClickWallet"
+              v-tooltip.bottom="
+                wallet.isConnected ? 'Disconnect Mobile Wallet' : 'Connect Mobile Wallet'
+              "
             >
               <i class="pi pi-wallet text-white" />
             </button>
