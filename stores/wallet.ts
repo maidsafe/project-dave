@@ -3,10 +3,61 @@ import {readContract, signMessage, waitForTransactionReceipt, writeContract} fro
 import tokenAbi from "~/assets/abi/PaymentToken.json";
 import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import {wagmiAdapter} from "~/config";
+import debounce from "~/utils/debounce";
 
 const tokenContractAddress = "0xBE1802c27C324a28aeBcd7eeC7D734246C807194";
 const paymentVaultContractAddress = "0x993C7739f50899A997fEF20860554b8a28113634";
 const VAULT_SECRET_KEY_SEED = "Massive Array of Internet Disks Secure Access For Everyone";
+
+let isSetWalletModalListener = false;
+
+const handleObserveHideModalElements = (walletModal: HTMLElement) => {
+    try {
+        const walletModalShadow = walletModal.shadowRoot as ShadowRoot;
+
+        const hideModalElements = debounce(() => {
+            try {
+                const mobileTabHeader = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-header');
+                const copyLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('wui-link');
+                const mobileDownloadLinks = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('w3m-mobile-download-links')?.shadowRoot?.querySelector('wui-cta-button');
+                const getStartedLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-guide');
+
+                console.log('>>> get started links: ', getStartedLink)
+
+                if (mobileTabHeader) {
+                    mobileTabHeader.hidden = true;
+                }
+
+                if (copyLink) {
+                    copyLink.hidden = true;
+                }
+
+                if (mobileDownloadLinks) {
+                    mobileDownloadLinks.hidden = true;
+                }
+
+                if (getStartedLink) {
+                    getStartedLink.hidden = true;
+                }
+            }
+            catch (error) {
+                // TODO: Handle error
+            }
+        }, 50)
+
+        const observer = new MutationObserver((mutationsList) => {
+            mutationsList.forEach((mutation) => {
+                console.log('>>> Mutation: ', mutation)
+                hideModalElements()
+            })
+        })
+
+        observer.observe(walletModalShadow, { attributes: true, childList: true, subtree: true });
+    }
+    catch (error) {
+    }
+}
+
 
 export const useWalletStore = defineStore("wallet", () => {
     // State
@@ -19,7 +70,7 @@ export const useWalletStore = defineStore("wallet", () => {
     const cachedVaultKey = ref<string>();
 
     const wallet = useAppKitAccount();
-    const {open} = useAppKit();
+    const { open } = useAppKit();
     const {disconnect} = useDisconnect();
 
     const connectWallet = async () => {
@@ -27,10 +78,16 @@ export const useWalletStore = defineStore("wallet", () => {
             pendingConnectWallet.value = true;
 
             const connectResponse = await open();
+            
+            // Get wallet modal reference
+            const walletModal = document.querySelector('w3m-modal') as HTMLElement | null;
 
-            console.log(">>> Connect response: ", connectResponse);
-
-            // TODO: Fix how to handle a response using appKit
+            // Add observer
+            if (!isSetWalletModalListener) {
+                walletModal && handleObserveHideModalElements(walletModal)
+                isSetWalletModalListener = true
+            }
+            
             return {
                 success: true,
             };
