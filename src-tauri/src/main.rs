@@ -3,7 +3,8 @@
 
 use project_dave_lib::logging;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     logging::setup_logging();
-    project_dave_lib::run()
+    project_dave_lib::run().await;
 }
