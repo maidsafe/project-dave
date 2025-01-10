@@ -35,7 +35,7 @@ const openPickerAndUploadFiles = async () => {
     emit("show-notify", {
       notifyType: "info",
       title: "Sign upload required",
-      details: "Please sign the upload request in your wallet.",
+      details: "Please sign the upload request in your mobile wallet.",
     });
     let vaultKeySignature = await walletStore.getVaultKeySignature();
 

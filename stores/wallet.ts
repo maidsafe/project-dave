@@ -18,9 +18,52 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
         const hideModalElements = debounce(() => {
             try {
                 const mobileTabHeader = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-header');
+                
                 const copyLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('wui-link');
+                
                 const mobileDownloadLinks = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('w3m-mobile-download-links')?.shadowRoot?.querySelector('wui-cta-button');
+                
                 const getStartedLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-guide');
+
+                const buttonWalletConnect = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-login-list')?.shadowRoot?.querySelector('w3m-connector-list')?.shadowRoot?.querySelector('w3m-connect-walletconnect-widget');
+
+                const modalHeaderText =  walletModalShadow.querySelector('w3m-header')?.shadowRoot?.querySelector('wui-text');
+
+                const buttonAllWallets = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-login-list')?.shadowRoot?.querySelector('w3m-all-wallets-widget')?.shadowRoot?.querySelector('wui-list-wallet')?.shadowRoot?.querySelector('button')?.querySelector('wui-text');
+            
+                const buttonGetAWallet = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-what-is-a-wallet-view')?.shadowRoot?.querySelector('wui-button');
+
+                const scanQrCodeText = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('wui-text');
+
+                let walletName = '';
+
+                if (modalHeaderText) {
+
+                    const connectWalletRegex  = /Connect\s+Wallet/i;
+                    const isConnectWallet = connectWalletRegex.test(modalHeaderText.innerHTML); // Connect Wallet is the header
+                    const placeholderElement = modalHeaderText.parentElement?.querySelector('.autonomi-header');
+
+                    if (isConnectWallet) {
+                        if (!placeholderElement) {
+                            // Add the updated connect mobile wallet element if it doesn't exist
+                            modalHeaderText.parentElement?.insertAdjacentHTML('beforeend', '<span class="autonomi-header" style="font-size: 14px; font-weight: 600; color: #ffffff;">Connect Mobile Wallet</span>');
+                        }
+                        
+                        modalHeaderText.style.position = 'absolute';
+                        modalHeaderText.style.left = '-9999px';
+                    } else {
+                        // Show header
+                        modalHeaderText.style.position = 'relative';
+                        modalHeaderText.style.left = '0px';
+                        placeholderElement?.remove();
+                        // Set wallet name
+                        walletName = modalHeaderText.textContent || '';
+                    }
+                }
+
+                if (buttonAllWallets) {
+                    buttonAllWallets.textContent = "All Mobile Wallets";
+                }
 
                 if (mobileTabHeader) {
                     mobileTabHeader.hidden = true;
@@ -37,11 +80,23 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
                 if (getStartedLink) {
                     getStartedLink.hidden = true;
                 }
+
+                if (buttonWalletConnect) {
+                    buttonWalletConnect.hidden = true;
+                }
+
+                if (buttonGetAWallet) {
+                    buttonGetAWallet.hidden = true;
+                }
+
+                if (scanQrCodeText) {
+                    scanQrCodeText.innerHTML = `<span style="display: block; text-align: center;">Download ${walletName} on your mobile device then scan this QR code.</span>`
+                }
             }
             catch (error) {
                 // TODO: Handle error
             }
-        }, 50)
+        }, 75)
 
         const observer = new MutationObserver((mutationsList) => {
             mutationsList.forEach((mutation) => {

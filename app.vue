@@ -99,7 +99,7 @@ watchEffect(() => {
       notifyType: 'info',
       title: 'Sign file request',
       details:
-        'To view your files please sign the file request in your wallet.',
+        'To view your files please sign the file request in your mobile wallet.',
         enabledCancel: true,
     });
   } else {
