@@ -27,13 +27,6 @@ const handleLogIn = async () => {
     console.log(">>> Response", response);
 
     if (response.success) {
-      toast.add({
-        severity: "success",
-        summary: "Success",
-        detail: "TEST: Logged in successfully",
-        life: 3000,
-      });
-
       if (callbackConnectWallet.value) {
         callbackConnectWallet.value();
       }
@@ -82,7 +75,7 @@ const handleLogIn = async () => {
             Cancel
           </CommonButton>
           <CommonButton variant="primary" size="large" @click="handleLogIn">
-            <i class="pi pi-wallet" /> Connect Your Wallet
+            <i class="pi pi-wallet" /> Connect Your Mobile Wallet
           </CommonButton>
         </div>
       </div>

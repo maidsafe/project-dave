@@ -8,6 +8,7 @@ const props = defineProps<{
   notifyType: 'info' | 'warning';
   title: string;
   details: string;
+  canCancel?: boolean;
 }>();
 
 const emit = defineEmits(["close-notify"]);
@@ -20,6 +21,10 @@ const { visible } = props;
 // const handleCancelDisconnect = () => {
 //   emit("close-disconnect-wallet");
 // };
+
+const handleCancelNotify = () => {
+  emit("close-notify");
+};
 </script>
 
 <template>
@@ -42,6 +47,17 @@ const { visible } = props;
           class="flex items-center justify-center gap-4 text-autonomi-text-primary mt-2"
         >
           <span>{{  details  }}</span>
+        </div>
+
+        <div v-if="props.canCancel" class="mt-4">
+          <CommonButton
+            variant="secondary"
+            size="small"
+            @click="handleCancelNotify"
+            class="flex"
+          >
+            <span aria-label="Cancel">Cancel</span>
+          </CommonButton>
         </div>
       </div>
     </template>
