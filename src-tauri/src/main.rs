@@ -3,7 +3,9 @@
 
 use project_dave_lib::logging;
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    let _ = fix_path_env::fix();
     logging::setup_logging();
-    project_dave_lib::run()
+    project_dave_lib::run().await;
 }

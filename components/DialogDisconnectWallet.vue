@@ -26,13 +26,13 @@ const handleDisconnectWallet = async () => {
       toast.add({
         severity: "success",
         summary: "Success",
-        detail: "Wallet disconnected successfully",
+        detail: "Mobile wallet disconnected successfully",
         life: 3000,
       });
 
       navigateTo("/");
     } else {
-      throw new Error("Failed to disconnect wallet");
+      throw new Error("Failed to disconnect mobile wallet");
     }
   } catch (error) {
     toast.add({
@@ -80,7 +80,7 @@ const handleDisconnectWallet = async () => {
             size="large"
             @click="handleDisconnectWallet"
           >
-            <i class="pi pi-times-circle" />Disconnect Your Wallet
+            <i class="pi pi-times-circle" />Disconnect Your Mobile Wallet
           </CommonButton>
         </div>
       </div>

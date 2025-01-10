@@ -48,24 +48,28 @@ const navButtons = ref([
 
 const supportLinks = ref([
   {
-    name: "Quick start guides",
-    link: "#",
-    icon: "pi pi-file-pdf",
+    name: "Autonomi.com",
+    link: "http://autonomi.com",
+    icon: "pi pi-link",
+    target: "_blank",
   },
   {
-    name: "Direct Support",
-    link: "#",
-    icon: "pi pi-envelope",
+    name: "Discord",
+    link: "https://discord.com/invite/autonomi",
+    target: "_blank",
+    icon: "pi pi-discord",
   },
   {
-    name: "Rewards programme",
-    link: "#",
-    icon: "pi pi-star",
+    name: "Forum",
+    link: "https://forum.autonomi.community/",
+    icon: "pi pi-link",
+    target: "_blank",
   },
   {
-    name: "Download the latest launchpad",
-    link: "#",
-    icon: "pi pi-download",
+    name: "Follow on X",
+    link: "https://forum.autonomi.community/",
+    target: "_blank",
+    icon: "pi pi-twitter",
   },
 ]);
 
@@ -576,13 +580,14 @@ onMounted(async () => {
       <!-- Help & Support -->
       <div class="pr-[66px] pl-[110px] mt-12">
         <h3 class="text-2xl text-autonomi-header-text-dark font-semibold">
-          Help and support
+          About us
         </h3>
 
         <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-7">
           <NuxtLink
             v-for="link in supportLinks"
-            to="#"
+            :to="link.link"
+            :target="link.target"
             class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3"
           >
             <i :class="`${link.icon} text-autonomi-blue-600 mr-1`" />
