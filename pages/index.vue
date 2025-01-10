@@ -35,9 +35,9 @@ const handleGetStarted = () => {
       </h1>
       <p class="mt-4 text-autonomi-text-primary">
         Welcome to the Autonomi vault. This is a secure private data store
-        linked to your wallet, accessible from anywhere. You will need to link a
+        linked to your mobile wallet, accessible from anywhere. You will need to link a
         wallet in order to pay for the upload and gas fees. Once you have linked
-        your wallet, you will be able to see any files associated with it. You
+        your mobile wallet, you will be able to see any files associated with it. You
         can also upload new files from here. To get started, press the button
         below.
       </p>

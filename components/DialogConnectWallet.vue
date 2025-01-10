@@ -75,7 +75,7 @@ const handleLogIn = async () => {
             Cancel
           </CommonButton>
           <CommonButton variant="primary" size="large" @click="handleLogIn">
-            <i class="pi pi-wallet" /> Connect Your Wallet
+            <i class="pi pi-wallet" /> Connect Your Mobile Wallet
           </CommonButton>
         </div>
       </div>
