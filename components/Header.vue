@@ -24,6 +24,8 @@ const {
   pendingPaymentsCount,
 } = storeToRefs(paymentStore);
 
+const { isDark } = useTheme()
+
 // Refs
 const refTokenDropdown = ref();
 const isTokenDropdownOpen = ref(false);
@@ -117,10 +119,10 @@ onBeforeUnmount(() => {
       class="sticky top-0 min-h-[68px] lg:min-h-[110px] bg-autonomi-gray-50 dark:bg-autonomi-blue-600 transition-all duration-300"
     >
       <div
-        class="flex items-center px-4 lg:px-[62px] h-[68px] lg:h-[110px] bg-white lg:bg-autonomi-gray-50 lg:dark:bg-autonomi-blue-600 rounded-b-2xl"
+        class="flex items-center px-4 lg:px-[62px] h-[68px] lg:h-[110px] bg-white dark:bg-black/30 lg:bg-autonomi-gray-50 lg:dark:bg-autonomi-blue-600 rounded-b-2xl"
       >
         <div class="flex gap-2 cursor-pointer" @click="navigateTo('/')">
-          <IconLogo :dark="false" />
+          <IconLogo />
           <p class="text-autonomi-text-primary">Beta</p>
         </div>
 
@@ -199,6 +201,8 @@ onBeforeUnmount(() => {
               :badge="pendingPaymentsCount.toString()"
               @click="paymentStore.openPaymentDrawer()"
             />
+            
+            <ThemeToggle />
           </div>
         </div>
 
@@ -285,7 +289,7 @@ onBeforeUnmount(() => {
             </button>
 
             <div
-              class="bg-autonomi-gray-200 dark:bg-autonomi-blue-800 absolute right-0 w-full max-w-[400px] rounded-b-3xl overflow-hidden transition-all duration-500"
+              class="bg-autonomi-gray-200 dark:bg-black/40 bg-auto absolute right-0 w-full max-w-[400px] rounded-b-3xl overflow-hidden transition-all duration-500"
               :class="{
                 'h-0': !isHamburgerMenuOpen,
                 'h-[100px]': isHamburgerMenuOpen,
@@ -300,10 +304,10 @@ onBeforeUnmount(() => {
                     navigateTo('/settings');
                   }
                 "
-                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white hover:bg-white transition-all duration-300 cursor-pointer"
+                class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white dark:border-t-black hover:bg-white dark:hover:bg-autonomi-blue-200/10 transition-all duration-300 cursor-pointer"
               >
                 <div>
-                  <div class="text-2xl font-semibold text-autonomi-header-text">
+                  <div class="text-2xl font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
                     About us
                   </div>
                   <!-- <div class="text-xs font-semibold text-autonomi-gray-500">
