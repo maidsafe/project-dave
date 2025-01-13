@@ -56,6 +56,6 @@ export default {
         },
         extend: {},
     },
-    darkMode: ["selector", ".autonomi-dark"],
+    darkMode: ["class"],
     plugins: [require("tailwindcss-primeui")]
 };

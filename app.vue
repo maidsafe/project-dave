@@ -43,7 +43,7 @@ createAppKit({
   ]
 });
 
-const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer`;
+const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer dark:hover:text-white`;
 
 // State
 const fileStore = useFileStore();
@@ -121,7 +121,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-autonomi-gray-50 relative">
+  <div class="min-h-screen flex flex-col bg-autonomi-gray-50 dark:bg-autonomi-blue-600 relative">
     <div
       v-if="!removeSplashScreen"
       class="absolute w-full h-full bg-white top-0 left-0 z-50 transition-all duration-1000"
@@ -141,7 +141,7 @@ onMounted(async () => {
       <div class="flex flex-1">
         <!-- SideBar -->
         <div
-          class="pb-4 w-[290px] transition-all duration-300 hidden lg:flex flex-col rounded-tr-2xl bg-white overflow-hidden items-center pt-[35px] shrink-0"
+          class="pb-4 w-[290px] transition-all duration-300 hidden lg:flex flex-col rounded-tr-2xl bg-white dark:bg-white/10 overflow-hidden items-center pt-[35px] shrink-0"
         >
           <div class="mb-11">
             <CommonButton

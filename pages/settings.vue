@@ -579,7 +579,7 @@ onMounted(async () => {
 
       <!-- Help & Support -->
       <div class="pr-[66px] pl-[110px] mt-12">
-        <h3 class="text-2xl text-autonomi-header-text-dark font-semibold">
+        <h3 class="text-2xl text-autonomi-header-text-dark dark:text-autonomi-text-primary-dark font-semibold">
           About us
         </h3>
 
@@ -588,7 +588,7 @@ onMounted(async () => {
             v-for="link in supportLinks"
             :to="link.link"
             :target="link.target"
-            class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3"
+            class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 dark:bg-white/90 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3"
           >
             <i :class="`${link.icon} text-autonomi-blue-600 mr-1`" />
             {{ link.name }}

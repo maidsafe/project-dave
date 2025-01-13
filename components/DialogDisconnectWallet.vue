@@ -56,7 +56,7 @@ const handleDisconnectWallet = async () => {
   >
     <template #container="{ closeCallback }">
       <div
-        class="flex flex-col px-8 py-8 gap-6 rounded-2xl bg-autonomi-blue-600"
+        class="flex flex-col px-8 py-8 gap-6 rounded-2xl bg-autonomi-blue-600 dark:bg-black"
       >
         <IconLogo :dark="true" />
 
