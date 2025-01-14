@@ -1,16 +1,10 @@
 <script lang="ts" setup>
-// Logo
-const props = defineProps<{
-  class?: string;
-  dark?: boolean;
-}>();
-
-const { class: className, dark = false } = props;
+const { isDark } = useTheme();
 </script>
 
 <template>
   <svg
-    v-if="dark"
+    v-if="isDark"
     width="175"
     height="29"
     viewBox="0 0 175 29"

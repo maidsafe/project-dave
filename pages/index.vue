@@ -29,7 +29,7 @@ const handleGetStarted = () => {
   <div>
     <div class="px-[66px] lg:px-[110px] pt-[70px]" v-if="!wallet.isConnected">
       <h1
-        class="text-4xl font-semibold leading-[54px] text-autonomi-header-text"
+        class="text-4xl font-semibold leading-[54px] text-autonomi-header-text dark:text-autonomi-text-primary-dark"
       >
         Welcome to Autonomi
       </h1>
@@ -42,7 +42,7 @@ const handleGetStarted = () => {
         below.
       </p>
 
-      <div v-if="!wallet.connected">
+      <div v-if="!wallet.isConnected">
         <CommonButton
           variant="secondary"
           size="medium"

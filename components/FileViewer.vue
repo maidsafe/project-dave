@@ -353,7 +353,7 @@ onMounted(() => {
       </div>
 
       <div
-        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
         v-tooltip.bottom="'Refresh files'"
         @click="fileStore.getAllFiles()"
       >
@@ -361,7 +361,7 @@ onMounted(() => {
       </div>
 
       <div
-        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
         @click="
           $event => {
             handleToggleFilesViewMenu($event);
@@ -378,7 +378,7 @@ onMounted(() => {
       v-if="breadcrumbs?.length > 0 && view === 'vault'"
     >
       <div
-        class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary"
+        class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
         @click="handleClickBreadcrumb(rootDirectory)"
       >
         Root
@@ -412,7 +412,7 @@ onMounted(() => {
           <div
             :class="`text-sm font-semibold cursor-pointer transition-all duration-300 ${
               view === 'vault'
-                ? 'text-autonomi-text-secondary'
+                ? 'text-autonomi-text-secondary dark:text-autonomi-text-primary-dark'
                 : 'text-autonomi-text-primary/70'
             }`"
             @click="view = 'vault'"
@@ -421,7 +421,7 @@ onMounted(() => {
           </div>
           <div
             :class="`h-1 transition-all duration-300 ${
-              view === 'vault' ? 'bg-autonomi-blue-600' : 'bg-autonomi-blue-200'
+              view === 'vault' ? 'bg-autonomi-blue-600 dark:bg-autonomi-blue-200' : 'bg-autonomi-blue-200'
             }`"
           />
         </div>
@@ -551,7 +551,7 @@ onMounted(() => {
         <template v-if="filteredFiles.length">
           <div
             v-for="file in filteredFiles"
-            class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 hover:bg-white"
+            class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 hover:bg-white dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:hover:bg-[#8587c5] dark:text-autonomi-text-primary-dark"
             @click="handleChangeDirectory(file)"
             :class="{ 'cursor-pointer': !file.path }"
           >
@@ -586,7 +586,7 @@ onMounted(() => {
 
             <!-- Upload Date -->
             <div
-              class="hidden xl:block xl:col-span-3 text-autonomi-text-primary"
+              class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
             >
               {{
                 file?.metadata?.uploaded
@@ -599,7 +599,7 @@ onMounted(() => {
             <template v-if="file.path">
               <div class="col-span-1">
                 <i
-                  class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600"
+                  class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
                   @click="
                     $event => {
                       // TODO: Update key:values to match api
@@ -614,7 +614,7 @@ onMounted(() => {
         </template>
         <template v-else>
           <div
-            class="grid grid-cols-subgrid col-span-12 items-center justify-center min-h-[100px] font-semibold text-4xl text-autonomi-blue-600/50"
+            class="grid grid-cols-subgrid col-span-12 items-center justify-center min-h-[100px] font-semibold text-4xl text-autonomi-blue-600/50 dark:text-autonomi-text-primary-dark"
           >
             <div v-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
               <i class="pi pi-spinner pi-spin mr-4" />Loading files...
@@ -643,7 +643,7 @@ onMounted(() => {
           <template v-if="filteredFiles.length">
             <div
               v-for="file in filteredFiles"
-              class="col-span-6 md:col-span-4 xl:col-span-3 aspect-square max-h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary transition-all duration-500"
+              class="col-span-6 md:col-span-4 xl:col-span-3 aspect-squarez h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500"
               :class="{ 'cursor-pointer': !file.path }"
               @click="handleChangeDirectory(file)"
             >
@@ -668,7 +668,7 @@ onMounted(() => {
 
                 <!-- Folder/File Name -->
                 <div
-                  class="flex flex-col flex-1 items-center justify-center gap-3"
+                  class="flex flex-col flex-1 items-center justify-center gap-3 w-full overflow-hidden"
                 >
                   <template v-if="file?.path">
                     <!-- This is the file -->
@@ -687,7 +687,7 @@ onMounted(() => {
                       class="pi pi-box mr-4"
                     />
 
-                    <span class="text-ellipsis overflow-hidden">{{
+                    <span v-tooltip.bottom="file.name" class="text-ellipsis overflow-hidden line-clamp-1 w-full block text-center">{{
                       file.name
                     }}</span>
                   </template>
