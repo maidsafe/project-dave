@@ -62,8 +62,10 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Ad-hoc signing for macOS
+      - name: Ad-hoc signing and quarantine removal for macOS
         if: matrix.platform == 'macos-latest'
         run: |
           echo "Performing ad-hoc signing..."
           codesign --force --deep --sign - ./src-tauri/target/*/release/bundle/macos/*.app
+          echo "Removing quarantine attribute..."
+          xattr -rd com.apple.quarantine ./src-tauri/target/*/release/bundle/macos/*.app
