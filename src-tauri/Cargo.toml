@@ -32,7 +32,6 @@ tauri-plugin-dialog = "2"
 thiserror = "2.0.8"
 toml = "0.8.19"
 tokio = { version = "1.42.0", features = ["fs"] }
-fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
