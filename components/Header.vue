@@ -279,6 +279,9 @@ onBeforeUnmount(() => {
             @click="paymentStore.openPaymentDrawer()"
           />
 
+          <!-- THEME -->
+          <ThemeToggle />
+
           <!-- HAMBURGER MENU -->
           <div ref="refHamburgerMenu">
             <button
