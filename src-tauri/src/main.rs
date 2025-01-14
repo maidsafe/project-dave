@@ -5,6 +5,7 @@ use project_dave_lib::logging;
 
 #[tokio::main]
 async fn main() {
+    let _ = fix_path_env::fix();
     logging::setup_logging();
     project_dave_lib::run().await;
 }
