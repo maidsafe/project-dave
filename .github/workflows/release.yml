@@ -62,7 +62,13 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           echo "Processing macOS build..."
+          # Create temporary keychain
+          security create-keychain -p temppass build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p temppass build.keychain
           # Sign the app
-          codesign --force --deep --sign - ./src-tauri/target/*/release/bundle/macos/*.app
-          # Remove quarantine from app and DMG
+          codesign --force --deep --options runtime --sign - ./src-tauri/target/*/release/bundle/macos/*.app
+          # Remove quarantine attributes
           find ./src-tauri/target/*/release/bundle -name "*.app" -o -name "*.dmg" -exec xattr -rd com.apple.quarantine {} \;
+          # Verify signature
+          codesign --verify --verbose ./src-tauri/target/*/release/bundle/macos/*.app
