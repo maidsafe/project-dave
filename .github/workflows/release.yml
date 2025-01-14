@@ -56,6 +56,13 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
-          args: |
-            ${{ matrix.args }}
-            --config '{"tauri":{"bundle":{"macOS":{"signing":{"identity":null,"providerShortName":null}}}}}'
+          args: ${{ matrix.args }}
+
+      - name: Process macOS build
+        if: matrix.platform == 'macos-latest'
+        run: |
+          echo "Processing macOS build..."
+          # Sign the app
+          codesign --force --deep --sign - ./src-tauri/target/*/release/bundle/macos/*.app
+          # Remove quarantine from app and DMG
+          find ./src-tauri/target/*/release/bundle -name "*.app" -o -name "*.dmg" -exec xattr -rd com.apple.quarantine {} \;
