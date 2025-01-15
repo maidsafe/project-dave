@@ -14,9 +14,7 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
+            args: '--target universal-apple-darwin'
           - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'windows-latest'
@@ -62,34 +60,12 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           echo "Processing macOS build..."
-
           # Find the app bundle
           APP_PATH=$(find ./src-tauri/target/*/release/bundle/macos -name "*.app" -type d)
           echo "Found app at: $APP_PATH"
 
-          # Create entitlements file
-          cat > entitlements.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-              <true/>
-              <key>com.apple.security.cs.allow-jit</key>
-              <true/>
-              <key>com.apple.security.cs.disable-library-validation</key>
-              <true/>
-              <key>com.apple.security.inherit</key>
-              <true/>
-          </dict>
-          </plist>
-          EOF
-
-          # Sign with hardened runtime and entitlements
-          codesign --force --deep --options runtime \
-            --entitlements entitlements.plist \
-            --sign - \
-            "$APP_PATH"
+          # Sign with hardened runtime
+          codesign --force --deep --options runtime --sign - "$APP_PATH"
 
           # Process DMG
           DMG_PATH=$(find ./src-tauri/target/*/release/bundle/dmg -name "*.dmg" -type f)
