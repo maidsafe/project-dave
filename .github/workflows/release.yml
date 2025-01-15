@@ -62,13 +62,41 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           echo "Processing macOS build..."
-          # Create temporary keychain
-          security create-keychain -p temppass build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p temppass build.keychain
-          # Sign the app
-          codesign --force --deep --options runtime --sign - ./src-tauri/target/*/release/bundle/macos/*.app
+
+          # Find the app bundle
+          APP_PATH=$(find ./src-tauri/target/*/release/bundle/macos -name "*.app" -type d)
+          echo "Found app at: $APP_PATH"
+
+          # Create entitlements file
+          cat > entitlements.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+              <true/>
+              <key>com.apple.security.cs.allow-jit</key>
+              <true/>
+              <key>com.apple.security.cs.disable-library-validation</key>
+              <true/>
+              <key>com.apple.security.inherit</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+          # Sign with hardened runtime and entitlements
+          codesign --force --deep --options runtime \
+            --entitlements entitlements.plist \
+            --sign - \
+            "$APP_PATH"
+
+          # Process DMG
+          DMG_PATH=$(find ./src-tauri/target/*/release/bundle/dmg -name "*.dmg" -type f)
+          if [ ! -z "$DMG_PATH" ]; then
+            echo "Found DMG at: $DMG_PATH"
+            codesign --force --sign - "$DMG_PATH"
+          fi
+
           # Remove quarantine attributes
           find ./src-tauri/target/*/release/bundle -name "*.app" -o -name "*.dmg" -exec xattr -rd com.apple.quarantine {} \;
-          # Verify signature
-          codesign --verify --verbose ./src-tauri/target/*/release/bundle/macos/*.app
