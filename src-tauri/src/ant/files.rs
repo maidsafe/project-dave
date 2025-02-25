@@ -7,7 +7,7 @@ use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSec
 use autonomi::client::GetError;
 use autonomi::files::{Metadata, PrivateArchive};
 use autonomi::vault::user_data::UserDataVaultError;
-use autonomi::{Amount, Bytes, Chunk};
+use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -136,13 +136,26 @@ pub async fn upload_private_files_to_vault(
 
     let _ = user_data.add_private_file_archive(DataMapChunk::from(private_archive_datamap));
 
-    let (scratch_pad, _is_new) = client
-        .get_or_create_scratchpad(secret_key, app_name_to_vault_content_type("UserData"))
+    let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
+    let scratchpad_exists = client
+        .scratchpad_check_existance(&scratchpad_addr)
         .await
-        .map_err(|err| UploadError::Scratchpad(err.to_string()))?;
+        .map_err(|err| UploadError::Scratchpad(format!("{err}")))?;
+    let content_type = app_name_to_vault_content_type("UserData");
+    let scratchpad = if scratchpad_exists {
+        client
+            .scratchpad_get(&scratchpad_addr)
+            .await
+            .map_err(|err| UploadError::Scratchpad(format!("{err}")))?
+    } else {
+        Scratchpad::new(secret_key, content_type, &Bytes::new(), 0)
+    };
 
     let scratch_pad_store_quote = client
-        .get_store_quotes(DataTypes::Scratchpad, vec![scratch_pad.name()].into_iter())
+        .get_store_quotes(
+            DataTypes::Scratchpad,
+            std::iter::once((scratchpad.address().xorname(), scratchpad.size())),
+        )
         .await
         .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
@@ -230,7 +243,7 @@ pub async fn get_files_from_vault(
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
         // Get private archive
-        let archive = client.archive_get(data_map).await?;
+        let archive = client.archive_get(&data_map).await?;
 
         for (filepath, (data_map, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
@@ -248,7 +261,7 @@ pub async fn get_files_from_vault(
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
         // Get public archive
-        let archive = client.archive_get_public(archive_addr).await?;
+        let archive = client.archive_get_public(&archive_addr).await?;
 
         for (filepath, (data_addr, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
@@ -266,7 +279,7 @@ pub async fn get_files_from_vault(
 }
 
 pub async fn download_private_file(
-    data_map: DataMapChunk,
+    data_map: &DataMapChunk,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
@@ -276,7 +289,7 @@ pub async fn download_private_file(
 }
 
 pub async fn download_public_file(
-    addr: DataAddr,
+    addr: &DataAddr,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
