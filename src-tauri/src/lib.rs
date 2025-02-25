@@ -5,7 +5,7 @@ use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use ant::{app_data::AppData, files::FileFromVault};
 use autonomi::chunk::DataMapChunk;
-use autonomi::client::data::DataAddr;
+use autonomi::client::data::DataAddress;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
@@ -114,7 +114,7 @@ async fn download_private_file(
 
 #[tauri::command]
 async fn download_public_file(
-    addr: DataAddr,
+    addr: DataAddress,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), ()> {

@@ -1,10 +1,10 @@
 use crate::ant::client::SharedClient;
 use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEOUT_SECS};
 use autonomi::chunk::DataMapChunk;
-use autonomi::client::data::DataAddr;
 use autonomi::client::quote::{DataTypes, StoreQuote};
 use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
 use autonomi::client::GetError;
+use autonomi::data::DataAddress;
 use autonomi::files::{Metadata, PrivateArchive};
 use autonomi::vault::user_data::UserDataVaultError;
 use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
@@ -224,7 +224,7 @@ pub struct FileFromVault {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum PublicOrPrivateFile {
-    Public(DataAddr),
+    Public(DataAddress),
     Private(DataMapChunk),
 }
 
@@ -289,7 +289,7 @@ pub async fn download_private_file(
 }
 
 pub async fn download_public_file(
-    addr: &DataAddr,
+    addr: &DataAddress,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
