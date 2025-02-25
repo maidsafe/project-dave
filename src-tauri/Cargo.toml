@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-autonomi = { version = "0.3.0", git = "https://github.com/mickvandijke/safe_network", rev = "968ddc6cb9a0248fc1decdec7729e2a493bf16a1", features = ["full"] }
+autonomi = { version = "0.3.6", git = "https://github.com/b-zee/safe_network", branch = "fix-0x-prefix-remove" }
 rand = "0.8.5"
 dirs-next = "~2.0.0"
 directories = "5.0"
