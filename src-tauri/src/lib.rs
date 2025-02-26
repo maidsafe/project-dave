@@ -4,7 +4,8 @@ use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use ant::{app_data::AppData, files::FileFromVault};
-use autonomi::client::data::{DataAddr, DataMapChunk};
+use autonomi::chunk::DataMapChunk;
+use autonomi::client::data::DataAddress;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
@@ -104,7 +105,7 @@ async fn download_private_file(
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
-    ant::files::download_private_file(data_map, to_dest, shared_client)
+    ant::files::download_private_file(&data_map, to_dest, shared_client)
         .await
         .map_err(|err| CommandError {
             message: err.to_string(),
@@ -113,11 +114,11 @@ async fn download_private_file(
 
 #[tauri::command]
 async fn download_public_file(
-    addr: DataAddr,
+    addr: DataAddress,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), ()> {
-    ant::files::download_public_file(addr, to_dest, shared_client)
+    ant::files::download_public_file(&addr, to_dest, shared_client)
         .await
         .map_err(|_err| ()) // TODO: Map to serializable error
 }

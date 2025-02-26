@@ -1,10 +1,13 @@
 use crate::ant::client::SharedClient;
 use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEOUT_SECS};
-use autonomi::client::data::{DataAddr, DataMapChunk};
-use autonomi::client::files::archive::Metadata;
-use autonomi::client::quote::StoreQuote;
+use autonomi::chunk::DataMapChunk;
+use autonomi::client::quote::{DataTypes, StoreQuote};
 use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
-use autonomi::{Amount, Bytes, Chunk};
+use autonomi::client::GetError;
+use autonomi::data::DataAddress;
+use autonomi::files::{Metadata, PrivateArchive};
+use autonomi::vault::user_data::UserDataVaultError;
+use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -39,9 +42,9 @@ pub enum VaultError {
     #[error("Could not connect to the network: {0:?}")]
     Connect(#[from] autonomi::client::ConnectError),
     #[error("Could not retrieve user data: {0:?}")]
-    UserDataGet(#[from] autonomi::client::vault::user_data::UserDataVaultGetError),
+    UserDataGet(#[from] UserDataVaultError),
     #[error("Could not retrieve data: {0:?}")]
-    DataGet(#[from] autonomi::client::data::GetError),
+    DataGet(#[from] GetError),
 }
 
 #[derive(ThisError, Debug)]
@@ -49,7 +52,7 @@ pub enum DownloadError {
     #[error("Could not connect to the network: {0:?}")]
     Connect(#[from] autonomi::client::ConnectError),
     #[error("Could not download file: {0:?}")]
-    Download(#[from] autonomi::client::files::fs::DownloadError),
+    Download(#[from] autonomi::client::files::DownloadError),
 }
 
 pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError> {
@@ -70,7 +73,7 @@ pub async fn upload_private_files_to_vault(
 
     let mut aggregated_chunks: Vec<Chunk> = vec![];
     let mut aggregated_store_quote = StoreQuote(Default::default());
-    let mut private_archive = autonomi::PrivateArchive::new();
+    let mut private_archive = PrivateArchive::new();
 
     for file in files {
         let bytes: Bytes = read_file_to_bytes(file.path).await?;
@@ -84,13 +87,12 @@ pub async fn upload_private_files_to_vault(
             metadata.clone(),
         );
 
-        let chunk_addresses: Vec<_> = chunks
+        let chunks_iter = chunks
             .iter()
-            .map(|chunk| *chunk.address.xorname())
-            .collect();
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
 
         let store_quote = client
-            .get_store_quotes(chunk_addresses.into_iter())
+            .get_store_quotes(DataTypes::Chunk, chunks_iter)
             .await
             .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
@@ -110,13 +112,12 @@ pub async fn upload_private_files_to_vault(
     )
     .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
-    let private_archive_chunk_addresses: Vec<_> = private_archive_chunks
+    let private_archive_chunk_iter = private_archive_chunks
         .iter()
-        .map(|chunk| *chunk.address.xorname())
-        .collect();
+        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
 
     let private_archive_store_quote = client
-        .get_store_quotes(private_archive_chunk_addresses.into_iter())
+        .get_store_quotes(DataTypes::Chunk, private_archive_chunk_iter)
         .await
         .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
@@ -135,13 +136,26 @@ pub async fn upload_private_files_to_vault(
 
     let _ = user_data.add_private_file_archive(DataMapChunk::from(private_archive_datamap));
 
-    let (scratch_pad, _is_new) = client
-        .get_or_create_scratchpad(secret_key, app_name_to_vault_content_type("UserData"))
+    let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
+    let scratchpad_exists = client
+        .scratchpad_check_existance(&scratchpad_addr)
         .await
-        .map_err(|err| UploadError::Scratchpad(err.to_string()))?;
+        .map_err(|err| UploadError::Scratchpad(format!("{err}")))?;
+    let content_type = app_name_to_vault_content_type("UserData");
+    let scratchpad = if scratchpad_exists {
+        client
+            .scratchpad_get(&scratchpad_addr)
+            .await
+            .map_err(|err| UploadError::Scratchpad(format!("{err}")))?
+    } else {
+        Scratchpad::new(secret_key, content_type, &Bytes::new(), 0)
+    };
 
     let scratch_pad_store_quote = client
-        .get_store_quotes(vec![scratch_pad.name()].into_iter())
+        .get_store_quotes(
+            DataTypes::Scratchpad,
+            std::iter::once((scratchpad.address().xorname(), scratchpad.size())),
+        )
         .await
         .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
@@ -210,7 +224,7 @@ pub struct FileFromVault {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum PublicOrPrivateFile {
-    Public(DataAddr),
+    Public(DataAddress),
     Private(DataMapChunk),
 }
 
@@ -229,7 +243,7 @@ pub async fn get_files_from_vault(
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
         // Get private archive
-        let archive = client.archive_get(data_map).await?;
+        let archive = client.archive_get(&data_map).await?;
 
         for (filepath, (data_map, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
@@ -247,7 +261,7 @@ pub async fn get_files_from_vault(
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
         // Get public archive
-        let archive = client.archive_get_public(archive_addr).await?;
+        let archive = client.archive_get_public(&archive_addr).await?;
 
         for (filepath, (data_addr, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
@@ -265,7 +279,7 @@ pub async fn get_files_from_vault(
 }
 
 pub async fn download_private_file(
-    data_map: DataMapChunk,
+    data_map: &DataMapChunk,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
@@ -275,7 +289,7 @@ pub async fn download_private_file(
 }
 
 pub async fn download_public_file(
-    addr: DataAddr,
+    addr: &DataAddress,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
