@@ -765,8 +765,9 @@ dependencies = [
 
 [[package]]
 name = "ant-bootstrap"
-version = "0.1.5"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "668cbc0227eca1bc83ff40b4acf19b0b71e0e7d28491da410a6501f58a002347"
 dependencies = [
  "ant-logging",
  "ant-protocol",
@@ -787,8 +788,9 @@ dependencies = [
 
 [[package]]
 name = "ant-build-info"
-version = "0.1.24"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9aa6c61776d7c7530b5e17e0b86ce93e0b58cb4e126795ecfb62d15ec0cbf2c0"
 dependencies = [
  "chrono",
  "tracing",
@@ -797,8 +799,9 @@ dependencies = [
 
 [[package]]
 name = "ant-evm"
-version = "0.1.9"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d662ad327aeac4bf46815b959a3395221448cb127fd544a84cb83eb2db3138e"
 dependencies = [
  "custom_debug",
  "evmlib",
@@ -819,8 +822,9 @@ dependencies = [
 
 [[package]]
 name = "ant-logging"
-version = "0.2.46"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.2.47"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "578ee538351487a231a15f70d014976e4931db6d6b9806ae997efa321a014854"
 dependencies = [
  "chrono",
  "dirs-next",
@@ -836,8 +840,9 @@ dependencies = [
 
 [[package]]
 name = "ant-networking"
-version = "0.3.5"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66e5c0f139b65890ea16831038693bd9132fd07c9732d412f3a81b341aecd30d"
 dependencies = [
  "aes-gcm-siv",
  "ant-bootstrap",
@@ -870,8 +875,9 @@ dependencies = [
 
 [[package]]
 name = "ant-protocol"
-version = "1.0.0"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "814ecc9a771e6c0eb8ad160bc274d5a3e178848f3062dd6f73304a903d4b8e28"
 dependencies = [
  "ant-build-info",
  "ant-evm",
@@ -1334,8 +1340,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "autonomi"
-version = "0.3.6"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "809d3a3d7c53356477fee101bdb9e6ad45d84efbddc0abb4058306d9d7c6a2b2"
 dependencies = [
  "ant-bootstrap",
  "ant-evm",
@@ -2774,7 +2781,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2800,11 +2807,11 @@ dependencies = [
 
 [[package]]
 name = "evmlib"
-version = "0.1.9"
-source = "git+https://github.com/maidsafe/safe_network?branch=main#2eba0203be6298e475d3cacff3c9ad9c9663b0e2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fbd18a5e198bdacfe3c71d2787b5ac50661323a03ab923d03cc354452944057"
 dependencies = [
  "alloy",
- "alloy-primitives",
  "dirs-next",
  "rand 0.8.5",
  "serde",
@@ -5354,7 +5361,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af1844ef2428cc3e1cb900be36181049ef3d3193c63e43026cfe202983b27a56"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 2.0.0",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
@@ -6426,7 +6433,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6920,7 +6927,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8125,7 +8132,7 @@ dependencies = [
  "fastrand",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9219,7 +9226,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
