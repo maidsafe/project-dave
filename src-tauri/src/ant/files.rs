@@ -138,7 +138,7 @@ pub async fn upload_private_files_to_vault(
 
     let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
     let scratchpad_exists = client
-        .scratchpad_check_existance(&scratchpad_addr)
+        .scratchpad_check_existence(&scratchpad_addr)
         .await
         .map_err(|err| UploadError::Scratchpad(format!("{err}")))?;
     let content_type = app_name_to_vault_content_type("UserData");
@@ -199,10 +199,12 @@ pub async fn upload_private_files_to_vault(
             tracing::debug!("Uploading chunks..");
 
             let failed_uploads = client
-                .upload_chunks_with_retries(aggregated_chunks.iter().collect(), &receipt)
+                .chunk_batch_upload(aggregated_chunks.iter().collect(), &receipt)
                 .await;
 
-            tracing::debug!("Failed uploads: {}", failed_uploads.len());
+            if let Err(err) = failed_uploads {
+                tracing::error!("Upload chunks errored: {err}");
+            }
 
             let result = client
                 .put_user_data_to_vault(&secret_key, receipt.into(), user_data)

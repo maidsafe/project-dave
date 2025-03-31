@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-autonomi = { version = "0.3.6", git = "https://github.com/maidsafe/safe_network", branch = "main" }
+autonomi = { git = "https://github.com/b-zee/autonomi", branch = "feat-public-chunk-batch-upload" }
 rand = "0.8.5"
 dirs-next = "~2.0.0"
 directories = "5.0"
