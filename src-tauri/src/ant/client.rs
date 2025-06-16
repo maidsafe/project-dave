@@ -16,7 +16,11 @@ impl SharedClient {
             return Ok(client.clone());
         }
 
-        let client = Client::init().await?;
+        let client = if std::env::var("ANT_LOCAL").is_ok() {
+            Client::init_local().await?
+        } else {
+            Client::init().await?
+        };
         *client_lock = Some(client.clone());
 
         Ok(client)
