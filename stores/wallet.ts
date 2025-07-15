@@ -1,5 +1,6 @@
 import {useAppKit, useAppKitAccount, useDisconnect} from "@reown/appkit/vue";
 import {readContract, signMessage, waitForTransactionReceipt, writeContract} from "@wagmi/core";
+import {keccak256, concat, toHex, toBytes, hashMessage} from "viem";
 import tokenAbi from "~/assets/abi/PaymentToken.json";
 import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import {wagmiAdapter} from "~/config";
@@ -117,7 +118,7 @@ export const useWalletStore = defineStore("wallet", () => {
     const openDisconnectWallet = ref(false);
     const callbackConnectWallet = ref<Function | null>(null);
     const callbackDisconnectWallet = ref<Function | null>(null);
-    const cachedVaultKey = ref<string>();
+    const cachedVaultKeySignature = ref<string>();
 
     const wallet = useAppKitAccount();
     const {open} = useAppKit();
@@ -283,19 +284,24 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const getVaultKeySignature = async (): Promise<string> => {
-        if (!cachedVaultKey.value) {
-            cachedVaultKey.value = await sign(VAULT_SECRET_KEY_SEED);
+        if (!cachedVaultKeySignature.value) {
+            const hex = toHex(VAULT_SECRET_KEY_SEED);
+            const ethSignedMessageHash = toEthSignedMessageHash(hex);
+            const signature = await sign(keccak256(ethSignedMessageHash));
+            cachedVaultKeySignature.value = signature.slice(0, -2); // Remove recovery ID
         }
 
-        console.log("Cached vault key:", cachedVaultKey.value);
+        console.log("Cached vault key signature:", cachedVaultKeySignature.value);
 
-        return cachedVaultKey.value;
+        return cachedVaultKeySignature.value;
     }
 
-    const sign = async (message: string): Promise<string> => {
+    const sign = async (hex: `0x${string}`): Promise<string> => {
+        console.log("Signing message:", hex);
+
         try {
             return await signMessage(wagmiAdapter.wagmiConfig, {
-                message,
+                message: {raw: hex},
             });
         } catch (error) {
             console.error("Error signing message:", error);
@@ -325,3 +331,16 @@ export const useWalletStore = defineStore("wallet", () => {
         sign,
     };
 });
+
+function toEthSignedMessageHash(message) {
+    // First hash the input message (must be bytes or hex string)
+    const messageHash = keccak256(message); // This gives a hex string
+
+    const prefix = '\x19Ethereum Signed Message:\n32';
+    const prefixBytes = toBytes(prefix);              // Converts to Uint8Array
+    const messageHashBytes = toBytes(messageHash);    // Converts hash hex to bytes
+
+    const ethMessage = concat([prefixBytes, messageHashBytes]);
+
+    return keccak256(ethMessage);
+}
