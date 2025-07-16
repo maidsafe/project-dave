@@ -1,21 +1,24 @@
 <script lang="ts" setup>
-import { useFileStore } from '~/stores/files';
-import { useToast } from 'primevue/usetoast';
-import { useUserStore } from '~/stores/user';
-import { invoke } from '@tauri-apps/api/core';
-import { downloadDir } from '@tauri-apps/api/path';
+import {useFileStore} from '~/stores/files';
+import {useToast} from 'primevue/usetoast';
+import {useUserStore} from '~/stores/user';
+import {invoke} from '@tauri-apps/api/core';
+import {downloadDir} from '@tauri-apps/api/path';
 
 const toast = useToast();
 const fileStore = useFileStore();
 const {
   pendingGetAllFiles,
+  pendingVaultStructure,
   currentDirectory,
   currentDirectoryFiles,
   rootDirectory,
+  files,
+  failedArchives,
 } = storeToRefs(fileStore);
 const userStore = useUserStore();
 // const autonomi = useAutonomiStore();
-const { query } = storeToRefs(userStore);
+const {query} = storeToRefs(userStore);
 const view = ref<'vault'>('vault');
 const viewTypeVault = ref<'grid' | 'list'>('list');
 const breadcrumbs = ref<any[]>([]);
@@ -37,8 +40,8 @@ const filteredFiles = computed(() => {
       if (query.value) {
         // TODO: Change "parents" folder name
         return (
-          folder.name.toLowerCase().includes(query.value.toLowerCase()) &&
-          folder.name !== 'parents'
+            folder.name.toLowerCase().includes(query.value.toLowerCase()) &&
+            folder.name !== 'parents'
         );
       }
 
@@ -48,6 +51,40 @@ const filteredFiles = computed(() => {
     // TODO: Handle error
     return [];
   }
+});
+
+// Combine regular files and failed archives
+const combinedFiles = computed(() => {
+  const regularFiles = filteredFiles.value || [];
+
+  // Convert failed archives to a format compatible with files
+  const failedArchiveFiles = failedArchives.value.map(archive => ({
+    name: archive.name,
+    is_failed_archive: true,
+    is_private: archive.is_private,
+    // Add these properties to match the structure expected by the UI
+    is_loaded: false,
+    is_loading: false,
+    load_error: true,
+    // Add empty path to indicate it's not a regular file
+    path: `failed-archive://${archive.name}`,
+    // Add empty metadata to avoid errors
+    metadata: {}
+  }));
+
+  return [...regularFiles, ...failedArchiveFiles];
+});
+
+// Computed for loading progress
+const loadingProgress = computed(() => {
+  if (!files.value.length) return {loaded: 0, total: 0, loading: 0, errors: 0};
+
+  const loaded = files.value.filter(f => f.is_loaded).length;
+  const loading = files.value.filter(f => f.is_loading).length;
+  const errors = files.value.filter(f => f.load_error).length;
+  const total = files.value.length;
+
+  return {loaded, total, loading, errors};
 });
 
 const handleGoBack = (target: any) => {
@@ -207,14 +244,27 @@ const handleMoveFile = () => {
 
 const handleDownloadFile = async () => {
   try {
+    const file = selectedFileItem.value;
+
+    // Check if file is fully loaded
+    if (!file.is_loaded) {
+      toast.add({
+        severity: 'warn',
+        summary: 'File Not Ready',
+        detail: 'Please wait for the file to finish loading before downloading.',
+        life: 3000,
+      });
+      return;
+    }
+
     toast.add({
       severity: 'info',
       summary: 'File Download',
       detail:
-        'Downloading file...check your downloads folder (this may take some time)',
+          'Downloading file...check your downloads folder (this may take some time)',
       life: 6000,
     });
-    const file = selectedFileItem.value;
+
     let fileBytes = new Uint8Array();
 
     const downloadsPath = await downloadDir();
@@ -225,15 +275,15 @@ const handleDownloadFile = async () => {
 
     try {
       fileBytes = await invoke(
-        'download_private_file',
-        downloadPrivateFileArgs,
+          'download_private_file',
+          downloadPrivateFileArgs,
       );
     } catch (error) {
       console.error('Error downloading file:', error);
     }
 
     // Create a Blob from the bytes
-    const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
+    const blob = new Blob([fileBytes], {type: 'application/octet-stream'});
 
     // Create a URL for the Blob
     const url = URL.createObjectURL(blob);
@@ -268,28 +318,44 @@ const handleInfoFile = () => {
   isVisibleFileInfo.value = true;
 };
 
-const menuFiles = ref([
-  {
-    label: 'Download',
-    icon: 'pi pi-download',
-    command: handleDownloadFile,
-  },
-  // {
-  //   label: "Rename",
-  //   icon: "pi pi-pencil",
-  //   command: handleRenameFile,
-  // },
-  // {
-  //   label: "Delete",
-  //   icon: "pi pi-trash",
-  //   command: handleDeleteFile,
-  // },
-  {
+const menuFiles = computed(() => {
+  const file = selectedFileItem.value;
+  const items = [];
+
+  if (file?.is_loaded) {
+    items.push({
+      label: 'Download',
+      icon: 'pi pi-download',
+      command: handleDownloadFile,
+    });
+  } else if (file?.is_loading) {
+    items.push({
+      label: 'Loading...',
+      icon: 'pi pi-spinner pi-spin',
+      disabled: true,
+    });
+  } else if (file?.load_error) {
+    items.push({
+      label: 'Failed to load',
+      icon: 'pi pi-exclamation-triangle',
+      disabled: true,
+    });
+  } else {
+    items.push({
+      label: 'Not loaded',
+      icon: 'pi pi-clock',
+      disabled: true,
+    });
+  }
+
+  items.push({
     label: 'Info',
     icon: 'pi pi-info-circle',
     command: handleInfoFile,
-  },
-]);
+  });
+
+  return items;
+});
 
 const handleShowListView = () => {
   viewTypeVault.value = 'list';
@@ -341,64 +407,78 @@ onMounted(() => {
   <div class="pr-[66px] pl-[66px] lg:pl-[110px] mt-10">
     <!-- View Toggler -->
     <div
-      v-if="view === 'vault'"
-      class="flex items-center justify-end gap-3 -mr-[30px] lg:-mr-0"
+        v-if="view === 'vault'"
+        class="flex items-center justify-end gap-3 -mr-[30px] lg:-mr-0"
     >
       <div
-        v-if="currentDirectory?.parent"
-        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
-        @click="handleGoBack(currentDirectory.parent)"
+          v-if="currentDirectory?.parent"
+          class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+          @click="handleGoBack(currentDirectory.parent)"
       >
-        <i class="pi pi-reply -scale-x-100 translate" />
+        <i class="pi pi-reply -scale-x-100 translate"/>
       </div>
 
       <div
-        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-        v-tooltip.bottom="'Refresh files'"
-        @click="fileStore.getAllFiles()"
+          class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+          v-tooltip.bottom="'Refresh files'"
+          @click="fileStore.getAllFiles()"
       >
-        <i class="pi pi-refresh" />
+        <i class="pi pi-refresh"/>
+      </div>
+
+      <!-- Loading Progress Indicator -->
+      <div
+          v-if="pendingGetAllFiles && loadingProgress.total > 0"
+          class="flex items-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium"
+      >
+        <i class="pi pi-spinner pi-spin text-blue-500"/>
+        <span class="text-blue-700 dark:text-blue-300">
+          Loading {{ loadingProgress.loading }} of {{ loadingProgress.total }} files
+        </span>
+        <span v-if="loadingProgress.errors > 0" class="text-red-500">
+          ({{ loadingProgress.errors }} errors)
+        </span>
       </div>
 
       <div
-        class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-        @click="
+          class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+          @click="
           $event => {
             handleToggleFilesViewMenu($event);
           }
         "
       >
-        <i class="pi pi-bars" />
+        <i class="pi pi-bars"/>
       </div>
     </div>
 
     <!-- Breadcrumbs -->
     <div
-      class="flex gap-4 items-center text-sm font-semibold flex-wrap mt-4 -ml-[30px] lg:-ml-0"
-      v-if="breadcrumbs?.length > 0 && view === 'vault'"
+        class="flex gap-4 items-center text-sm font-semibold flex-wrap mt-4 -ml-[30px] lg:-ml-0"
+        v-if="breadcrumbs?.length > 0 && view === 'vault'"
     >
       <div
-        class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
-        @click="handleClickBreadcrumb(rootDirectory)"
+          class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
+          @click="handleClickBreadcrumb(rootDirectory)"
       >
         Root
       </div>
-      <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70" />
+      <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"/>
 
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <div
-          :class="`cursor-pointer transition-all duration-300 ${
+            :class="`cursor-pointer transition-all duration-300 ${
             index === breadcrumbs.length - 1
               ? 'text-autonomi-text-secondary'
               : 'text-autonomi-text-primary/70'
           }`"
-          @click="handleClickBreadcrumb(crumb)"
+            @click="handleClickBreadcrumb(crumb)"
         >
           {{ crumb.name }}
         </div>
         <i
-          v-if="index !== breadcrumbs.length - 1"
-          class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"
+            v-if="index !== breadcrumbs.length - 1"
+            class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"
         />
       </template>
     </div>
@@ -407,20 +487,20 @@ onMounted(() => {
     <div class="mt-[62px] -ml-[30px] -mr-[30px] lg:-ml-0 lg:-mr-0">
       <div class="grid grid-cols-12 h-10">
         <div
-          class="col-span-12 lg:col-span-12 xl:col-span-12 flex flex-col justify-between"
+            class="col-span-12 lg:col-span-12 xl:col-span-12 flex flex-col justify-between"
         >
           <div
-            :class="`text-sm font-semibold cursor-pointer transition-all duration-300 ${
+              :class="`text-sm font-semibold cursor-pointer transition-all duration-300 ${
               view === 'vault'
                 ? 'text-autonomi-text-secondary dark:text-autonomi-text-primary-dark'
                 : 'text-autonomi-text-primary/70'
             }`"
-            @click="view = 'vault'"
+              @click="view = 'vault'"
           >
             Files
           </div>
           <div
-            :class="`h-1 transition-all duration-300 ${
+              :class="`h-1 transition-all duration-300 ${
               view === 'vault' ? 'bg-autonomi-blue-600 dark:bg-autonomi-blue-200' : 'bg-autonomi-blue-200'
             }`"
           />
@@ -529,11 +609,11 @@ onMounted(() => {
     <div class="mt-11 -mr-[66px] -ml-[110px]">
       <!-- Viewing: Vault (LIST) -->
       <div
-        v-if="view === 'vault' && viewTypeVault === 'list'"
-        class="grid grid-cols-12 font-semibold mb-10"
+          v-if="view === 'vault' && viewTypeVault === 'list'"
+          class="grid grid-cols-12 font-semibold mb-10"
       >
         <div
-          class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
+            class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
         >
           Name
         </div>
@@ -541,66 +621,85 @@ onMounted(() => {
           Upload Date
         </div>
         <div class="col-span-1 text-autonomi-red-300">
-          <i class="pi pi-user" />
+          <i class="pi pi-user"/>
         </div>
 
         <!-- Spacer -->
-        <div class="col-span-12 h-10" />
+        <div class="col-span-12 h-10"/>
 
         <!-- Vault Files Rows -->
-        <template v-if="filteredFiles.length">
+        <template v-if="combinedFiles.length">
           <div
-            v-for="file in filteredFiles"
-            class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 hover:bg-white dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:hover:bg-[#8587c5] dark:text-autonomi-text-primary-dark"
-            @click="handleChangeDirectory(file)"
-            :class="{ 'cursor-pointer': !file.path }"
+              v-for="file in combinedFiles"
+              class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
+              @click="handleChangeDirectory(file)"
+              :class="{
+              'cursor-pointer': !file.path || file.is_failed_archive,
+              'opacity-75': file.is_loading,
+              'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
+              'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive)
+            }"
           >
             <!-- Folder/File Name -->
             <div
-              class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] flex items-center"
+                class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] flex items-center"
             >
-              <template v-if="file?.path">
+              <template v-if="file.is_failed_archive">
+                <!-- This is a failed archive -->
+                <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
+                <i class="pi pi-folder-open mr-2 text-red-500"/>
+                <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
+                  {{ file.name }} <span class="text-xs">({{ file.is_private ? 'Private' : 'Public' }})</span>
+                </span>
+              </template>
+              <template v-else-if="file?.path">
                 <!-- This is the file -->
                 <i
-                  v-if="/\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
-                  class="pi pi-image mr-4"
+                    v-if="/\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
+                    class="pi pi-image mr-4"
                 />
                 <i
-                  v-if="/\.(pdf)$/i.test(file.name)"
-                  class="pi pi-file-pdf mr-4"
+                    v-if="/\.(pdf)$/i.test(file.name)"
+                    class="pi pi-file-pdf mr-4"
                 />
-                <i v-if="/\.(zip)$/i.test(file.name)" class="pi pi-box mr-4" />
+                <i v-if="/\.(zip)$/i.test(file.name)" class="pi pi-box mr-4"/>
 
                 <span class="text-ellipsis overflow-hidden">{{
-                  file.name
-                }}</span>
+                    file.name
+                  }}</span>
+                <!-- Loading indicators for files -->
+                <i v-if="file.is_loading" class="pi pi-spinner pi-spin ml-2 text-sm text-blue-500"/>
+                <i v-else-if="file.load_error" class="pi pi-exclamation-triangle ml-2 text-sm text-red-500"
+                   v-tooltip.top="'Failed to load file data'"/>
+                <i v-else-if="file.is_loaded === false" class="pi pi-clock ml-2 text-sm opacity-50"
+                   v-tooltip.top="'File data not yet loaded'"/>
               </template>
               <template v-else>
                 <!-- This is the folder -->
-                <i class="pi pi-folder mr-4" /><span
+                <i class="pi pi-folder mr-4"/><span
                   class="line-clamp-one text-ellipsis"
-                  >{{ file.name }}</span
-                >
+              >{{ file.name }}</span
+              >
               </template>
             </div>
 
             <!-- Upload Date -->
             <div
-              class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
+                class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
             >
               {{
-                file?.metadata?.uploaded
-                  ? secondsToDate(file.metadata.uploaded).toLocaleString()
-                  : ''
+                file?.metadata?.uploaded && !file.is_failed_archive
+                    ? secondsToDate(file.metadata.uploaded).toLocaleString()
+                    : ''
               }}
             </div>
 
             <!-- Menu -->
-            <template v-if="file.path">
+            <template v-if="file.path && !file.is_failed_archive">
               <div class="col-span-1">
                 <i
-                  class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
-                  @click="
+                    class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
+                    @click="
                     $event => {
                       // TODO: Update key:values to match api
                       selectedFileItem = file;
@@ -610,14 +709,21 @@ onMounted(() => {
                 />
               </div>
             </template>
+            <template v-else>
+              <div class="col-span-1"></div>
+            </template>
           </div>
         </template>
         <template v-else>
+          <!-- No files or archives found -->
           <div
-            class="grid grid-cols-subgrid col-span-12 items-center justify-center min-h-[100px] font-semibold text-4xl text-autonomi-blue-600/50 dark:text-autonomi-text-primary-dark"
+              class="grid grid-cols-subgrid col-span-12 items-center justify-center min-h-[100px] font-semibold text-4xl text-autonomi-blue-600/50 dark:text-autonomi-text-primary-dark"
           >
-            <div v-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
-              <i class="pi pi-spinner pi-spin mr-4" />Loading files...
+            <div v-if="pendingVaultStructure" class="col-span-12 pl-[150px]">
+              <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+            </div>
+            <div v-else-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
+              <i class="pi pi-spinner pi-spin mr-4"/>Loading file details...
             </div>
             <div v-else class="col-span-12 pl-[150px]">No files found.</div>
           </div>
@@ -626,36 +732,41 @@ onMounted(() => {
 
       <!-- Viewing: Vault (GRID) -->
       <div
-        v-if="view === 'vault' && viewTypeVault === 'grid'"
-        class="grid grid-cols-12 font-semibold mb-10"
+          v-if="view === 'vault' && viewTypeVault === 'grid'"
+          class="grid grid-cols-12 font-semibold mb-10"
       >
         <div class="col-span-12 pl-[80px] lg:pl-[110px] text-autonomi-red-300">
           Name
         </div>
 
         <!-- Spacer -->
-        <div class="col-span-12 h-10" />
+        <div class="col-span-12 h-10"/>
 
         <!-- Vault Files Rows -->
         <div
-          class="col-span-12 grid grid-cols-12 ml-[80px] lg:ml-[110px] mr-[30px] lg:mr-[66px] gap-2"
+            class="col-span-12 grid grid-cols-12 ml-[80px] lg:ml-[110px] mr-[30px] lg:mr-[66px] gap-2"
         >
           <template v-if="filteredFiles.length">
             <div
-              v-for="file in filteredFiles"
-              class="col-span-6 md:col-span-4 xl:col-span-3 aspect-squarez h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500"
-              :class="{ 'cursor-pointer': !file.path }"
-              @click="handleChangeDirectory(file)"
+                v-for="file in filteredFiles"
+                class="col-span-6 md:col-span-4 xl:col-span-3 aspect-squarez h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500"
+                :class="{
+                'cursor-pointer': !file.path,
+                'opacity-75': file.is_loading,
+                'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error,
+                'hover:bg-white dark:hover:bg-[#8587c5]': !file.load_error
+              }"
+                @click="handleChangeDirectory(file)"
             >
               <div
-                class="flex flex-col items-center justify-center w-full h-full p-2"
+                  class="flex flex-col items-center justify-center w-full h-full p-2"
               >
                 <!-- Menu -->
                 <template v-if="file.path">
                   <div class="self-end">
                     <i
-                      class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
-                      @click="
+                        class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                        @click="
                         $event => {
                           // TODO: Update key:values to match api
                           selectedFileItem = file;
@@ -668,32 +779,40 @@ onMounted(() => {
 
                 <!-- Folder/File Name -->
                 <div
-                  class="flex flex-col flex-1 items-center justify-center gap-3 w-full overflow-hidden"
+                    class="flex flex-col flex-1 items-center justify-center gap-3 w-full overflow-hidden"
                 >
                   <template v-if="file?.path">
                     <!-- This is the file -->
                     <i
-                      v-if="
+                        v-if="
                         /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)
                       "
-                      class="pi pi-image text-4xl"
+                        class="pi pi-image text-4xl"
                     />
                     <i
-                      v-if="/\.(pdf)$/i.test(file.name)"
-                      class="pi pi-file-pdf mr-4"
+                        v-if="/\.(pdf)$/i.test(file.name)"
+                        class="pi pi-file-pdf mr-4"
                     />
                     <i
-                      v-if="/\.(zip)$/i.test(file.name)"
-                      class="pi pi-box mr-4"
+                        v-if="/\.(zip)$/i.test(file.name)"
+                        class="pi pi-box mr-4"
                     />
 
-                    <span v-tooltip.bottom="file.name" class="text-ellipsis overflow-hidden line-clamp-1 w-full block text-center">{{
-                      file.name
-                    }}</span>
+                    <div class="flex items-center justify-center gap-2 w-full">
+                      <span v-tooltip.bottom="file.name"
+                            class="text-ellipsis overflow-hidden line-clamp-1 block text-center">{{
+                          file.name
+                        }}</span>
+                      <i v-if="file.is_loading" class="pi pi-spinner pi-spin text-xs text-blue-500"/>
+                      <i v-else-if="file.load_error" class="pi pi-exclamation-triangle text-xs text-red-500"
+                         v-tooltip.top="'Failed to load file data'"/>
+                      <i v-else-if="file.is_loaded === false" class="pi pi-clock text-xs opacity-50"
+                         v-tooltip.top="'File data not yet loaded'"/>
+                    </div>
                   </template>
                   <template v-else>
                     <!-- This is the folder -->
-                    <i class="pi pi-folder text-4xl lg:text-6xl" />
+                    <i class="pi pi-folder text-4xl lg:text-6xl"/>
                     <div class="text-ellipsis overflow-hidden">
                       {{ file.name }}
                     </div>
@@ -701,13 +820,76 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+
+            <!-- Failed Archives Section (Grid View) -->
+            <template v-if="failedArchives.length > 0">
+              <!-- Section Header -->
+              <div class="col-span-12 mt-8 mb-4">
+                <h3 class="text-lg font-semibold text-red-500 dark:text-red-400">Failed Archives</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">The following archives could not be loaded</p>
+              </div>
+
+              <!-- Failed Archives Grid Items -->
+              <div
+                  v-for="archive in failedArchives"
+                  class="col-span-6 md:col-span-4 xl:col-span-3 aspect-squarez h-[200px] text-red-600 bg-red-50 rounded-lg dark:bg-red-900/20 dark:text-red-400 transition-all duration-500"
+              >
+                <div class="flex flex-col items-center justify-center w-full h-full p-2">
+                  <!-- Archive Icon and Name -->
+                  <div class="flex flex-col flex-1 items-center justify-center gap-3 w-full overflow-hidden">
+                    <i class="pi pi-exclamation-triangle text-2xl text-red-500 mb-2"/>
+                    <i class="pi pi-folder-open text-4xl text-red-500"/>
+                    <div class="flex flex-col items-center">
+                      <span v-tooltip.bottom="archive.name"
+                            class="text-ellipsis overflow-hidden line-clamp-1 block text-center">
+                        {{ archive.name }}
+                      </span>
+                      <span class="text-xs mt-1">({{ archive.is_private ? 'Private' : 'Public' }})</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </template>
           <template v-else>
-            <div
-              class="grid grid-cols-subgrid col-span-12 items-center justify-center min-h-[100px] font-semibold text-4xl text-autonomi-blue-600/50"
+            <!-- Show failed archives in grid view if there are any, even if no regular files -->
+            <template v-if="failedArchives.length > 0">
+              <!-- Section Header -->
+              <div class="col-span-12 mt-8 mb-4">
+                <h3 class="text-lg font-semibold text-red-500 dark:text-red-400">Failed Archives</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">The following archives could not be loaded</p>
+              </div>
+
+              <!-- Failed Archives Grid Items -->
+              <div
+                  v-for="archive in failedArchives"
+                  class="col-span-6 md:col-span-4 xl:col-span-3 aspect-squarez h-[200px] text-red-600 bg-red-50 rounded-lg dark:bg-red-900/20 dark:text-red-400 transition-all duration-500"
+              >
+                <div class="flex flex-col items-center justify-center w-full h-full p-2">
+                  <!-- Archive Icon and Name -->
+                  <div class="flex flex-col flex-1 items-center justify-center gap-3 w-full overflow-hidden">
+                    <i class="pi pi-exclamation-triangle text-2xl text-red-500 mb-2"/>
+                    <i class="pi pi-folder-open text-4xl text-red-500"/>
+                    <div class="flex flex-col items-center">
+                      <span v-tooltip.bottom="archive.name"
+                            class="text-ellipsis overflow-hidden line-clamp-1 block text-center">
+                        {{ archive.name }}
+                      </span>
+                      <span class="text-xs mt-1">({{ archive.is_private ? 'Private' : 'Public' }})</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <!-- No files or archives found -->
+            <div v-else
+                 class="grid grid-cols-subgrid col-span-12 items-center justify-center min-h-[100px] font-semibold text-4xl text-autonomi-blue-600/50"
             >
-              <div v-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
-                <i class="pi pi-spinner pi-spin mr-4" />Loading files...
+              <div v-if="pendingVaultStructure" class="col-span-12 pl-[150px]">
+                <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+              </div>
+              <div v-else-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
+                <i class="pi pi-spinner pi-spin mr-4"/>Loading file details...
               </div>
               <div v-else class="col-span-12 pl-[150px]">No files found.</div>
             </div>
@@ -717,8 +899,8 @@ onMounted(() => {
 
       <!-- Viewing: Uploads -->
       <div
-        v-if="view === 'uploads'"
-        class="mr-[33px] lg:mr-[66px] ml-[80px] lg:ml-[110px] font-semibold mb-10 flex flex-col gap-4"
+          v-if="view === 'uploads'"
+          class="mr-[33px] lg:mr-[66px] ml-[80px] lg:ml-[110px] font-semibold mb-10 flex flex-col gap-4"
       >
         <template v-for="item in [1, 2, 3]">
           <div class="flex items-center gap-4">
@@ -728,8 +910,8 @@ onMounted(() => {
                 <div>MyRandomFileName.zip</div>
                 <div class="ml-auto lg:hidden">
                   <i
-                    class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
-                    @click="
+                      class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                      @click="
                       $event => {
                         selectedUploadItem = item;
                         handleToggleUploadMenu($event);
@@ -746,15 +928,15 @@ onMounted(() => {
               </div>
               <div class="hidden lg:block col-span-3 whitespace-nowrap">
                 <span class="text-autonomi-red-300"
-                  >{{ (Math.random() * 100).toFixed(2) }}%</span
+                >{{ (Math.random() * 100).toFixed(2) }}%</span
                 >
                 complete
               </div>
               <div class="col-span-12 flex gap-[2px]">
                 <div
-                  v-for="item in Array(100)"
-                  class="h-[22px] flex-1"
-                  :class="`${
+                    v-for="item in Array(100)"
+                    class="h-[22px] flex-1"
+                    :class="`${
                     Math.random() > 0.5
                       ? 'bg-autonomi-red-300'
                       : Math.random() > 0.5
@@ -764,7 +946,7 @@ onMounted(() => {
                 ></div>
               </div>
               <div
-                class="col-span-12 lg:hidden text-xs font-semibold text-autonomi-text-primary flex justify-between gap-2"
+                  class="col-span-12 lg:hidden text-xs font-semibold text-autonomi-text-primary flex justify-between gap-2"
               >
                 <div>14.2.GB</div>
                 <div>€43.25</div>
@@ -775,8 +957,8 @@ onMounted(() => {
             <!-- Row Menu -->
             <div class="self-end hidden lg:block">
               <i
-                class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
-                @click="
+                  class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                  @click="
                   $event => {
                     selectedUploadItem = item;
                     handleToggleUploadMenu($event);
@@ -790,8 +972,8 @@ onMounted(() => {
 
       <!-- Viewing: Downloads -->
       <div
-        v-if="view === 'downloads'"
-        class="mr-[30px] lg:mr-[66px] ml-[80px] lg:ml-[110px] font-semibold mb-10 flex flex-col gap-4"
+          v-if="view === 'downloads'"
+          class="mr-[30px] lg:mr-[66px] ml-[80px] lg:ml-[110px] font-semibold mb-10 flex flex-col gap-4"
       >
         <template v-for="item in Array(5)">
           <div class="flex items-center gap-4">
@@ -801,8 +983,8 @@ onMounted(() => {
                 <div>MyRandomFileName.zip</div>
                 <div class="ml-auto lg:hidden">
                   <i
-                    class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
-                    @click="
+                      class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                      @click="
                       $event => {
                         selectedDownloadItem = item;
                         handleToggleDownloadMenu($event);
@@ -818,18 +1000,18 @@ onMounted(() => {
                 {{ (Math.random() * 12).toFixed(0) }} of 265
               </div>
               <div
-                class="hidden lg:block col-span-2 text-right whitespace-nowrap"
+                  class="hidden lg:block col-span-2 text-right whitespace-nowrap"
               >
                 <span class="text-autonomi-red-300"
-                  >{{ (Math.random() * 100).toFixed(2) }}%</span
+                >{{ (Math.random() * 100).toFixed(2) }}%</span
                 >
                 complete
               </div>
               <div class="col-span-12 flex gap-[2px] lg:mb-6">
                 <div
-                  v-for="item in Array(100)"
-                  class="h-[22px] flex-1"
-                  :class="`${
+                    v-for="item in Array(100)"
+                    class="h-[22px] flex-1"
+                    :class="`${
                     Math.random() > 0.5
                       ? 'bg-autonomi-red-300'
                       : Math.random() > 0.5
@@ -839,7 +1021,7 @@ onMounted(() => {
                 ></div>
               </div>
               <div
-                class="col-span-12 flex gap-10 text-sm text-autonomi-text-primary lg:hidden"
+                  class="col-span-12 flex gap-10 text-sm text-autonomi-text-primary lg:hidden"
               >
                 <div>{{ (Math.random() * 20).toFixed(2) }} GB</div>
                 <div>{{ (Math.random() * 12).toFixed(0) }} of 265</div>
@@ -850,8 +1032,8 @@ onMounted(() => {
             <!-- Row Menu -->
             <div class="hidden lg:block self-center">
               <i
-                class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
-                @click="
+                  class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                  @click="
                   $event => {
                     selectedDownloadItem = item;
                     handleToggleDownloadMenu($event);
@@ -871,12 +1053,12 @@ onMounted(() => {
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
-              v-for="item in menuFilesView"
-              :key="item.label"
-              class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
-              @click="item.command"
+                v-for="item in menuFilesView"
+                :key="item.label"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                @click="item.command"
             >
-              <i :class="item.icon" />
+              <i :class="item.icon"/>
               <div>
                 {{ item.label }}
               </div>
@@ -892,12 +1074,16 @@ onMounted(() => {
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
-              v-for="item in menuFiles"
-              :key="item.label"
-              class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
-              @click="item.command"
+                v-for="item in menuFiles"
+                :key="item.label"
+                class="flex items-center gap-2 py-3 px-5 rounded-border rounded-2xl"
+                :class="{
+                'hover:bg-autonomi-gray-100 cursor-pointer': !item.disabled,
+                'opacity-50 cursor-not-allowed': item.disabled
+              }"
+                @click="!item.disabled && item.command && item.command()"
             >
-              <i :class="item.icon" />
+              <i :class="item.icon"/>
               <div>
                 {{ item.label }}
               </div>
@@ -913,12 +1099,12 @@ onMounted(() => {
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
-              v-for="item in menuUploads"
-              :key="item.label"
-              class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
-              @click="item.command"
+                v-for="item in menuUploads"
+                :key="item.label"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                @click="item.command"
             >
-              <i :class="item.icon" />
+              <i :class="item.icon"/>
               <div>
                 {{ item.label }}
               </div>
@@ -934,12 +1120,12 @@ onMounted(() => {
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
-              v-for="item in menuDownloads"
-              :key="item.label"
-              class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
-              @click="item.command"
+                v-for="item in menuDownloads"
+                :key="item.label"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                @click="item.command"
             >
-              <i :class="item.icon" />
+              <i :class="item.icon"/>
               <div>
                 {{ item.label }}
               </div>
@@ -951,16 +1137,16 @@ onMounted(() => {
 
     <!-- DRAWER -->
     <Drawer
-      v-model:visible="isVisibleFileInfo"
-      header="Drawer"
-      position="right"
+        v-model:visible="isVisibleFileInfo"
+        header="Drawer"
+        position="right"
     >
       <template #header>
         <div class="flex items-center gap-3">
           <div
-            class="w-10 h-10 bg-autonomi-gray-500 rounded-full flex items-center justify-center"
+              class="w-10 h-10 bg-autonomi-gray-500 rounded-full flex items-center justify-center"
           >
-            <i class="pi pi-file text-white" />
+            <i class="pi pi-file text-white"/>
           </div>
           <div class="text-lg font-semibold text-autonomi-blue-600">
             Details
@@ -1001,10 +1187,10 @@ onMounted(() => {
           <div class="text-autonomi-text-primary">
             {{
               selectedFileItem?.metadata?.modified
-                ? secondsToDate(
-                    selectedFileItem.metadata.modified,
+                  ? secondsToDate(
+                      selectedFileItem.metadata.modified,
                   ).toLocaleString()
-                : ''
+                  : ''
             }}
           </div>
         </div>
@@ -1021,10 +1207,10 @@ onMounted(() => {
           <div class="text-autonomi-text-primary">
             {{
               selectedFileItem?.metadata?.created
-                ? secondsToDate(
-                    selectedFileItem.metadata.created,
+                  ? secondsToDate(
+                      selectedFileItem.metadata.created,
                   ).toLocaleString()
-                : ''
+                  : ''
             }}
           </div>
         </div>

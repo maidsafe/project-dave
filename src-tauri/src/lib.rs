@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
-use ant::{app_data::AppData, files::FileFromVault};
+use ant::{app_data::AppData, files::{FileFromVault, VaultStructure}};
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
 use serde::{Deserialize, Serialize};
@@ -85,6 +85,21 @@ async fn send_payment_order_message(
 }
 
 #[tauri::command]
+async fn get_vault_structure(
+    vault_key_signature: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<VaultStructure, ()> {
+    let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    )
+    .expect("Invalid vault key signature");
+
+    ant::files::get_vault_structure(&secret_key, shared_client)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+}
+
+#[tauri::command]
 async fn get_files_from_vault(
     vault_key_signature: String,
     shared_client: State<'_, SharedClient>,
@@ -135,6 +150,7 @@ pub async fn run() {
         .invoke_handler(tauri::generate_handler![
             upload_files,
             send_payment_order_message,
+            get_vault_structure,
             get_files_from_vault,
             download_private_file,
             download_public_file,

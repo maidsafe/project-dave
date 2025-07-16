@@ -7,6 +7,8 @@ export interface IFolder {
 export interface IFile {
   file_access: {
     Private: any[];
+  } | {
+    Public: any[];
   }
   metadata: {
     uploaded: number;
@@ -15,6 +17,9 @@ export interface IFile {
     size: number;
   }
   path: string;
+  is_loaded?: boolean;
+  is_loading?: boolean;
+  load_error?: boolean;
 }
 
 /*

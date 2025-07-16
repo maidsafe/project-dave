@@ -225,9 +225,100 @@ pub struct FileFromVault {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FailedArchive {
+    pub name: String,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VaultStructure {
+    pub files: Vec<FileMetadata>,
+    pub failed_archives: Vec<FailedArchive>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileMetadata {
+    pub path: String,
+    pub metadata: Metadata,
+    pub file_type: FileType,
+    pub is_loaded: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum FileType {
+    Public,
+    Private,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum PublicOrPrivateFile {
     Public(DataAddress),
     Private(DataMapChunk),
+}
+
+pub async fn get_vault_structure(
+    secret_key: &VaultSecretKey,
+    shared_client: State<'_, SharedClient>,
+) -> Result<VaultStructure, VaultError> {
+    let client = shared_client.get_client().await?;
+
+    // Fetch user data
+    let user_data = client.get_user_data_from_vault(secret_key).await?;
+
+    let mut files: Vec<FileMetadata> = vec![];
+    let mut failed_archives: Vec<FailedArchive> = vec![];
+
+    for (data_map, name) in user_data.private_file_archives {
+        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
+
+        // Get private archive
+        if let Ok(archive) = client.archive_get(&data_map).await {
+            for (filepath, (_, metadata)) in archive.map() {
+                let filepath = format!("{archive_name}/{}", filepath.display());
+
+                let file = FileMetadata {
+                    path: filepath,
+                    metadata: metadata.clone(),
+                    file_type: FileType::Private,
+                    is_loaded: false,
+                };
+                files.push(file);
+            }
+        } else {
+            tracing::error!("Failed to get private archive");
+            failed_archives.push(FailedArchive {
+                name: archive_name,
+                is_private: true,
+            });
+        }
+    }
+
+    for (archive_addr, name) in user_data.file_archives {
+        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
+
+        // Get public archive
+        if let Ok(archive) = client.archive_get_public(&archive_addr).await {
+            for (filepath, (_, metadata)) in archive.map() {
+                let filepath = format!("{archive_name}/{}", filepath.display());
+
+                let file = FileMetadata {
+                    path: filepath,
+                    metadata: metadata.clone(),
+                    file_type: FileType::Public,
+                    is_loaded: false,
+                };
+                files.push(file);
+            }
+        } else {
+            tracing::error!("Failed to get public archive");
+            failed_archives.push(FailedArchive {
+                name: archive_name,
+                is_private: false,
+            });
+        }
+    }
+
+    Ok(VaultStructure { files, failed_archives })
 }
 
 pub async fn get_files_from_vault(
@@ -237,7 +328,12 @@ pub async fn get_files_from_vault(
     let client = shared_client.get_client().await?;
 
     // Fetch user data
-    let user_data = client.get_user_data_from_vault(secret_key).await?;
+    let user_data = client
+        .get_user_data_from_vault(secret_key)
+        .await
+        .inspect_err(|_| {
+            tracing::error!("Failed to get user data from vault");
+        })?;
 
     let mut files: Vec<FileFromVault> = vec![];
 
@@ -245,7 +341,9 @@ pub async fn get_files_from_vault(
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
         // Get private archive
-        let archive = client.archive_get(&data_map).await?;
+        let archive = client.archive_get(&data_map).await.inspect_err(|_| {
+            tracing::error!("Failed to get private archive");
+        })?;
 
         for (filepath, (data_map, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
@@ -263,7 +361,12 @@ pub async fn get_files_from_vault(
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
         // Get public archive
-        let archive = client.archive_get_public(&archive_addr).await?;
+        let archive = client
+            .archive_get_public(&archive_addr)
+            .await
+            .inspect_err(|_| {
+                tracing::error!("Failed to get public archive");
+            })?;
 
         for (filepath, (data_addr, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
