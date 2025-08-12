@@ -1,0 +1,31 @@
+# Tauri backend
+src-tauri/
+
+# Build outputs
+.output/
+.nuxt/
+dist/
+
+# Large directories
+node_modules/
+.git/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+
+# Lock files (optional, but can reduce watched files)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

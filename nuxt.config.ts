@@ -41,8 +41,32 @@ export default defineNuxtConfig({
     // Enables the development server to be discoverable by other devices when running on iOS physical devices
     devServer: {host: process.env.TAURI_DEV_HOST || "localhost"},
     ignore: [
-        '**/folder-with-many-files/**'
+        '**/src-tauri/**',
+        '**/.git/**',
+        '**/node_modules/**',
+        '**/.nuxt/**',
+        '**/.output/**',
+        '**/dist/**',
+        '**/*.log',
+        '**/.DS_Store',
+        '**/Thumbs.db'
     ],
+    watchers: {
+        webpack: {
+            ignored: /node_modules/
+        },
+        chokidar: {
+            ignoreInitial: true,
+            followSymlinks: false,
+            usePolling: false,
+            interval: 1000,
+            binaryInterval: 1000,
+            awaitWriteFinish: {
+                stabilityThreshold: 500,
+                pollInterval: 100
+            }
+        }
+    },
     vite: {
         // Better support for Tauri CLI output
         clearScreen: false,
