@@ -3,12 +3,12 @@ import {arbitrum} from "@reown/appkit/networks";
 import {injected} from "wagmi/connectors";
 
 const connector = injected({
-    shimDisconnect: false,
+    shimDisconnect: true,
 });
 
 export const networks = [arbitrum];
 
-export const projectId = "1229cfd3cf7355433bc9ab7f4ea9e97e";
+export const projectId = "c57e0bb001a4dc96b54b9ced656a3cb8";
 
 export const wagmiAdapter = new WagmiAdapter({
     networks,

@@ -11,9 +11,11 @@ use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
+use std::collections::VecDeque;
 use tauri::{AppHandle, Emitter, State};
 use thiserror::Error as ThisError;
 use tokio::time::timeout;
+use tokio::fs;
 
 #[derive(Deserialize)]
 pub struct File {
@@ -62,6 +64,57 @@ pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError
         .map_err(|_| UploadError::Read(file_path))
 }
 
+/// Collects files from a directory and its subdirectories, preserving relative paths.
+/// Returns a vector of tuples containing (relative_path, absolute_path).
+pub async fn collect_files_from_directory(dir_path: PathBuf) -> Result<Vec<(PathBuf, PathBuf)>, UploadError> {
+    let mut files = Vec::new();
+    let mut queue = VecDeque::new();
+
+    // Get the parent directory to calculate relative paths correctly
+    let base_dir = dir_path.parent().unwrap_or(&dir_path);
+    let dir_name = dir_path.file_name().unwrap_or_default();
+
+    // Start with the root directory
+    queue.push_back(dir_path.clone());
+
+    while let Some(current_dir) = queue.pop_front() {
+        let mut entries = fs::read_dir(&current_dir).await
+            .map_err(|_| UploadError::Read(current_dir.clone()))?;
+
+        while let Some(entry) = entries.next_entry().await
+            .map_err(|_| UploadError::Read(current_dir.clone()))? {
+
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Add directory to the queue for processing
+                queue.push_back(path);
+            } else {
+                // Calculate relative path including the root folder name
+                if let Ok(rel_path) = path.strip_prefix(base_dir) {
+                    // Ensure the root folder name is included in the path
+                    let mut relative_path = PathBuf::new();
+                    if let Some(name) = dir_name.to_str() {
+                        relative_path.push(name);
+                    }
+
+                    // Add the rest of the path
+                    if rel_path != dir_name {
+                        relative_path.push(rel_path);
+                    }
+
+                    files.push((relative_path, path));
+                } else {
+                    // Fallback if strip_prefix fails
+                    files.push((path.clone(), path));
+                }
+            }
+        }
+    }
+
+    Ok(files)
+}
+
 pub async fn upload_private_files_to_vault(
     app: AppHandle,
     files: Vec<File>,
@@ -76,32 +129,73 @@ pub async fn upload_private_files_to_vault(
     let mut private_archive = PrivateArchive::new();
 
     for file in files {
-        let bytes: Bytes = read_file_to_bytes(file.path).await?;
-        let metadata = Metadata::new_with_size(bytes.len() as u64);
-        let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
-            .map_err(|err| UploadError::Encryption(err.to_string()))?;
+        // Check if the path is a directory
+        let path_metadata = fs::metadata(&file.path).await
+            .map_err(|_| UploadError::Read(file.path.clone()))?;
 
-        private_archive.add_file(
-            PathBuf::from(&file.name),
-            DataMapChunk::from(datamap.clone()),
-            metadata.clone(),
-        );
+        if path_metadata.is_dir() {
+            // Handle directory: collect all files with their relative paths
+            let collected_files = collect_files_from_directory(file.path.clone()).await?;
 
-        let chunks_iter = chunks
-            .iter()
-            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+            for (relative_path, absolute_path) in collected_files {
+                let bytes: Bytes = read_file_to_bytes(absolute_path).await?;
+                let metadata = Metadata::new_with_size(bytes.len() as u64);
+                let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                    .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
-        let store_quote = client
-            .get_store_quotes(DataTypes::Chunk, chunks_iter)
-            .await
-            .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+                // Add file to archive with its relative path
+                private_archive.add_file(
+                    relative_path,
+                    DataMapChunk::from(datamap.clone()),
+                    metadata.clone(),
+                );
 
-        for (xor_name, quotes) in store_quote.0 {
-            aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
-        }
+                let chunks_iter = chunks
+                    .iter()
+                    .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
 
-        for chunk in chunks {
-            aggregated_chunks.push(chunk);
+                let store_quote = client
+                    .get_store_quotes(DataTypes::Chunk, chunks_iter)
+                    .await
+                    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+                for (xor_name, quotes) in store_quote.0 {
+                    aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
+                }
+
+                for chunk in chunks {
+                    aggregated_chunks.push(chunk);
+                }
+            }
+        } else {
+            // Handle single file
+            let bytes: Bytes = read_file_to_bytes(file.path).await?;
+            let metadata = Metadata::new_with_size(bytes.len() as u64);
+            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+            private_archive.add_file(
+                PathBuf::from(&file.name),
+                DataMapChunk::from(datamap.clone()),
+                metadata.clone(),
+            );
+
+            let chunks_iter = chunks
+                .iter()
+                .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+
+            let store_quote = client
+                .get_store_quotes(DataTypes::Chunk, chunks_iter)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+            for (xor_name, quotes) in store_quote.0 {
+                aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
+            }
+
+            for chunk in chunks {
+                aggregated_chunks.push(chunk);
+            }
         }
     }
 

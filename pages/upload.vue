@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import { useToast } from "primevue/usetoast";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { basename } from "@tauri-apps/api/path";
-import { useWalletStore } from "~/stores/wallet";
+import {useToast} from "primevue/usetoast";
+import {invoke} from "@tauri-apps/api/core";
+import {open} from "@tauri-apps/plugin-dialog";
+import {basename} from "@tauri-apps/api/path";
+import {useWalletStore} from "~/stores/wallet";
 
 const walletStore = useWalletStore();
 const toast = useToast();
@@ -11,7 +11,7 @@ const emit = defineEmits(["show-notify", "hide-notify"]);
 
 const openPickerAndUploadFiles = async () => {
   // Open the file picker.
-  let selected = await open({ multiple: true });
+  let selected = await open({multiple: true});
 
   // User did not select any files in the dialog.
   if (selected === null) {
@@ -25,18 +25,40 @@ const openPickerAndUploadFiles = async () => {
 
   // Turn into `File` objects, giving the file the name of the filename in the path.
   const files = await Promise.all(
-    selected.map(async (file) => {
-      return { path: file, name: await basename(file) };
-    })
+      selected.map(async (file) => {
+        return {path: file, name: await basename(file)};
+      })
   );
 
+  await uploadFiles(files);
+};
+
+const openFolderPickerAndUploadFiles = async () => {
+  // Open the folder picker
+  const selected = await open({
+    directory: true,
+  });
+
+  // User did not select a folder in the dialog
+  if (selected === null) {
+    return;
+  }
+
+  const files = [{path: selected, name: await basename(selected)}];
+
+  await uploadFiles(files);
+};
+
+// Common function to upload files
+const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
   try {
-    console.log(">>> UPLOD.VUE GETTING VAULT KEY SIGNATURE");
+    console.log(">>> UPLOAD.VUE GETTING VAULT KEY SIGNATURE");
     emit("show-notify", {
       notifyType: "info",
       title: "Sign upload required",
       details: "Please sign the upload request in your mobile wallet.",
     });
+
     let vaultKeySignature = await walletStore.getVaultKeySignature();
 
     // TODO: Show list of selected files
@@ -72,9 +94,14 @@ const openPickerAndUploadFiles = async () => {
     <div class="autonomi-uploader px-[100px] py-[70px]">
       <!-- <Toast /> -->
 
-      <CommonButton variant="secondary" @click="openPickerAndUploadFiles">
-        Upload Files
-      </CommonButton>
+      <div class="flex gap-4">
+        <CommonButton variant="secondary" @click="openPickerAndUploadFiles">
+          Upload Files
+        </CommonButton>
+        <CommonButton variant="secondary" @click="openFolderPickerAndUploadFiles">
+          Upload Folder
+        </CommonButton>
+      </div>
     </div>
   </div>
 </template>
