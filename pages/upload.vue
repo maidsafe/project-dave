@@ -4,10 +4,14 @@ import {invoke} from "@tauri-apps/api/core";
 import {open} from "@tauri-apps/plugin-dialog";
 import {basename} from "@tauri-apps/api/path";
 import {useWalletStore} from "~/stores/wallet";
+import {useUploadStore} from "~/stores/upload";
 
 const walletStore = useWalletStore();
+const uploadStore = useUploadStore();
 const toast = useToast();
 const emit = defineEmits(["show-notify", "hide-notify"]);
+
+const isUploading = computed(() => uploadStore.uploadProgress.isUploading);
 
 const openPickerAndUploadFiles = async () => {
   // Open the file picker.
@@ -95,11 +99,21 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
       <!-- <Toast /> -->
 
       <div class="flex gap-4">
-        <CommonButton variant="secondary" @click="openPickerAndUploadFiles">
-          Upload Files
+        <CommonButton 
+          variant="secondary" 
+          @click="openPickerAndUploadFiles"
+          :disabled="isUploading"
+        >
+          <span v-if="!isUploading">Upload Files</span>
+          <span v-else>Uploading...</span>
         </CommonButton>
-        <CommonButton variant="secondary" @click="openFolderPickerAndUploadFiles">
-          Upload Folder
+        <CommonButton 
+          variant="secondary" 
+          @click="openFolderPickerAndUploadFiles"
+          :disabled="isUploading"
+        >
+          <span v-if="!isUploading">Upload Folder</span>
+          <span v-else>Uploading...</span>
         </CommonButton>
       </div>
     </div>

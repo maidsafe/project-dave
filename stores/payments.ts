@@ -27,7 +27,6 @@ export const usePaymentStore = defineStore("payments", () => {
   const currentPayment = ref<any>(null);
   const pendingPayments: Ref<Map<number, PendingPayment>> = ref(new Map());
   const showPayments = ref(false);
-  const showPaymentDrawer = ref(false);
   const signPaymentPending = ref(false);
 
   const pendingPaymentsCount = computed(
@@ -46,13 +45,6 @@ export const usePaymentStore = defineStore("payments", () => {
   });
 
   // Methods
-  const openPaymentDrawer = () => {
-    showPaymentDrawer.value = true;
-  };
-
-  const closePaymentDrawer = () => {
-    showPaymentDrawer.value = false;
-  };
 
   const addPendingPayment = (orderId: number, payment: any) => {
     console.log(">>> ADDING PAYMENT");
@@ -60,8 +52,6 @@ export const usePaymentStore = defineStore("payments", () => {
 
     // Update current payment
     currentPayment.value = pendingPayments.value.get(orderId);
-
-    openPaymentDrawer();
   };
 
   const resetExpirationTime = (orderId: number) => {
@@ -182,14 +172,11 @@ export const usePaymentStore = defineStore("payments", () => {
     pendingPayments,
     pendingPaymentsCount,
     signPaymentPending,
-    showPaymentDrawer,
     sortedPendingPayments,
     addPendingPayment,
     calculateRemainingTime,
     calculateTotalAmount,
-    closePaymentDrawer,
     getProcessingState,
-    openPaymentDrawer,
     resetExpirationTime,
     setCurrentPayment,
     pay,

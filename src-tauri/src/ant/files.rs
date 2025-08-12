@@ -23,6 +23,44 @@ pub struct File {
     path: PathBuf,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "type")]
+pub enum UploadProgress {
+    Started {
+        total_files: usize,
+        total_size: u64,
+    },
+    Processing {
+        current_file: String,
+        files_processed: usize,
+        total_files: usize,
+        bytes_processed: u64,
+        total_bytes: u64,
+    },
+    Encrypting {
+        current_file: String,
+        files_processed: usize,
+        total_files: usize,
+    },
+    RequestingPayment {
+        files_processed: usize,
+        total_files: usize,
+    },
+    Uploading {
+        chunks_uploaded: usize,
+        total_chunks: usize,
+        bytes_uploaded: u64,
+        total_bytes: u64,
+    },
+    Completed {
+        total_files: usize,
+        total_bytes: u64,
+    },
+    Failed {
+        error: String,
+    },
+}
+
 #[derive(ThisError, Debug)]
 pub enum UploadError {
     #[error("Could not connect to the network: {0:?}")]
@@ -62,6 +100,29 @@ pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError
         .await
         .map(Bytes::from)
         .map_err(|_| UploadError::Read(file_path))
+}
+
+async fn calculate_total_size(files: &[File]) -> Result<u64, UploadError> {
+    let mut total_size = 0u64;
+    
+    for file in files {
+        let metadata = fs::metadata(&file.path).await
+            .map_err(|_| UploadError::Read(file.path.clone()))?;
+            
+        if metadata.is_dir() {
+            // Calculate directory size
+            let collected_files = collect_files_from_directory(file.path.clone()).await?;
+            for (_, absolute_path) in collected_files {
+                let file_metadata = fs::metadata(&absolute_path).await
+                    .map_err(|_| UploadError::Read(absolute_path))?;
+                total_size += file_metadata.len();
+            }
+        } else {
+            total_size += metadata.len();
+        }
+    }
+    
+    Ok(total_size)
 }
 
 /// Collects files from a directory and its subdirectories, preserving relative paths.
@@ -124,9 +185,20 @@ pub async fn upload_private_files_to_vault(
 ) -> Result<(), UploadError> {
     let client = shared_client.get_client().await?;
 
+    // Calculate total size and emit start event
+    let total_size = calculate_total_size(&files).await?;
+    let total_files = files.len();
+    
+    app.emit("upload-progress", UploadProgress::Started {
+        total_files,
+        total_size,
+    }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
     let mut aggregated_chunks: Vec<Chunk> = vec![];
     let mut aggregated_store_quote = StoreQuote(Default::default());
     let mut private_archive = PrivateArchive::new();
+    let mut files_processed = 0;
+    let mut bytes_processed = 0u64;
 
     for file in files {
         // Check if the path is a directory
@@ -138,10 +210,30 @@ pub async fn upload_private_files_to_vault(
             let collected_files = collect_files_from_directory(file.path.clone()).await?;
 
             for (relative_path, absolute_path) in collected_files {
-                let bytes: Bytes = read_file_to_bytes(absolute_path).await?;
-                let metadata = Metadata::new_with_size(bytes.len() as u64);
+                // Emit processing progress
+                app.emit("upload-progress", UploadProgress::Processing {
+                    current_file: relative_path.to_string_lossy().to_string(),
+                    files_processed,
+                    total_files,
+                    bytes_processed,
+                    total_bytes: total_size,
+                }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+                
+                let bytes: Bytes = read_file_to_bytes(absolute_path.clone()).await?;
+                let file_size = bytes.len() as u64;
+                
+                // Emit encrypting progress
+                app.emit("upload-progress", UploadProgress::Encrypting {
+                    current_file: relative_path.to_string_lossy().to_string(),
+                    files_processed,
+                    total_files,
+                }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+                
+                let metadata = Metadata::new_with_size(file_size);
                 let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
                     .map_err(|err| UploadError::Encryption(err.to_string()))?;
+                
+                bytes_processed += file_size;
 
                 // Add file to archive with its relative path
                 private_archive.add_file(
@@ -169,10 +261,30 @@ pub async fn upload_private_files_to_vault(
             }
         } else {
             // Handle single file
-            let bytes: Bytes = read_file_to_bytes(file.path).await?;
-            let metadata = Metadata::new_with_size(bytes.len() as u64);
+            // Emit processing progress
+            app.emit("upload-progress", UploadProgress::Processing {
+                current_file: file.name.clone(),
+                files_processed,
+                total_files,
+                bytes_processed,
+                total_bytes: total_size,
+            }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            
+            let bytes: Bytes = read_file_to_bytes(file.path.clone()).await?;
+            let file_size = bytes.len() as u64;
+            
+            // Emit encrypting progress
+            app.emit("upload-progress", UploadProgress::Encrypting {
+                current_file: file.name.clone(),
+                files_processed,
+                total_files,
+            }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            
+            let metadata = Metadata::new_with_size(file_size);
             let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
                 .map_err(|err| UploadError::Encryption(err.to_string()))?;
+                
+            bytes_processed += file_size;
 
             private_archive.add_file(
                 PathBuf::from(&file.name),
@@ -197,6 +309,8 @@ pub async fn upload_private_files_to_vault(
                 aggregated_chunks.push(chunk);
             }
         }
+        
+        files_processed += 1;
     }
 
     let (private_archive_datamap, private_archive_chunks) = autonomi::self_encryption::encrypt(
@@ -263,12 +377,20 @@ pub async fn upload_private_files_to_vault(
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
         .collect();
 
+    // Emit payment request progress
+    app.emit("upload-progress", UploadProgress::RequestingPayment {
+        files_processed,
+        total_files,
+    }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
     let (order, mut confirmation_receiver) = payment_orders.create_order(payments).await;
 
     app.emit("payment-order", order.to_json())
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
     let secret_key = secret_key.clone();
+    let app_clone = app.clone();
+    let total_chunks = aggregated_chunks.len();
 
     tokio::spawn(async move {
         let order_successful = loop {
@@ -291,6 +413,14 @@ pub async fn upload_private_files_to_vault(
                 autonomi::client::payment::receipt_from_store_quotes(aggregated_store_quote);
 
             tracing::debug!("Uploading chunks..");
+            
+            // Emit uploading progress
+            let _ = app_clone.emit("upload-progress", UploadProgress::Uploading {
+                chunks_uploaded: 0,
+                total_chunks,
+                bytes_uploaded: 0,
+                total_bytes: total_size,
+            });
 
             let failed_uploads = client
                 .chunk_batch_upload(aggregated_chunks.iter().collect(), &receipt)
@@ -298,6 +428,10 @@ pub async fn upload_private_files_to_vault(
 
             if let Err(err) = failed_uploads {
                 tracing::error!("Upload chunks errored: {err}");
+                let _ = app_clone.emit("upload-progress", UploadProgress::Failed {
+                    error: format!("Upload failed: {}", err),
+                });
+                return;
             }
 
             let result = client
@@ -305,6 +439,22 @@ pub async fn upload_private_files_to_vault(
                 .await;
 
             tracing::debug!("Update vault result: {:?}", result);
+            
+            if result.is_ok() {
+                // Emit completion
+                let _ = app_clone.emit("upload-progress", UploadProgress::Completed {
+                    total_files,
+                    total_bytes: total_size,
+                });
+            } else {
+                let _ = app_clone.emit("upload-progress", UploadProgress::Failed {
+                    error: "Failed to update vault".to_string(),
+                });
+            }
+        } else {
+            let _ = app_clone.emit("upload-progress", UploadProgress::Failed {
+                error: "Payment was not completed".to_string(),
+            });
         }
     });
 

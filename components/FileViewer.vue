@@ -2,11 +2,17 @@
 import {useFileStore} from '~/stores/files';
 import {useToast} from 'primevue/usetoast';
 import {useUserStore} from '~/stores/user';
+import {useUploadStore} from '~/stores/upload';
+import {useWalletStore} from '~/stores/wallet';
 import {invoke} from '@tauri-apps/api/core';
 import {downloadDir} from '@tauri-apps/api/path';
+import {open} from '@tauri-apps/plugin-dialog';
+import {basename} from '@tauri-apps/api/path';
 
 const toast = useToast();
 const fileStore = useFileStore();
+const uploadStore = useUploadStore();
+const walletStore = useWalletStore();
 const {
   pendingGetAllFiles,
   pendingVaultStructure,
@@ -16,6 +22,7 @@ const {
   files,
   failedArchives,
 } = storeToRefs(fileStore);
+const { uploadProgress } = storeToRefs(uploadStore);
 const userStore = useUserStore();
 // const autonomi = useAutonomiStore();
 const {query} = storeToRefs(userStore);
@@ -30,6 +37,12 @@ const refUploadMenu = ref();
 const selectedDownloadItem = ref<any>();
 const selectedFileItem = ref<any>();
 const selectedUploadItem = ref<any>();
+const showUploadModal = ref(false);
+const uploadSteps = ref<any[]>([]);
+const currentUploadStep = ref<string>('');
+const quoteData = ref<any>(null);
+const uploadError = ref<string>('');
+const pendingUploadFiles = ref<any>(null);
 const filteredFiles = computed(() => {
   try {
     if (!currentDirectory.value?.children?.length) {
@@ -86,6 +99,152 @@ const loadingProgress = computed(() => {
 
   return {loaded, total, loading, errors};
 });
+
+// Upload functions
+const emit = defineEmits(["show-notify", "hide-notify"]);
+
+const isUploading = computed(() => uploadStore.uploadProgress.isUploading);
+
+const openPickerAndUploadFiles = async () => {
+  // Open the file picker.
+  let selected = await open({multiple: true});
+
+  // User did not select any files in the dialog.
+  if (selected === null) {
+    return;
+  }
+
+  // User might have selected a single file, turn into one-element array.
+  if (!Array.isArray(selected)) {
+    selected = [selected];
+  }
+
+  // Turn into `File` objects, giving the file the name of the filename in the path.
+  const files = await Promise.all(
+      selected.map(async (file) => {
+        return {path: file, name: await basename(file)};
+      })
+  );
+
+  await uploadFiles(files);
+};
+
+const openFolderPickerAndUploadFiles = async () => {
+  // Open the folder picker
+  const selected = await open({
+    directory: true,
+  });
+
+  // User did not select a folder in the dialog
+  if (selected === null) {
+    return;
+  }
+
+  const files = [{path: selected, name: await basename(selected)}];
+
+  await uploadFiles(files);
+};
+
+// Initialize upload steps
+const initializeUploadSteps = () => {
+  uploadSteps.value = [
+    {
+      key: 'processing',
+      label: 'Processing Files',
+      status: 'pending',
+      message: 'Reading and preparing files...'
+    },
+    {
+      key: 'encrypting',
+      label: 'Encrypting',
+      status: 'pending',
+      message: 'Encrypting files for secure storage...'
+    },
+    {
+      key: 'quoting',
+      label: 'Getting Quote',
+      status: 'pending',
+      message: 'Calculating storage costs...'
+    },
+    {
+      key: 'payment-request',
+      label: 'Payment Request',
+      status: 'pending',
+      message: 'Requesting payment authorization...'
+    }
+  ];
+  currentUploadStep.value = '';
+  uploadError.value = '';
+  quoteData.value = null;
+};
+
+// Update step status
+const updateStepStatus = (stepKey: string, status: string, message?: string, progress?: number) => {
+  const step = uploadSteps.value.find(s => s.key === stepKey);
+  if (step) {
+    step.status = status;
+    if (message) step.message = message;
+    if (progress !== undefined) step.progress = progress;
+  }
+  currentUploadStep.value = stepKey;
+};
+
+// Common function to upload files
+const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
+  try {
+    console.log(">>> FILEVIEWER GETTING VAULT KEY SIGNATURE");
+    emit("show-notify", {
+      notifyType: "info",
+      title: "Sign upload required",
+      details: "Please sign the upload request in your mobile wallet.",
+    });
+
+    let vaultKeySignature = await walletStore.getVaultKeySignature();
+    emit("hide-notify");
+
+    // Initialize and show modal, then start the process
+    initializeUploadSteps();
+    pendingUploadFiles.value = { files, vaultKeySignature };
+    showUploadModal.value = true;
+
+    // Start the upload process immediately - this will trigger events that we'll handle
+    // The modal will show progress through all steps including payment
+    console.log(">>> FILEVIEWER STARTING UPLOAD PROCESS");
+    await invoke("upload_files", {
+      files,
+      vaultKeySignature,
+    });
+
+  } catch (error: any) {
+    emit("hide-notify");
+    uploadError.value = error.message;
+    toast.add({
+      severity: "error",
+      summary: "Error starting upload",
+      detail: error.message,
+      life: 3000,
+    });
+  }
+};
+
+// Payment is handled automatically by the wallet/backend
+// No separate confirmation needed - the upload flow continues automatically
+
+const handleCancelUploadModal = () => {
+  showUploadModal.value = false;
+  pendingUploadFiles.value = null;
+  uploadSteps.value = [];
+  currentUploadStep.value = '';
+  uploadError.value = '';
+  quoteData.value = null;
+};
+
+const handleCloseUploadModal = () => {
+  const hasActiveProcessing = uploadSteps.value.some(step => step.status === 'processing');
+  if (!hasActiveProcessing) {
+    handleCancelUploadModal();
+  }
+};
 
 const handleGoBack = (target: any) => {
   // Update breadcrumbs
@@ -386,7 +545,15 @@ const secondsToDate = (seconds: number): Date => {
   return new Date(seconds * 1000);
 };
 
-onMounted(() => {
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
+onMounted(async () => {
   try {
     // TODO: Check user / wallet permissions and details
     fileStore.getAllFiles();
@@ -396,6 +563,110 @@ onMounted(() => {
     console.log('>>> Current directory files: ', currentDirectoryFiles);
 
     console.log('>>> Filtered files: ', filteredFiles);
+
+    // Set up upload progress event listener
+    const { listen } = await import("@tauri-apps/api/event");
+    await listen("upload-progress", (event: any) => {
+      const payload = event.payload;
+      
+      switch (payload.type) {
+        case "Started":
+          uploadStore.startUpload(payload.total_files || 0, payload.total_size || 0);
+          if (showUploadModal.value) {
+            updateStepStatus('processing', 'processing', `Processing ${payload.total_files} file(s)...`);
+            
+            // Set quote data with real file info
+            quoteData.value = {
+              totalFiles: payload.total_files,
+              totalSize: formatBytes(payload.total_size || 0)
+            };
+          }
+          break;
+          
+        case "Processing":
+          uploadStore.updateProcessing(
+            payload.current_file || "",
+            payload.files_processed || 0,
+            payload.bytes_processed || 0
+          );
+          if (showUploadModal.value) {
+            const progress = payload.total_bytes > 0 ? Math.round((payload.bytes_processed / payload.total_bytes) * 100) : 0;
+            updateStepStatus('processing', 'processing', `Processing: ${payload.current_file}`, progress);
+          }
+          break;
+          
+        case "Encrypting":
+          uploadStore.updateEncrypting(payload.current_file || "");
+          if (showUploadModal.value) {
+            updateStepStatus('processing', 'completed', 'Files processed');
+            updateStepStatus('encrypting', 'processing', `Encrypting: ${payload.current_file}`);
+          }
+          break;
+          
+        case "RequestingPayment":
+          uploadStore.updateRequestingPayment();
+          if (showUploadModal.value) {
+            updateStepStatus('encrypting', 'completed', 'Files encrypted');
+            updateStepStatus('quoting', 'processing', 'Getting storage quote...');
+            // Note: Payment request will be shown when we get the payment-order event
+          }
+          break;
+          
+        case "Uploading":
+          uploadStore.updateUploading(payload.chunks_uploaded || 0, payload.total_chunks || 0);
+          if (showUploadModal.value) {
+            // If we reach uploading, the payment was approved
+            updateStepStatus('quoting', 'completed', 'Quote received');
+            updateStepStatus('payment-request', 'completed', 'Payment authorized');
+            
+            // Close modal and show progress table
+            showUploadModal.value = false;
+            handleCancelUploadModal(); // Clean up modal state
+          }
+          break;
+          
+        case "Completed":
+          uploadStore.completeUpload();
+          // Auto-refresh files after upload completion
+          setTimeout(() => {
+            fileStore.getAllFiles();
+            uploadStore.resetUpload();
+          }, 2000);
+          break;
+          
+        case "Failed":
+          uploadStore.failUpload(payload.error || "Unknown error");
+          if (showUploadModal.value) {
+            uploadError.value = payload.error || "Unknown error";
+          }
+          setTimeout(() => {
+            uploadStore.resetUpload();
+          }, 5000);
+          break;
+      }
+    });
+
+    // Listen for payment order events (these contain quote data - this IS the payment request)
+    await listen("payment-order", (event: any) => {
+      if (showUploadModal.value && event.payload) {
+        const orderData = event.payload;
+        
+        // Update quote data with real cost information
+        if (quoteData.value) {
+          quoteData.value.totalCostNano = orderData.totalCost || "0";
+          quoteData.value.costPerFileNano = orderData.costPerFile || "0";
+          quoteData.value.rawQuoteData = orderData;
+        }
+        
+        // Mark quoting as complete and show payment request (which is the same as showing the quote/cost)
+        updateStepStatus('quoting', 'completed', 'Quote received');
+        updateStepStatus('payment-request', 'processing', 'Awaiting wallet authorization...');
+        currentUploadStep.value = 'payment-request';
+        
+        // At this point the quote data is shown as the payment request
+        // The wallet will handle the authorization automatically
+      }
+    });
   } catch (err) {
     // TODO: Handle error
     console.log('>>> Error getting files: ', err);
@@ -408,15 +679,43 @@ onMounted(() => {
     <!-- View Toggler -->
     <div
         v-if="view === 'vault'"
-        class="flex items-center justify-end gap-3 -mr-[30px] lg:-mr-0"
+        class="flex items-center justify-between -mr-[30px] lg:-mr-0"
     >
-      <div
-          v-if="currentDirectory?.parent"
-          class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
-          @click="handleGoBack(currentDirectory.parent)"
-      >
-        <i class="pi pi-reply -scale-x-100 translate"/>
+      <!-- Upload Buttons -->
+      <div class="flex gap-3">
+        <CommonButton 
+          variant="secondary" 
+          @click="openPickerAndUploadFiles"
+          :disabled="isUploading"
+          size="medium"
+          class="px-4 py-3 h-12"
+        >
+          <i class="pi pi-upload mr-2"/>
+          <span v-if="!isUploading">Upload Files</span>
+          <span v-else>Uploading...</span>
+        </CommonButton>
+        <CommonButton 
+          variant="secondary" 
+          @click="openFolderPickerAndUploadFiles"
+          :disabled="isUploading"
+          size="medium"
+          class="px-4 py-3 h-12"
+        >
+          <i class="pi pi-folder mr-2"/>
+          <span v-if="!isUploading">Upload Folder</span>
+          <span v-else>Uploading...</span>
+        </CommonButton>
       </div>
+      
+      <!-- Navigation and Controls -->
+      <div class="flex items-center gap-3">
+        <div
+            v-if="currentDirectory?.parent"
+            class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+            @click="handleGoBack(currentDirectory.parent)"
+        >
+          <i class="pi pi-reply -scale-x-100 translate"/>
+        </div>
 
       <div
           class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
@@ -426,29 +725,30 @@ onMounted(() => {
         <i class="pi pi-refresh"/>
       </div>
 
-      <!-- Loading Progress Indicator -->
-      <div
-          v-if="pendingGetAllFiles && loadingProgress.total > 0"
-          class="flex items-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium"
-      >
-        <i class="pi pi-spinner pi-spin text-blue-500"/>
-        <span class="text-blue-700 dark:text-blue-300">
-          Loading {{ loadingProgress.loading }} of {{ loadingProgress.total }} files
-        </span>
-        <span v-if="loadingProgress.errors > 0" class="text-red-500">
-          ({{ loadingProgress.errors }} errors)
-        </span>
-      </div>
+        <!-- Loading Progress Indicator -->
+        <div
+            v-if="pendingGetAllFiles && loadingProgress.total > 0"
+            class="flex items-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium"
+        >
+          <i class="pi pi-spinner pi-spin text-blue-500"/>
+          <span class="text-blue-700 dark:text-blue-300">
+            Loading {{ loadingProgress.loading }} of {{ loadingProgress.total }} files
+          </span>
+          <span v-if="loadingProgress.errors > 0" class="text-red-500">
+            ({{ loadingProgress.errors }} errors)
+          </span>
+        </div>
 
-      <div
-          class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-          @click="
-          $event => {
-            handleToggleFilesViewMenu($event);
-          }
-        "
-      >
-        <i class="pi pi-bars"/>
+        <div
+            class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+            @click="
+            $event => {
+              handleToggleFilesViewMenu($event);
+            }
+          "
+        >
+          <i class="pi pi-bars"/>
+        </div>
       </div>
     </div>
 
@@ -481,6 +781,71 @@ onMounted(() => {
             class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"
         />
       </template>
+    </div>
+
+    <!-- Upload Progress Table -->
+    <div 
+      v-if="uploadProgress.isUploading || uploadProgress.error" 
+      class="mt-8 -mr-[30px] -ml-[30px] lg:-ml-0 lg:-mr-0"
+    >
+      <div class="bg-white dark:bg-autonomi-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-autonomi-gray-700 overflow-hidden">
+        <!-- Table Header -->
+        <div class="bg-gray-50 dark:bg-autonomi-gray-900 px-6 py-3 border-b border-gray-200 dark:border-autonomi-gray-700">
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-autonomi-text-primary-dark flex items-center gap-2">
+            <i :class="uploadProgress.error ? 'pi pi-exclamation-triangle text-red-500' : 'pi pi-upload text-blue-500'"/>
+            {{ uploadProgress.error ? 'Upload Failed' : 'Upload in Progress' }}
+          </h3>
+        </div>
+        
+        <!-- Table Content -->
+        <div class="p-6">
+          <div class="grid grid-cols-12 gap-4 items-center">
+            <!-- File Name -->
+            <div class="col-span-12 md:col-span-4 lg:col-span-3">
+              <div class="text-sm font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
+                {{ uploadProgress.currentFile || `${uploadProgress.totalFiles} file(s)` }}
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {{ uploadProgress.filesProcessed }} of {{ uploadProgress.totalFiles }} files
+              </div>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div class="col-span-12 md:col-span-5 lg:col-span-6">
+              <div v-if="!uploadProgress.error" class="space-y-2">
+                <div class="flex justify-between text-xs text-gray-600 dark:text-gray-300">
+                  <span>{{ uploadProgress.statusMessage }}</span>
+                  <span>{{ uploadProgress.progressPercentage }}%</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div 
+                    class="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+                    :style="`width: ${uploadProgress.progressPercentage}%`"
+                  ></div>
+                </div>
+              </div>
+              <div v-else class="text-sm text-red-600 dark:text-red-400">
+                {{ uploadProgress.statusMessage }}
+              </div>
+            </div>
+            
+            <!-- Size Info -->
+            <div class="col-span-12 md:col-span-3 lg:col-span-3 text-right">
+              <div v-if="uploadProgress.totalBytes > 0" class="text-sm text-gray-600 dark:text-gray-300">
+                {{ formatBytes(uploadProgress.bytesProcessed) }}
+              </div>
+              <div v-if="uploadProgress.totalBytes > 0" class="text-xs text-gray-500 dark:text-gray-400">
+                of {{ formatBytes(uploadProgress.totalBytes) }}
+              </div>
+              
+              <!-- Upload chunks info for upload phase -->
+              <div v-if="uploadProgress.totalChunks > 0 && !uploadProgress.error" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {{ uploadProgress.chunksUploaded }} / {{ uploadProgress.totalChunks }} chunks
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- View Navigation -->
@@ -1216,5 +1581,18 @@ onMounted(() => {
         </div>
       </div>
     </Drawer>
+
+    <!-- Upload Progress Modal -->
+    <DialogInvoice
+      :visible="showUploadModal"
+      :current-step="currentUploadStep"
+      :steps="uploadSteps"
+      :quote-data="quoteData"
+      :error="uploadError"
+      @close-modal="handleCloseUploadModal"
+      @cancel-upload="handleCancelUploadModal"
+      @show-notify="emit('show-notify', $event)"
+      @hide-notify="emit('hide-notify')"
+    />
   </div>
 </template>

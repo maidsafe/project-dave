@@ -6,10 +6,6 @@ import IconField from "primevue/iconfield";
 import InputIcon from "primevue/inputicon";
 import {useWalletStore} from "~/stores/wallet";
 import {useUserStore} from "~/stores/user";
-import {usePaymentStore} from "~/stores/payments";
-import type {PaymentOrder} from "~/stores/payments";
-import {listen} from "@tauri-apps/api/event";
-import {invoke} from "@tauri-apps/api/core";
 import {storeToRefs} from "pinia";
 
 const value1 = ref("");
@@ -17,12 +13,6 @@ const searching = ref(false);
 const walletStore = useWalletStore();
 const {wallet} = storeToRefs(walletStore);
 const userStore = useUserStore();
-const paymentStore = usePaymentStore();
-const {
-  IDLE_PAYMENT_EXPIRATION_TIME_SECS,
-  pendingPayments,
-  pendingPaymentsCount,
-} = storeToRefs(paymentStore);
 
 const {isDark} = useTheme()
 
@@ -88,24 +78,6 @@ onMounted(() => {
     }
   });
 
-  listen<PaymentOrder>("payment-order", async (event: any) => {
-    let order: PaymentOrder = JSON.parse(event.payload);
-
-    if (!order) return;
-
-    console.log(">>> PAYMENT ORDER RECEIVED HEADER", order);
-
-    paymentStore.addPendingPayment(order.id, {
-      order,
-      expires: Date.now() + 1000 * IDLE_PAYMENT_EXPIRATION_TIME_SECS.value,
-      processing: ProcessingState.PENDING,
-    });
-
-    console.log(
-        ">>> LISTENING PAYMENT ORDER FROM HEADER:",
-        pendingPayments.value
-    );
-  });
 });
 
 onBeforeUnmount(() => {
@@ -191,17 +163,6 @@ onBeforeUnmount(() => {
               </div>
             </template>
 
-            <!-- PAYMENT ORDERS -->
-            <!-- <PaymentOrders/> -->
-            <Button
-                class="hidden lg:flex gap-1"
-                type="button"
-                icon="pi pi-receipt"
-                label="Pay"
-                :severity="pendingPaymentsCount > 0 ? 'info' : 'secondary'"
-                :badge="pendingPaymentsCount.toString()"
-                @click="paymentStore.openPaymentDrawer()"
-            />
 
             <ThemeToggle/>
           </div>
@@ -269,16 +230,6 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- PAYMENT ORDERS -->
-          <!-- MOBILE -->
-          <Button
-              class="flex lg:hidden gap-1"
-              type="button"
-              icon="pi pi-receipt"
-              :severity="pendingPaymentsCount > 0 ? 'info' : 'secondary'"
-              :badge="pendingPaymentsCount.toString()"
-              @click="paymentStore.openPaymentDrawer()"
-          />
 
           <!-- THEME -->
           <ThemeToggle/>

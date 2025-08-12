@@ -39,20 +39,6 @@ const isFadeOut = ref(false);
 const removeSplashScreen = ref(false);
 
 // Methods
-const handleClickUpload = async () => {
-  try {
-    if (wallet.value.isConnected) {
-      await navigateTo('/upload');
-    } else {
-      walletStore.showConnectWallet(async () => {
-        await navigateTo('/upload');
-      });
-    }
-  } catch (error) {
-    // TODO: Handle error
-    console.error('>>> Error: handleClickUpload');
-  }
-};
 
 const handleShowNotification = (payload: any) => {
   console.log('>>> Notification payload:', payload);
@@ -121,23 +107,10 @@ onMounted(async () => {
         <div
             class="pb-4 w-[290px] transition-all duration-300 hidden lg:flex flex-col rounded-tr-2xl bg-white dark:bg-white/10 overflow-hidden items-center pt-[35px] shrink-0"
         >
-          <div class="mb-11">
-            <CommonButton
-                variant="primary"
-                size="large"
-                @click="handleClickUpload"
-                class="flex"
-            >
-              <i class="pi pi-plus-circle"/><span aria-label="Upload">
-                Upload</span
-            >
-            </CommonButton>
-          </div>
-
           <div class="flex flex-col justify-start">
             <NuxtLink :class="`${classesLinks}`" to="/">
               <IconFiles class="w-6 h-6"/>
-              Files
+              Vault
             </NuxtLink>
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
@@ -176,10 +149,6 @@ onMounted(async () => {
             @close-notify="handleHideNotification"
         />
 
-        <PaymentDrawer
-            @show-notify="handleShowNotification"
-            @hide-notify="handleHideNotification"
-        />
       </div>
     </NuxtLayout>
   </div>
