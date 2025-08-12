@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-autonomi = { path = "/Users/mick/RustroverProjects/safe_network/autonomi" }
+autonomi = { git = "https://github.com/maidsafe/autonomi" }
 rand = "0.8.5"
 dirs-next = "~2.0.0"
 directories = "5.0"
