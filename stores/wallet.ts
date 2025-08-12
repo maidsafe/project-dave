@@ -158,6 +158,9 @@ export const useWalletStore = defineStore("wallet", () => {
 
             await disconnect();
 
+            // Clear cached vault key signature on disconnect
+            cachedVaultKeySignature.value = undefined;
+
             console.log("Disconnected wallet");
 
             if (callbackDisconnectWallet.value) {

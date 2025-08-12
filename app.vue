@@ -4,6 +4,7 @@ import {networks, projectId, wagmiAdapter} from '~/config';
 import {useFileStore} from '~/stores/files';
 import {storeToRefs} from 'pinia';
 import {updater} from './lib/updater';
+import {reconnect} from '@wagmi/core';
 
 createAppKit({
   adapters: [wagmiAdapter],
@@ -72,6 +73,17 @@ watchEffect(() => {
 });
 
 onMounted(async () => {
+  // Attempt to reconnect wallet on app startup after a short delay
+  // to ensure AppKit is fully initialized
+  setTimeout(async () => {
+    try {
+      await reconnect(wagmiAdapter.wagmiConfig);
+      console.log('Wallet reconnection attempted');
+    } catch (error) {
+      console.error('Failed to reconnect wallet:', error);
+    }
+  }, 100);
+
   setTimeout(() => {
     isFadeOut.value = true;
 
