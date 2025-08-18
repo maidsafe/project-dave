@@ -168,6 +168,101 @@ const handlePayUpload = async () => {
   }
 };
 
+// File info handlers
+const handleFileNameClick = (file: any) => {
+  // Only open info for files, not folders
+  if (file.path) {
+    selectedFileItem.value = file;
+    isVisibleFileInfo.value = true;
+  }
+};
+
+// Menu definitions
+const menuFiles = computed(() => {
+  const file = selectedFileItem.value;
+  const items = [];
+
+  if (file?.is_loading) {
+    items.push({
+      label: 'Loading...',
+      icon: 'pi pi-spinner pi-spin',
+      disabled: true,
+    });
+  } else if (file?.load_error) {
+    items.push({
+      label: 'Retry Download',
+      icon: 'pi pi-refresh',
+      command: () => handleDownloadFile(file),
+    });
+  } else if (file?.path) {
+    // Only show download for files (not folders)
+    items.push({
+      label: 'Download',
+      icon: 'pi pi-download',
+      command: () => handleDownloadFile(file),
+    });
+  }
+
+  if (file?.path) {
+    // Only show info for files (not folders)
+    items.push({
+      label: 'Info',
+      icon: 'pi pi-info-circle',
+      command: () => {
+        isVisibleFileInfo.value = true;
+      },
+    });
+  }
+
+  return items;
+});
+
+const menuUploads = ref([
+  {
+    label: 'Remove',
+    icon: 'pi pi-times',
+    command: () => {
+      if (selectedUploadItem.value) {
+        uploadsStore.removeUpload(selectedUploadItem.value.id);
+      }
+    },
+  },
+]);
+
+const menuDownloads = ref([
+  {
+    label: 'Remove',
+    icon: 'pi pi-times',
+    command: () => {
+      if (selectedDownloadItem.value) {
+        downloadsStore.removeDownload(selectedDownloadItem.value.id);
+      }
+    },
+  },
+]);
+
+// View functions
+const handleShowListView = () => {
+  viewTypeVault.value = 'list';
+};
+
+const handleShowGridView = () => {
+  viewTypeVault.value = 'grid';
+};
+
+const menuFilesView = ref([
+  {
+    label: 'List',
+    icon: 'pi pi-list',
+    command: handleShowListView,
+  },
+  {
+    label: 'Grid',
+    icon: 'pi pi-th-large',
+    command: handleShowGridView,
+  },
+]);
+
 // Upload functions
 const emit = defineEmits(["show-notify", "hide-notify"]);
 const isUploading = computed(() => uploadStore.uploadProgress.isUploading);
@@ -669,6 +764,13 @@ onMounted(async () => {
               >
                 <i class="pi pi-refresh"/>
               </div>
+
+              <div
+                  class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+                  @click="$event => { refFilesViewMenu.toggle($event); }"
+              >
+                <i class="pi pi-bars"/>
+              </div>
             </div>
           </div>
 
@@ -703,40 +805,173 @@ onMounted(async () => {
             </template>
           </div>
 
-          <!-- Files Content -->
-          <div class="mt-6">
-            <div v-if="combinedFiles.length > 0" class="space-y-2">
+          <!-- Files Table -->
+          <div
+              v-if="viewTypeVault === 'list'"
+              class="mt-6 grid grid-cols-12 font-semibold mb-10"
+          >
+            <div
+                class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
+            >
+              Name
+            </div>
+            <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
+              Upload Date
+            </div>
+            <div class="col-span-1 text-autonomi-red-300">
+              <i class="pi pi-user"/>
+            </div>
+
+            <!-- Spacer -->
+            <div class="col-span-12 h-10"/>
+
+            <!-- Files Rows -->
+            <template v-if="combinedFiles.length">
               <div
                   v-for="file in combinedFiles"
                   :key="file.path || file.name"
-                  class="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer flex items-center justify-between"
+                  class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
                   @click="handleChangeDirectory(file)"
+                  :class="{
+                  'cursor-pointer': !file.path || file.is_failed_archive,
+                  'opacity-75': file.is_loading,
+                  'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
+                  'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive)
+                }"
               >
-                <div class="flex items-center gap-3">
-                  <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-red-500"/>
-                  <i v-else-if="file.path" class="pi pi-file"/>
-                  <i v-else class="pi pi-folder"/>
-                  <span>{{ file.name }}</span>
-                  <span v-if="file.is_failed_archive" class="text-xs text-red-500">
-                    ({{ file.is_private ? 'Private' : 'Public' }})
-                  </span>
+                <!-- Folder/File Name -->
+                <div
+                    class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] flex items-center"
+                >
+                  <template v-if="file.is_failed_archive">
+                    <!-- This is a failed archive -->
+                    <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
+                    <i class="pi pi-folder-open mr-2 text-red-500"/>
+                    <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
+                      {{ file.name }} <span class="text-xs">({{ file.is_private ? 'Private' : 'Public' }})</span>
+                    </span>
+                  </template>
+                  <template v-else-if="file?.path">
+                    <!-- This is the file -->
+                    <i
+                        v-if="/\\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
+                        class="pi pi-image mr-4"
+                    />
+                    <i
+                        v-else-if="/\\.(pdf)$/i.test(file.name)"
+                        class="pi pi-file-pdf mr-4"
+                    />
+                    <i v-else-if="/\\.(zip)$/i.test(file.name)" class="pi pi-box mr-4"/>
+                    <i v-else class="pi pi-file mr-4"/>
+
+                    <span
+                        class="text-ellipsis overflow-hidden cursor-pointer"
+                        @click.stop="handleFileNameClick(file)">
+                      {{ file.name }}
+                    </span>
+                    <!-- Loading indicators for files -->
+                    <i v-if="file.is_loading" class="pi pi-spinner pi-spin ml-2 text-sm text-blue-500"/>
+                    <i v-else-if="file.load_error" class="pi pi-exclamation-triangle ml-2 text-sm text-red-500"
+                       v-tooltip.top="'Failed to load file data'"/>
+                  </template>
+                  <template v-else>
+                    <!-- This is the folder -->
+                    <i class="pi pi-folder mr-4"/><span
+                      class="line-clamp-one text-ellipsis"
+                  >{{ file.name }}</span>
+                  </template>
                 </div>
-                <div v-if="file.path" class="flex gap-2">
-                  <Button
-                      icon="pi pi-download"
-                      size="small"
-                      text
-                      @click.stop="handleDownloadFile(file)"
-                  />
+
+                <!-- Upload Date -->
+                <div
+                    class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
+                >
+                  {{
+                    file?.metadata?.uploaded && !file.is_failed_archive
+                        ? secondsToDate(file.metadata.uploaded).toLocaleString()
+                        : ''
+                  }}
                 </div>
+
+                <!-- Menu -->
+                <template v-if="file.path && !file.is_failed_archive">
+                  <div class="col-span-1">
+                    <i
+                        class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
+                        @click.stop="
+                        $event => {
+                          selectedFileItem = file;
+                          refFilesMenu.toggle($event);
+                        }
+                      "
+                    />
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="col-span-1"></div>
+                </template>
               </div>
-            </div>
-            <div v-else class="text-center py-8 text-gray-500">
-              <div v-if="pendingVaultStructure">
-                <i class="pi pi-spinner pi-spin mr-2"/>
-                Loading vault...
+            </template>
+            <template v-else>
+              <div class="col-span-12 p-8 text-center text-gray-500">
+                <div v-if="pendingVaultStructure">
+                  <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+                </div>
+                <div v-else>No files found.</div>
               </div>
-              <div v-else>No files found.</div>
+            </template>
+          </div>
+
+          <!-- Grid View -->
+          <div
+              v-else-if="viewTypeVault === 'grid'"
+              class="mt-6"
+          >
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div v-if="!combinedFiles.length" class="col-span-full p-8 text-center text-gray-500">
+                <div v-if="pendingVaultStructure">
+                  <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+                </div>
+                <div v-else>No files found.</div>
+              </div>
+              <template v-else>
+                <div
+                    v-for="file in combinedFiles"
+                    :key="file.path || file.name"
+                    class="aspect-square h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-4 border cursor-pointer"
+                    @click="handleChangeDirectory(file)"
+                >
+                  <div class="flex flex-col items-center justify-center w-full h-full">
+                    <template v-if="file.path">
+                      <!-- Menu -->
+                      <div class="self-end">
+                        <i
+                            class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                            @click.stop="
+                            $event => {
+                              selectedFileItem = file;
+                              refFilesMenu.toggle($event);
+                            }
+                          "
+                        />
+                      </div>
+                    </template>
+                    
+                    <div class="flex flex-col items-center justify-center flex-1 gap-2">
+                      <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-4xl text-red-500"/>
+                      <i v-else-if="file.path" class="pi pi-file text-4xl"/>
+                      <i v-else class="pi pi-folder text-4xl"/>
+                      
+                      <span 
+                          class="text-center text-sm truncate w-full cursor-pointer"
+                          @click.stop="file.path ? handleFileNameClick(file) : null"
+                      >
+                        {{ file.name }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </TabPanel>
@@ -835,6 +1070,27 @@ onMounted(async () => {
                 'opacity-50 cursor-not-allowed': item.disabled
               }"
                 @click="!item.disabled && item.command && item.command()"
+            >
+              <i :class="item.icon"/>
+              <div>
+                {{ item.label }}
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </Popover>
+
+    <!-- FILES VIEW MENU POPOVER -->
+    <Popover ref="refFilesViewMenu" class="syslog-menu">
+      <div class="flex flex-col gap-4">
+        <div>
+          <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
+            <li
+                v-for="item in menuFilesView"
+                :key="item.label"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                @click="item.command"
             >
               <i :class="item.icon"/>
               <div>
