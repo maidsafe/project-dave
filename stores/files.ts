@@ -74,9 +74,7 @@ export const useFileStore = defineStore("files", () => {
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
     const pendingFilesSignature = ref(false);
-    const pendingGetAllFiles = ref(false);
     const pendingVaultStructure = ref(false);
-    const loadingFiles = ref<Set<string>>(new Set());
     const loadedFiles = ref<Map<string, any>>(new Map());
 
     // Computed
@@ -175,9 +173,6 @@ export const useFileStore = defineStore("files", () => {
             // Build Root Directory immediately
             buildRootDirectory();
 
-            // Start background loading of actual files
-            // loadFilesInBackground(vaultKeySignature);
-
         } catch (error: any) {
             console.log(">>> ERROR: Failed to get vault structure:", error);
             const message =
@@ -197,57 +192,65 @@ export const useFileStore = defineStore("files", () => {
         }
     };
 
-    const loadFilesInBackground = async (vaultKeySignature: string) => {
-        console.log(">>> Loading files in background...");
-        try {
-            pendingGetAllFiles.value = true;
-
-            // Set all files as loading
-            files.value = files.value.map((file: any) => ({
-                ...file,
-                is_loaded: false,
-                is_loading: true
-            }));
-
-            // Rebuild directory to show loading state
-            buildRootDirectory();
-
-            const fullFiles = await invoke("get_files_from_vault", {vaultKeySignature});
-
-            // Update files with full data
-            files.value = fullFiles.map((file: any) => ({
-                ...file,
-                is_loaded: true,
-                is_loading: false
-            }));
-
-            // Store loaded files for quick access
-            fullFiles.forEach((file: any) => {
-                loadedFiles.value.set(file.path, file);
-            });
-
-            // Rebuild directory with loaded files
-            buildRootDirectory();
-
-        } catch (error: any) {
-            console.log(">>> ERROR: Failed to load files in background:", error);
-            // Mark all files as failed to load
-            files.value = files.value.map((file: any) => ({
-                ...file,
-                is_loaded: false,
-                is_loading: false,
-                load_error: true
-            }));
-            buildRootDirectory();
-        } finally {
-            pendingGetAllFiles.value = false;
-        }
-    };
 
     const getAllFiles = async () => {
         // This is now just an alias for the new two-phase approach
         return getVaultStructure();
     };
+
+    const loadSingleFileData = async (file: any) => {
+        try {
+            // Mark the file as loading
+            const fileIndex = files.value.findIndex(f => f.path === file.path);
+            if (fileIndex !== -1) {
+                files.value[fileIndex] = {
+                    ...files.value[fileIndex],
+                    is_loading: true,
+                    load_error: false
+                };
+            }
+
+            // Get vault key signature
+            let vaultKeySignature = await walletStore.getVaultKeySignature();
+            
+            // Load the file data
+            const loadedFile = await invoke("get_single_file_data", {
+                vaultKeySignature,
+                filePath: file.path
+            }) as any;
+
+            // Update the file with loaded data
+            if (fileIndex !== -1) {
+                files.value[fileIndex] = {
+                    ...loadedFile,
+                    is_loaded: true,
+                    is_loading: false,
+                    load_error: false
+                };
+
+                // Store in loadedFiles map
+                loadedFiles.value.set(loadedFile.path, loadedFile);
+            }
+
+            return loadedFile;
+        } catch (error: any) {
+            console.error("Failed to load file data:", error);
+            
+            // Mark the file as failed to load
+            const fileIndex = files.value.findIndex(f => f.path === file.path);
+            if (fileIndex !== -1) {
+                files.value[fileIndex] = {
+                    ...files.value[fileIndex],
+                    is_loaded: false,
+                    is_loading: false,
+                    load_error: true
+                };
+            }
+            
+            throw error;
+        }
+    };
+    
     // Return
     return {
         files,
@@ -257,14 +260,12 @@ export const useFileStore = defineStore("files", () => {
         currentDirectory,
         currentDirectoryFiles,
         pendingFilesSignature,
-        pendingGetAllFiles,
         pendingVaultStructure,
-        loadingFiles,
         loadedFiles,
         // Methods
         changeDirectory,
         getAllFiles,
         getVaultStructure,
-        loadFilesInBackground,
+        loadSingleFileData,
     };
 });

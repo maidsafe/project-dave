@@ -3,6 +3,7 @@ use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEO
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::quote::{DataTypes, StoreQuote};
 use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
+use autonomi::client::vault::key::vault_key_from_signature_hex;
 use autonomi::client::GetError;
 use autonomi::data::DataAddress;
 use autonomi::files::{Metadata, PrivateArchive};
@@ -85,6 +86,8 @@ pub enum VaultError {
     UserDataGet(#[from] UserDataVaultError),
     #[error("Could not retrieve data: {0:?}")]
     DataGet(#[from] GetError),
+    #[error("File not found in vault")]
+    FileNotFound,
 }
 
 #[derive(ThisError, Debug)]
@@ -645,4 +648,57 @@ pub async fn download_public_file(
     let client = shared_client.get_client().await?;
     client.file_download_public(addr, to_dest).await?;
     Ok(())
+}
+
+pub async fn get_single_file_data(
+    vault_key_signature: &str,
+    file_path: &str,
+    shared_client: State<'_, SharedClient>,
+) -> Result<FileFromVault, VaultError> {
+    let secret_key = vault_key_from_signature_hex(vault_key_signature.trim_start_matches("0x"))
+        .expect("Invalid vault key signature");
+    let client = shared_client.get_client().await?;
+    let user_data = client.get_user_data_from_vault(&secret_key).await?;
+    
+    // Try to find the file in private archives first
+    for (data_map, archive_name) in user_data.private_file_archives.iter() {
+        // Check if the file path starts with this archive name
+        if file_path.starts_with(&format!("{}/", archive_name)) {
+            let archive = client.archive_get(data_map).await?;
+            
+            // Look for the file in this archive
+            for (filepath, (file_data_map, metadata)) in archive.map() {
+                let full_path = format!("{}/{}", archive_name, filepath.display());
+                if full_path == file_path {
+                    return Ok(FileFromVault {
+                        path: file_path.to_string(),
+                        metadata: metadata.clone(),
+                        file_access: PublicOrPrivateFile::Private(file_data_map.clone()),
+                    });
+                }
+            }
+        }
+    }
+    
+    // Try to find the file in public archives
+    for (addr, archive_name) in user_data.file_archives.iter() {
+        // Check if the file path starts with this archive name
+        if file_path.starts_with(&format!("{}/", archive_name)) {
+            let archive = client.archive_get_public(addr).await?;
+            
+            // Look for the file in this archive
+            for (filepath, (file_addr, metadata)) in archive.map() {
+                let full_path = format!("{}/{}", archive_name, filepath.display());
+                if full_path == file_path {
+                    return Ok(FileFromVault {
+                        path: file_path.to_string(),
+                        metadata: metadata.clone(),
+                        file_access: PublicOrPrivateFile::Public(*file_addr),
+                    });
+                }
+            }
+        }
+    }
+    
+    Err(VaultError::FileNotFound)
 }

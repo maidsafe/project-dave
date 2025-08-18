@@ -138,6 +138,17 @@ async fn download_public_file(
         .map_err(|_err| ()) // TODO: Map to serializable error
 }
 
+#[tauri::command]
+async fn get_single_file_data(
+    vault_key_signature: String,
+    file_path: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<FileFromVault, ()> {
+    ant::files::get_single_file_data(&vault_key_signature, &file_path, shared_client)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
@@ -154,6 +165,7 @@ pub async fn run() {
             get_files_from_vault,
             download_private_file,
             download_public_file,
+            get_single_file_data,
             app_data,
             app_data_store,
         ])

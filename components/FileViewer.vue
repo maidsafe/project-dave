@@ -14,7 +14,6 @@ const fileStore = useFileStore();
 const uploadStore = useUploadStore();
 const walletStore = useWalletStore();
 const {
-  pendingGetAllFiles,
   pendingVaultStructure,
   currentDirectory,
   currentDirectoryFiles,
@@ -405,12 +404,25 @@ const handleDownloadFile = async () => {
   try {
     const file = selectedFileItem.value;
 
-    // Check if file is fully loaded
-    if (!file.is_loaded) {
+    // Load file data on-demand if not already loaded
+    let fileData = file;
+    if (!file.is_loaded && !file.is_loading) {
+      try {
+        fileData = await fileStore.loadSingleFileData(file);
+      } catch (error) {
+        toast.add({
+          severity: 'error',
+          summary: 'Download Failed',
+          detail: 'Could not load file data for download.',
+          life: 3000,
+        });
+        return;
+      }
+    } else if (file.is_loading) {
       toast.add({
-        severity: 'warn',
-        summary: 'File Not Ready',
-        detail: 'Please wait for the file to finish loading before downloading.',
+        severity: 'info',
+        summary: 'Download in Progress',
+        detail: 'File is already being prepared for download...',
         life: 3000,
       });
       return;
@@ -424,41 +436,44 @@ const handleDownloadFile = async () => {
       life: 6000,
     });
 
-    let fileBytes = new Uint8Array();
-
     const downloadsPath = await downloadDir();
-    const downloadPrivateFileArgs = {
-      dataMap: file.file_access.Private,
-      toDest: `${downloadsPath}/${file.name}`,
-    };
+    // Extract filename from path - use the original file.name from UI or extract from path
+    const fileName = file.name || fileData.path.split('/').pop() || 'downloaded_file';
 
     try {
-      fileBytes = await invoke(
-          'download_private_file',
-          downloadPrivateFileArgs,
-      );
+      if (fileData.file_access.Private) {
+        // Private file download
+        const downloadPrivateFileArgs = {
+          dataMap: fileData.file_access.Private,
+          toDest: `${downloadsPath}/${fileName}`,
+        };
+        await invoke('download_private_file', downloadPrivateFileArgs);
+      } else if (fileData.file_access.Public) {
+        // Public file download
+        const downloadPublicFileArgs = {
+          addr: fileData.file_access.Public,
+          toDest: `${downloadsPath}/${fileName}`,
+        };
+        await invoke('download_public_file', downloadPublicFileArgs);
+      }
+
+      // Success - file has been downloaded to the downloads folder
+      toast.add({
+        severity: 'success',
+        summary: 'Download Complete',
+        detail: `File saved to downloads folder: ${fileName}`,
+        life: 4000,
+      });
     } catch (error) {
       console.error('Error downloading file:', error);
+      toast.add({
+        severity: 'error',
+        summary: 'Download Failed',
+        detail: 'Failed to download the file.',
+        life: 3000,
+      });
+      return;
     }
-
-    // Create a Blob from the bytes
-    const blob = new Blob([fileBytes], {type: 'application/octet-stream'});
-
-    // Create a URL for the Blob
-    const url = URL.createObjectURL(blob);
-
-    // Create an <a> element and set the download attribute
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-
-    // Trigger the download by clicking the <a> element
-    document.body.appendChild(a); // Append <a> to the DOM
-    a.click();
-    document.body.removeChild(a); // Clean up
-
-    // Release the URL after the download
-    URL.revokeObjectURL(url);
   } catch (error) {
     console.log('>>> Error in FileViewer.vue >> handleDownloadFile: ', error);
   }
@@ -477,17 +492,19 @@ const handleInfoFile = () => {
   isVisibleFileInfo.value = true;
 };
 
+const handleFileNameClick = (file: any) => {
+  // Only open info for files, not folders
+  if (file.path) {
+    selectedFileItem.value = file;
+    handleInfoFile();
+  }
+};
+
 const menuFiles = computed(() => {
   const file = selectedFileItem.value;
   const items = [];
 
-  if (file?.is_loaded) {
-    items.push({
-      label: 'Download',
-      icon: 'pi pi-download',
-      command: handleDownloadFile,
-    });
-  } else if (file?.is_loading) {
+  if (file?.is_loading) {
     items.push({
       label: 'Loading...',
       icon: 'pi pi-spinner pi-spin',
@@ -495,15 +512,16 @@ const menuFiles = computed(() => {
     });
   } else if (file?.load_error) {
     items.push({
-      label: 'Failed to load',
-      icon: 'pi pi-exclamation-triangle',
-      disabled: true,
+      label: 'Retry Download',
+      icon: 'pi pi-refresh',
+      command: handleDownloadFile,
     });
   } else {
+    // Always show download button - we'll load data on-demand
     items.push({
-      label: 'Not loaded',
-      icon: 'pi pi-clock',
-      disabled: true,
+      label: 'Download',
+      icon: 'pi pi-download',
+      command: handleDownloadFile,
     });
   }
 
@@ -725,14 +743,14 @@ onMounted(async () => {
         <i class="pi pi-refresh"/>
       </div>
 
-        <!-- Loading Progress Indicator -->
+        <!-- Individual File Loading Indicator -->
         <div
-            v-if="pendingGetAllFiles && loadingProgress.total > 0"
+            v-if="loadingProgress.loading > 0"
             class="flex items-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium"
         >
           <i class="pi pi-spinner pi-spin text-blue-500"/>
           <span class="text-blue-700 dark:text-blue-300">
-            Loading {{ loadingProgress.loading }} of {{ loadingProgress.total }} files
+            Loading {{ loadingProgress.loading }} file{{ loadingProgress.loading > 1 ? 's' : '' }}...
           </span>
           <span v-if="loadingProgress.errors > 0" class="text-red-500">
             ({{ loadingProgress.errors }} errors)
@@ -1029,15 +1047,15 @@ onMounted(async () => {
                 />
                 <i v-if="/\.(zip)$/i.test(file.name)" class="pi pi-box mr-4"/>
 
-                <span class="text-ellipsis overflow-hidden">{{
+                <span 
+                  class="text-ellipsis overflow-hidden cursor-pointer"
+                  @click="handleFileNameClick(file)">{{
                     file.name
                   }}</span>
                 <!-- Loading indicators for files -->
                 <i v-if="file.is_loading" class="pi pi-spinner pi-spin ml-2 text-sm text-blue-500"/>
                 <i v-else-if="file.load_error" class="pi pi-exclamation-triangle ml-2 text-sm text-red-500"
                    v-tooltip.top="'Failed to load file data'"/>
-                <i v-else-if="file.is_loaded === false" class="pi pi-clock ml-2 text-sm opacity-50"
-                   v-tooltip.top="'File data not yet loaded'"/>
               </template>
               <template v-else>
                 <!-- This is the folder -->
@@ -1086,9 +1104,6 @@ onMounted(async () => {
           >
             <div v-if="pendingVaultStructure" class="col-span-12 pl-[150px]">
               <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
-            </div>
-            <div v-else-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
-              <i class="pi pi-spinner pi-spin mr-4"/>Loading file details...
             </div>
             <div v-else class="col-span-12 pl-[150px]">No files found.</div>
           </div>
@@ -1165,14 +1180,13 @@ onMounted(async () => {
 
                     <div class="flex items-center justify-center gap-2 w-full">
                       <span v-tooltip.bottom="file.name"
-                            class="text-ellipsis overflow-hidden line-clamp-1 block text-center">{{
+                            class="text-ellipsis overflow-hidden line-clamp-1 block text-center cursor-pointer"
+                            @click="handleFileNameClick(file)">{{
                           file.name
                         }}</span>
                       <i v-if="file.is_loading" class="pi pi-spinner pi-spin text-xs text-blue-500"/>
                       <i v-else-if="file.load_error" class="pi pi-exclamation-triangle text-xs text-red-500"
                          v-tooltip.top="'Failed to load file data'"/>
-                      <i v-else-if="file.is_loaded === false" class="pi pi-clock text-xs opacity-50"
-                         v-tooltip.top="'File data not yet loaded'"/>
                     </div>
                   </template>
                   <template v-else>
@@ -1252,9 +1266,6 @@ onMounted(async () => {
             >
               <div v-if="pendingVaultStructure" class="col-span-12 pl-[150px]">
                 <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
-              </div>
-              <div v-else-if="pendingGetAllFiles" class="col-span-12 pl-[150px]">
-                <i class="pi pi-spinner pi-spin mr-4"/>Loading file details...
               </div>
               <div v-else class="col-span-12 pl-[150px]">No files found.</div>
             </div>
