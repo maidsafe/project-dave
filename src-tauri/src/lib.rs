@@ -149,6 +149,52 @@ async fn get_single_file_data(
         .map_err(|_err| ()) // TODO: Map to serializable error
 }
 
+#[tauri::command]
+async fn confirm_payment(
+    order_id: u64,
+    payment_orders: State<'_, PaymentOrderManager>,
+) -> Result<(), ()> {
+    payment_orders.confirm_payment(order_id as u16).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_unique_download_path(
+    downloads_path: String,
+    filename: String,
+) -> Result<String, ()> {
+    use std::path::Path;
+    
+    let base_path = Path::new(&downloads_path);
+    let file_path = base_path.join(&filename);
+    
+    // If file doesn't exist, return original path
+    if !file_path.exists() {
+        return Ok(file_path.to_string_lossy().to_string());
+    }
+    
+    // Extract name and extension
+    let stem = file_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("file");
+    let extension = file_path.extension()
+        .and_then(|s| s.to_str())
+        .map(|s| format!(".{}", s))
+        .unwrap_or_default();
+    
+    // Try numbered variants until we find one that doesn't exist
+    for i in 1..1000 {
+        let new_filename = format!("{} ({}){}", stem, i, extension);
+        let new_path = base_path.join(&new_filename);
+        if !new_path.exists() {
+            return Ok(new_path.to_string_lossy().to_string());
+        }
+    }
+    
+    // Fallback if we can't find a unique name
+    Err(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
@@ -166,6 +212,8 @@ pub async fn run() {
             download_private_file,
             download_public_file,
             get_single_file_data,
+            confirm_payment,
+            get_unique_download_path,
             app_data,
             app_data_store,
         ])

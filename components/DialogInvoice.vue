@@ -13,6 +13,9 @@ interface UploadStep {
 interface QuoteData {
   totalFiles: number;
   totalSize: string;
+  totalCostFormatted?: string;
+  paymentRequired?: boolean;
+  paymentOrderId?: string;
   totalCostNano?: string;
   costPerFileNano?: string;
   rawQuoteData?: any;
@@ -26,7 +29,7 @@ const props = defineProps<{
   error?: string;
 }>();
 
-const emit = defineEmits(["close-modal", "cancel-upload", "show-notify", "hide-notify"]);
+const emit = defineEmits(["close-modal", "cancel-upload", "show-notify", "hide-notify", "pay-upload"]);
 
 const paymentStore = usePaymentStore();
 const {
@@ -211,8 +214,23 @@ watchEffect(() => {
         </div>
       </div>
 
+      <!-- Error Display -->
+      <div v-if="error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <div class="flex items-start gap-3">
+          <i class="pi pi-exclamation-triangle text-red-500 text-lg flex-shrink-0 mt-0.5"/>
+          <div class="flex-1">
+            <h4 class="text-sm font-semibold text-red-900 dark:text-red-300 mb-1">
+              Upload Error
+            </h4>
+            <p class="text-sm text-red-700 dark:text-red-400">
+              {{ error }}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- Quote Data (when payment is requested) -->
-      <div v-if="showQuoteData" class="space-y-4">
+      <div v-if="showQuoteData && !error" class="space-y-4">
         <!-- Upload Summary -->
         <div class="bg-gray-50 dark:bg-autonomi-gray-800 rounded-lg p-4">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-autonomi-text-primary-dark mb-3">
@@ -240,17 +258,10 @@ watchEffect(() => {
             Payment Request
           </h4>
           <div class="space-y-3">
-            <div v-if="hasActivePayment && remainingTime" class="flex justify-between text-sm">
-              <span class="text-gray-600 dark:text-gray-400">Expires in:</span>
-              <span class="font-medium text-orange-600 dark:text-orange-400">
-                {{ remainingTime }}
-              </span>
-            </div>
-            
-            <div class="flex justify-between text-sm" :class="{'border-t border-gray-200 dark:border-autonomi-gray-700 pt-3': hasActivePayment && remainingTime}">
+            <div class="flex justify-between text-sm">
               <span class="font-semibold text-gray-900 dark:text-autonomi-text-primary-dark">Total Cost:</span>
               <span class="font-bold text-blue-600 dark:text-blue-400">
-                {{ totalPaymentAmount }} ATTO
+                {{ quoteData?.totalCostFormatted || '0 ATTO' }}
               </span>
             </div>
           </div>
@@ -264,26 +275,17 @@ watchEffect(() => {
     <template #footer>
       <div class="flex justify-end items-center gap-3 py-3">
         <Button
-          v-if="hasActivePayment"
-          label="Cancel Payment"
-          severity="secondary"
-          text
-          @click="handleCancel"
-        />
-        <Button
-          v-else
-          :disabled="!canClose"
           label="Cancel"
           severity="secondary"
           text
           @click="handleCancel"
         />
         <Button
-          v-if="hasActivePayment"
+          v-if="currentStep === 'payment-request' && quoteData?.paymentRequired !== false"
           label="Pay"
           icon="pi pi-wallet"
           severity="primary"
-          @click="handlePayment"
+          @click="$emit('pay-upload')"
         />
       </div>
     </template>

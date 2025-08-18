@@ -200,7 +200,7 @@ export const useWalletStore = defineStore("wallet", () => {
         openDisconnectWallet.value = true;
     };
 
-    const payForQuotes = async (payments: [[string, string, string]]): Promise<string[]> => {
+    const payForQuotes = async (payments: [string, string, string][]): Promise<string[]> => {
         const MAX_PAYMENTS_PER_TRANSACTION = 256;
 
         try {

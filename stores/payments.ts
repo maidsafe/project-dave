@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type PaymentOrder = {
   id: number;
-  payments: [[string, string, string]];
+  payments: [string, string, string][];  // Array of tuples, not array containing single tuple
 };
 
 export enum ProcessingState {
@@ -46,12 +46,24 @@ export const usePaymentStore = defineStore("payments", () => {
 
   // Methods
 
-  const addPendingPayment = (orderId: number, payment: any) => {
-    console.log(">>> ADDING PAYMENT");
-    pendingPayments.value.set(orderId, payment);
+  const addPendingPayment = (orderId: number, orderData: any) => {
+    console.log(">>> ADDING PAYMENT", orderData);
+    
+    // Create a proper PendingPayment structure
+    const pendingPayment: PendingPayment = {
+      order: {
+        id: orderData.id,
+        payments: orderData.payments
+      },
+      expires: Date.now() + 1000 * IDLE_PAYMENT_EXPIRATION_TIME_SECS.value,
+      processing: ProcessingState.PENDING
+    };
+    
+    pendingPayments.value.set(orderId, pendingPayment);
 
     // Update current payment
-    currentPayment.value = pendingPayments.value.get(orderId);
+    currentPayment.value = pendingPayment;
+    console.log(">>> Current payment set:", currentPayment.value);
   };
 
   const resetExpirationTime = (orderId: number) => {
@@ -87,6 +99,11 @@ export const usePaymentStore = defineStore("payments", () => {
     currentPayment.value = payment;
   };
 
+  const setPaymentView = (view: string) => {
+    // TODO: Implement payment view state if needed
+    console.log("Setting payment view to:", view);
+  };
+
   //   const calculateRemainingTime = (expires: number) =>
   //     Math.max(0, Math.floor((expires - Date.now()) / 1000));
 
@@ -103,7 +120,7 @@ export const usePaymentStore = defineStore("payments", () => {
   };
 
   const calculateTotalAmount = (
-    payments: [[string, string, string]]
+    payments: [string, string, string][]
   ): bigint => {
     return payments.reduce((total, payment) => {
       const amountHex = payment[2];
@@ -179,6 +196,7 @@ export const usePaymentStore = defineStore("payments", () => {
     getProcessingState,
     resetExpirationTime,
     setCurrentPayment,
+    setPaymentView,
     pay,
     cancel,
   };

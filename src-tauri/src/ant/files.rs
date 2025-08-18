@@ -374,21 +374,35 @@ pub async fn upload_private_files_to_vault(
         aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
     }
 
-    let payments = aggregated_store_quote
+    let payments: Vec<_> = aggregated_store_quote
         .payments()
         .into_iter()
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
         .collect();
 
+    // Calculate total cost
+    let total_cost: Amount = payments.iter().map(|(_, _, amount)| *amount).sum();
+    let has_payments = !payments.is_empty();
+    
     // Emit payment request progress
     app.emit("upload-progress", UploadProgress::RequestingPayment {
         files_processed,
         total_files,
     }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    let (order, mut confirmation_receiver) = payment_orders.create_order(payments).await;
+    let (order, mut confirmation_receiver) = payment_orders.create_order(payments.clone()).await;
 
-    app.emit("payment-order", order.to_json())
+    // Emit simplified payment request
+    let payment_request = serde_json::json!({
+        "order_id": order.id,
+        "total_cost_nano": total_cost.to_string(),
+        "total_cost_formatted": format!("{} ATTO", total_cost),
+        "payment_required": has_payments,
+        "payments": payments
+    });
+    
+    tracing::debug!("Emitting payment-request event with data: {:?}", payment_request);
+    app.emit("payment-request", payment_request)
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
     let secret_key = secret_key.clone();
