@@ -10,3 +10,27 @@
     @tailwind components;
     @tailwind utilities;
 }
+
+:root {
+    --p-tabview-tab-active-border-color: #26264d;
+}
+
+.p-tabview-panels, .p-tabview-tablist {
+    background: transparent;
+}
+
+.p-tabview-panels {
+    @apply px-0;
+}
+
+.p-tabview-tab-header {
+}
+
+.p-tabview-tablist {
+    margin-left: 6rem;
+    margin-right: 6rem;
+}
+
+.p-tabview-ink-bar {
+    height: 2px;
+}

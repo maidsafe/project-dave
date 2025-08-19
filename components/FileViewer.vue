@@ -40,6 +40,7 @@ const refFilesMenu = ref();
 const refFilesViewMenu = ref();
 const refDownloadMenu = ref();
 const refUploadMenu = ref();
+const refUploadDropdown = ref();
 const selectedDownloadItem = ref<any>();
 const selectedFileItem = ref<any>();
 const selectedUploadItem = ref<any>();
@@ -263,6 +264,21 @@ const menuFilesView = ref([
   },
 ]);
 
+const menuUploadOptions = computed(() => [
+  {
+    label: 'Upload Files',
+    icon: 'pi pi-file',
+    command: openPickerAndUploadFiles,
+    disabled: isUploading.value,
+  },
+  {
+    label: 'Upload Folder',
+    icon: 'pi pi-folder',
+    command: openFolderPickerAndUploadFiles,
+    disabled: isUploading.value,
+  },
+]);
+
 // Upload functions
 const emit = defineEmits(["show-notify", "hide-notify"]);
 const isUploading = computed(() => uploadStore.uploadProgress.isUploading);
@@ -321,7 +337,7 @@ const openPickerAndUploadFiles = async () => {
   let selected = await open({multiple: true});
   if (selected === null) return;
   if (!Array.isArray(selected)) selected = [selected];
-  
+
   const files = await Promise.all(
       selected.map(async (file) => {
         return {path: file, name: await basename(file)};
@@ -334,7 +350,7 @@ const openPickerAndUploadFiles = async () => {
 const openFolderPickerAndUploadFiles = async () => {
   const selected = await open({directory: true});
   if (selected === null) return;
-  
+
   const files = [{path: selected, name: await basename(selected)}];
   await uploadFiles(files);
 };
@@ -392,7 +408,7 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
   } catch (error: any) {
     emit("hide-notify");
     console.error("Error in uploadFiles:", error);
-    
+
     // Update modal if showing
     if (showUploadModal.value) {
       uploadError.value = error.message || "Unknown error occurred";
@@ -439,13 +455,13 @@ const handleDownloadFile = async (fileToDownload?: any) => {
   try {
     const file = fileToDownload || selectedFileItem.value;
     const fileName = file.name || 'downloaded_file';
-    
+
     const downloadId = downloadsStore.createDownload(file);
 
     let fileData = file;
     if (!file.is_loaded && !file.is_loading) {
-      downloadsStore.updateDownload(downloadId, { status: 'loading' });
-      
+      downloadsStore.updateDownload(downloadId, {status: 'loading'});
+
       try {
         fileData = await fileStore.loadSingleFileData(file);
       } catch (error) {
@@ -464,7 +480,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
       }
     }
 
-    downloadsStore.updateDownload(downloadId, { status: 'downloading' });
+    downloadsStore.updateDownload(downloadId, {status: 'downloading'});
 
     try {
       const downloadsPath = await downloadDir();
@@ -715,69 +731,57 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="pr-[66px] pl-[66px] lg:pl-[110px] mt-10">
+  <div class="mt-10">
     <!-- Tab System -->
-    <div class="-ml-[30px] -mr-[30px] lg:-ml-0 lg:-mr-0">
-      <TabView v-model:activeIndex="activeTab" class="vault-tabs">
-        <!-- Files Tab -->
-        <TabPanel header="Files" :value="0">
-          <!-- Upload Controls -->
-          <div class="flex items-center justify-between mb-6">
-            <div class="flex gap-3">
-              <CommonButton
-                  variant="secondary"
-                  @click="openPickerAndUploadFiles"
-                  :disabled="isUploading"
-                  size="medium"
-                  class="px-4 py-3 h-12"
-              >
-                <i class="pi pi-upload mr-2"/>
-                <span v-if="!isUploading">Upload Files</span>
-                <span v-else>Uploading...</span>
-              </CommonButton>
-              <CommonButton
-                  variant="secondary"
-                  @click="openFolderPickerAndUploadFiles"
-                  :disabled="isUploading"
-                  size="medium"
-                  class="px-4 py-3 h-12"
-              >
-                <i class="pi pi-folder mr-2"/>
-                <span v-if="!isUploading">Upload Folder</span>
-                <span v-else>Uploading...</span>
-              </CommonButton>
-            </div>
+    <div>
+      <!-- Upload Controls -->
+      <div class="mx-[6rem] flex items-center justify-between mb-6">
+        <div class="flex gap-3">
+          <!-- Empty left side -->
+        </div>
 
-            <div class="flex items-center gap-3">
-              <div
-                  v-if="currentDirectory?.parent"
-                  class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
-                  @click="handleGoBack(currentDirectory.parent)"
-              >
-                <i class="pi pi-reply -scale-x-100 translate"/>
-              </div>
-
-              <div
-                  class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-                  v-tooltip.bottom="'Refresh files'"
-                  @click="fileStore.getAllFiles()"
-              >
-                <i class="pi pi-refresh"/>
-              </div>
-
-              <div
-                  class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-                  @click="$event => { refFilesViewMenu.toggle($event); }"
-              >
-                <i class="pi pi-bars"/>
-              </div>
-            </div>
+        <div class="flex items-center gap-3">
+          <div
+              v-if="currentDirectory?.parent"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+              @click="handleGoBack(currentDirectory.parent)"
+          >
+            <i class="pi pi-reply -scale-x-100 translate"/>
           </div>
 
+          <div
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+              @click="$event => { refUploadDropdown.toggle($event); }"
+              :class="{ 'opacity-50 cursor-not-allowed': isUploading }"
+              v-tooltip.bottom="'Upload'"
+          >
+            <i class="pi pi-plus"/>
+          </div>
+
+          <div
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+              v-tooltip.bottom="'Refresh files'"
+              @click="fileStore.getAllFiles()"
+          >
+            <i class="pi pi-refresh"/>
+          </div>
+
+          <div
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+              @click="$event => { refFilesViewMenu.toggle($event); }"
+          >
+            <i class="pi pi-bars"/>
+          </div>
+        </div>
+      </div>
+
+      <TabView v-model:activeIndex="activeTab">
+        <!-- Files Tab -->
+        <TabPanel header="Files" :value="0">
           <!-- Breadcrumbs -->
           <div
               v-if="breadcrumbs?.length > 0"
-              class="flex gap-4 items-center text-sm font-semibold flex-wrap mb-4"
+              class="mx-[6rem] flex gap-4 items-center text-sm font-semibold flex-wrap my-4"
           >
             <div
                 class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
@@ -811,7 +815,7 @@ onMounted(async () => {
               class="mt-6 grid grid-cols-12 font-semibold mb-10"
           >
             <div
-                class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] text-autonomi-red-300"
+                class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] text-autonomi-red-300"
             >
               Name
             </div>
@@ -841,7 +845,7 @@ onMounted(async () => {
               >
                 <!-- Folder/File Name -->
                 <div
-                    class="col-span-11 md:col-span-9 xl:col-span-8 pl-[80px] lg:pl-[110px] flex items-center"
+                    class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] flex items-center"
                 >
                   <template v-if="file.is_failed_archive">
                     <!-- This is a failed archive -->
@@ -956,13 +960,13 @@ onMounted(async () => {
                         />
                       </div>
                     </template>
-                    
+
                     <div class="flex flex-col items-center justify-center flex-1 gap-2">
                       <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-4xl text-red-500"/>
                       <i v-else-if="file.path" class="pi pi-file text-4xl"/>
                       <i v-else class="pi pi-folder text-4xl"/>
-                      
-                      <span 
+
+                      <span
                           class="text-center text-sm truncate w-full cursor-pointer"
                           @click.stop="file.path ? handleFileNameClick(file) : null"
                       >
@@ -978,8 +982,7 @@ onMounted(async () => {
 
         <!-- Uploads Tab -->
         <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="1">
-          <div class="space-y-4">
-            <h3 class="text-lg font-semibold">Active Uploads</h3>
+          <div class="mx-[6rem] space-y-4">
             <div v-if="uploadsStore.activeUploads.length > 0" class="space-y-3">
               <div
                   v-for="upload in uploadsStore.activeUploads"
@@ -1009,8 +1012,7 @@ onMounted(async () => {
 
         <!-- Downloads Tab -->
         <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="2">
-          <div class="space-y-4">
-            <h3 class="text-lg font-semibold">Active Downloads</h3>
+          <div class="mx-[6rem] space-y-4">
             <div v-if="downloadsStore.activeDownloads.length > 0" class="space-y-3">
               <div
                   v-for="download in downloadsStore.activeDownloads"
@@ -1091,6 +1093,31 @@ onMounted(async () => {
                 :key="item.label"
                 class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
                 @click="item.command"
+            >
+              <i :class="item.icon"/>
+              <div>
+                {{ item.label }}
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </Popover>
+
+    <!-- UPLOAD DROPDOWN POPOVER -->
+    <Popover ref="refUploadDropdown" class="syslog-menu">
+      <div class="flex flex-col gap-4">
+        <div>
+          <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
+            <li
+                v-for="item in menuUploadOptions"
+                :key="item.label"
+                class="flex items-center gap-2 py-3 px-5 rounded-border rounded-2xl"
+                :class="{
+                  'hover:bg-autonomi-gray-100 cursor-pointer': !item.disabled,
+                  'opacity-50 cursor-not-allowed': item.disabled
+                }"
+                @click="!item.disabled && item.command && item.command()"
             >
               <i :class="item.icon"/>
               <div>

@@ -122,7 +122,12 @@ onMounted(async () => {
           <div class="flex flex-col justify-start">
             <NuxtLink :class="`${classesLinks}`" to="/">
               <IconFiles class="w-6 h-6"/>
-              Vault
+              Home
+            </NuxtLink>
+
+            <NuxtLink :class="`${classesLinks}`" to="/vault">
+              <IconWallet class="w-6 h-6"/>
+              My Vault
             </NuxtLink>
 
             <NuxtLink :class="`${classesLinks}`" to="/settings">
