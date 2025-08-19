@@ -259,8 +259,48 @@ const menuUploads = computed(() => {
   return items;
 });
 
-const menuDownloads = ref([
-  {
+const menuDownloads = computed(() => {
+  const download = selectedDownloadItem.value;
+  const items = [];
+
+  if (download?.status === 'failed') {
+    items.push({
+      label: 'Retry',
+      icon: 'pi pi-refresh',
+      command: () => {
+        if (selectedDownloadItem.value) {
+          downloadsStore.retryDownload(selectedDownloadItem.value.id);
+        }
+      },
+    });
+  }
+
+  if (['pending', 'loading', 'downloading'].includes(download?.status)) {
+    items.push({
+      label: 'Cancel',
+      icon: 'pi pi-ban',
+      command: () => {
+        if (selectedDownloadItem.value) {
+          downloadsStore.cancelDownload(selectedDownloadItem.value.id);
+        }
+      },
+    });
+  }
+
+  if (download?.status === 'completed' && download?.downloadPath) {
+    items.push({
+      label: 'Show in Finder',
+      icon: 'pi pi-folder-open',
+      command: () => {
+        if (selectedDownloadItem.value?.downloadPath) {
+          // This would need Tauri's shell API to open file location
+          console.log('Show file location:', selectedDownloadItem.value.downloadPath);
+        }
+      },
+    });
+  }
+
+  items.push({
     label: 'Remove',
     icon: 'pi pi-times',
     command: () => {
@@ -268,8 +308,10 @@ const menuDownloads = ref([
         downloadsStore.removeDownload(selectedDownloadItem.value.id);
       }
     },
-  },
-]);
+  });
+
+  return items;
+});
 
 // View functions
 const handleShowListView = () => {
@@ -1259,29 +1301,163 @@ onUnmounted(() => {
         <!-- Downloads Tab -->
         <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="2">
           <div class="mx-[6rem] space-y-4">
-            <div v-if="downloadsStore.activeDownloads.length > 0" class="space-y-3">
-              <div
-                  v-for="download in downloadsStore.activeDownloads"
-                  :key="download.id"
-                  class="p-4 border rounded-lg"
-              >
-                <div class="flex justify-between items-center mb-2">
-                  <span class="font-medium">{{ download.fileName }}</span>
-                  <span class="text-sm text-gray-500">{{ download.status }}</span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                      class="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      :style="`width: ${download.progress}%`"
-                  />
-                </div>
-                <div class="text-xs text-gray-500 mt-1">
-                  {{ download.progress }}%
+            <!-- Active Downloads -->
+            <div v-if="downloadsStore.activeDownloads.length > 0" class="space-y-2">
+              <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
+                In Progress
+              </h3>
+              <div class="space-y-1">
+                <div
+                    v-for="download in downloadsStore.activeDownloads"
+                    :key="download.id"
+                    class="py-3"
+                >
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-3 flex-1">
+                      <!-- Icon -->
+                      <i class="pi pi-file text-autonomi-blue-600 dark:text-autonomi-blue-400" />
+                      
+                      <!-- Name in blue -->
+                      <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
+                        {{ download.fileName }}
+                      </span>
+                      
+                      <!-- Download duration -->
+                      <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
+                        {{ formatUploadDuration(download.createdAt) }}
+                      </span>
+                    </div>
+                    
+                    <!-- Menu icon -->
+                    <i
+                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        @click.stop="
+                          selectedDownloadItem = download;
+                          refDownloadMenu.toggle($event);
+                        "
+                    />
+                  </div>
+
+                  <!-- Progress bar -->
+                  <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                        class="h-1.5 rounded-full transition-all duration-300"
+                        :class="{
+                          'bg-blue-500': download.status === 'loading',
+                          'bg-green-500': download.status === 'downloading'
+                        }"
+                        :style="`width: ${download.progress}%`"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-            <div v-else class="text-center py-8 text-gray-500">
-              No active downloads
+            
+            <!-- Completed Downloads -->
+            <div v-if="downloadsStore.completedDownloads.length > 0" class="space-y-2 mt-8">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                  Completed
+                </h3>
+                <button
+                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                    @click="downloadsStore.clearCompleted()"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div class="space-y-1">
+                <div
+                    v-for="download in downloadsStore.completedDownloads.slice(0, 10)"
+                    :key="download.id"
+                    class="py-2 flex items-center justify-between"
+                >
+                  <div class="flex items-center gap-3">
+                    <!-- Icon -->
+                    <i class="pi pi-file text-green-600 dark:text-green-400" />
+                    
+                    <!-- Name -->
+                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                      {{ download.fileName }}
+                    </span>
+                    
+                    <!-- Duration -->
+                    <span class="text-sm text-gray-500 dark:text-gray-400">
+                      took {{ formatUploadDuration(download.createdAt, download.completedAt) }}
+                    </span>
+                    
+                    <!-- Download location -->
+                    <span class="text-sm text-gray-500 dark:text-gray-400" v-if="download.downloadPath">
+                      - {{ download.downloadPath.split('/').pop() }}
+                    </span>
+                  </div>
+                  
+                  <!-- Menu icon -->
+                  <i
+                      class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                      @click.stop="
+                        selectedDownloadItem = download;
+                        refDownloadMenu.toggle($event);
+                      "
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <!-- Failed Downloads -->
+            <div v-if="downloadsStore.failedDownloads.length > 0" class="space-y-2 mt-8">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                  Failed
+                </h3>
+                <button
+                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                    @click="downloadsStore.clearFailed()"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div class="space-y-1">
+                <div
+                    v-for="download in downloadsStore.failedDownloads.slice(0, 10)"
+                    :key="download.id"
+                    class="py-2 flex items-center justify-between"
+                >
+                  <div class="flex items-center gap-3 flex-1">
+                    <!-- Icon -->
+                    <i class="pi pi-file text-red-600 dark:text-red-400" />
+                    
+                    <!-- Name -->
+                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                      {{ download.fileName }}
+                    </span>
+                    
+                    <!-- Error message -->
+                    <span class="text-sm text-red-600 dark:text-red-400" v-if="download.error">
+                      - {{ download.error }}
+                    </span>
+                  </div>
+                  
+                  <div class="flex items-center gap-2">
+                    <i
+                        class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
+                        @click.stop="downloadsStore.retryDownload(download.id)"
+                        v-tooltip.top="'Retry download'"
+                    />
+                    <i
+                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        @click.stop="
+                          selectedDownloadItem = download;
+                          refDownloadMenu.toggle($event);
+                        "
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="downloadsStore.sortedDownloads.length === 0" class="text-center py-8 text-gray-500">
+              No downloads yet
             </div>
           </div>
         </TabPanel>
