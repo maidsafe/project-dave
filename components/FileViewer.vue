@@ -218,8 +218,35 @@ const menuFiles = computed(() => {
   return items;
 });
 
-const menuUploads = ref([
-  {
+const menuUploads = computed(() => {
+  const upload = selectedUploadItem.value;
+  const items = [];
+
+  if (upload?.status === 'failed') {
+    items.push({
+      label: 'Retry',
+      icon: 'pi pi-refresh',
+      command: () => {
+        if (selectedUploadItem.value) {
+          uploadsStore.retryUpload(selectedUploadItem.value.id);
+        }
+      },
+    });
+  }
+
+  if (['pending', 'processing', 'encrypting', 'quoting', 'payment', 'uploading'].includes(upload?.status)) {
+    items.push({
+      label: 'Cancel',
+      icon: 'pi pi-ban',
+      command: () => {
+        if (selectedUploadItem.value) {
+          uploadsStore.cancelUpload(selectedUploadItem.value.id);
+        }
+      },
+    });
+  }
+
+  items.push({
     label: 'Remove',
     icon: 'pi pi-times',
     command: () => {
@@ -227,8 +254,10 @@ const menuUploads = ref([
         uploadsStore.removeUpload(selectedUploadItem.value.id);
       }
     },
-  },
-]);
+  });
+
+  return items;
+});
 
 const menuDownloads = ref([
   {
@@ -541,6 +570,24 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
+const formatUploadDuration = (startTime: Date, endTime?: Date): string => {
+  const start = new Date(startTime);
+  const end = endTime ? new Date(endTime) : new Date();
+  const durationMs = end.getTime() - start.getTime();
+  
+  const seconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+};
+
 const secondsToDate = (seconds: number): Date => {
   return new Date(seconds * 1000);
 };
@@ -586,6 +633,7 @@ const setupEventListeners = async () => {
   // Set up upload progress event listener
   await listen("upload-progress", (event: any) => {
     const payload = event.payload;
+    console.log(">>> Upload progress event:", payload.type, payload);
 
     switch (payload.type) {
       case "Started":
@@ -661,6 +709,7 @@ const setupEventListeners = async () => {
         uploadStore.updateUploading(payload.chunks_uploaded || 0, payload.total_chunks || 0);
         if (currentUploadId.value) {
           const progress = payload.total_chunks > 0 ? Math.round((payload.chunks_uploaded / payload.total_chunks) * 100) : 0;
+          console.log(`>>> Updating upload ${currentUploadId.value} with chunks: ${payload.chunks_uploaded}/${payload.total_chunks}, progress: ${progress}%`);
           // NOW the upload becomes active after payment completion
           uploadsStore.updateUpload(currentUploadId.value, {
             status: 'uploading',
@@ -668,26 +717,52 @@ const setupEventListeners = async () => {
             totalChunks: payload.total_chunks || 0,
             progress
           });
+        } else {
+          console.log(">>> No currentUploadId when handling Uploading event");
         }
         if (showUploadModal.value) {
           // If we reach uploading, the payment was approved
           updateStepStatus('quoting', 'completed', 'Quote received');
           updateStepStatus('payment-request', 'completed', 'Payment authorized');
 
-          // Close modal and show progress table
+          // Close modal and show progress table (but keep upload ID active)
           showUploadModal.value = false;
-          handleCancelUploadModal(); // Clean up modal state
+          // Switch to uploads tab to show the active upload
+          activeTab.value = 1;
+          // Don't call handleCancelUploadModal() here - we need currentUploadId for subsequent events
+          pendingUploadFiles.value = null;
+          uploadSteps.value = [];
+          currentUploadStep.value = '';
+          uploadError.value = '';
+          quoteData.value = null;
         }
         break;
 
       case "Completed":
+        console.log(">>> Upload completed event received", payload);
         uploadStore.completeUpload();
         if (currentUploadId.value) {
+          console.log(`>>> Marking upload ${currentUploadId.value} as completed`);
           uploadsStore.updateUpload(currentUploadId.value, {
             status: 'completed',
             progress: 100,
             completedAt: new Date()
           });
+          // Clear the current upload ID now that upload is truly complete
+          currentUploadId.value = null;
+        } else {
+          console.log(">>> No currentUploadId when handling Completed event - checking for active uploads");
+          // If no currentUploadId but we have active uploads, mark the most recent one as completed
+          const activeUploads = uploadsStore.activeUploads;
+          if (activeUploads.length > 0) {
+            const mostRecentUpload = activeUploads[0]; // They're sorted by creation time
+            console.log(`>>> Marking most recent active upload ${mostRecentUpload.id} as completed`);
+            uploadsStore.updateUpload(mostRecentUpload.id, {
+              status: 'completed',
+              progress: 100,
+              completedAt: new Date()
+            });
+          }
         }
         // Auto-refresh files after upload completion
         setTimeout(() => {
@@ -704,6 +779,8 @@ const setupEventListeners = async () => {
             error: payload.error || "Unknown error",
             completedAt: new Date()
           });
+          // Clear the current upload ID since upload failed
+          currentUploadId.value = null;
         }
         if (showUploadModal.value) {
           uploadError.value = payload.error || "Unknown error";
@@ -721,11 +798,39 @@ setupEventListeners().catch(err => {
   console.error('>>> Error setting up event listeners:', err);
 });
 
+// Auto-detect stuck uploads (runs every 30 seconds)
+let stuckUploadCheckInterval: ReturnType<typeof setInterval> | null = null;
+
 onMounted(async () => {
   try {
     fileStore.getAllFiles();
   } catch (err) {
     console.log('>>> Error getting files: ', err);
+  }
+
+  // Start checking for stuck uploads every 30 seconds
+  stuckUploadCheckInterval = setInterval(() => {
+    const now = new Date();
+    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000); // 10 minutes ago
+
+    uploadsStore.activeUploads.forEach(upload => {
+      const createdAt = new Date(upload.createdAt);
+      // If an upload has been active for more than 10 minutes without completion, mark it as completed
+      if (createdAt < tenMinutesAgo && upload.status === 'uploading' && upload.progress >= 90) {
+        console.log(`>>> Auto-completing stuck upload ${upload.id} (created ${createdAt}, status: ${upload.status}, progress: ${upload.progress}%)`);
+        uploadsStore.updateUpload(upload.id, {
+          status: 'completed',
+          progress: 100,
+          completedAt: new Date()
+        });
+      }
+    });
+  }, 30000); // Check every 30 seconds
+});
+
+onUnmounted(() => {
+  if (stuckUploadCheckInterval) {
+    clearInterval(stuckUploadCheckInterval);
   }
 });
 </script>
@@ -983,29 +1088,170 @@ onMounted(async () => {
         <!-- Uploads Tab -->
         <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="1">
           <div class="mx-[6rem] space-y-4">
-            <div v-if="uploadsStore.activeUploads.length > 0" class="space-y-3">
-              <div
-                  v-for="upload in uploadsStore.activeUploads"
-                  :key="upload.id"
-                  class="p-4 border rounded-lg"
-              >
-                <div class="flex justify-between items-center mb-2">
-                  <span class="font-medium">{{ upload.name }}</span>
-                  <span class="text-sm text-gray-500">{{ upload.status }}</span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                      class="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      :style="`width: ${upload.progress}%`"
-                  />
-                </div>
-                <div class="text-xs text-gray-500 mt-1">
-                  {{ upload.progress }}% - {{ upload.filesProcessed }} of {{ upload.totalFiles }} files
+            <!-- Active Uploads -->
+            <div v-if="uploadsStore.activeUploads.length > 0" class="space-y-2">
+              <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
+                In Progress
+              </h3>
+              <div class="space-y-1">
+                <div
+                    v-for="upload in uploadsStore.activeUploads"
+                    :key="upload.id"
+                    class="py-3"
+                >
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-3 flex-1">
+                      <!-- Icon -->
+                      <i 
+                        class="pi text-autonomi-blue-600 dark:text-autonomi-blue-400"
+                        :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
+                      />
+                      
+                      <!-- Name in blue -->
+                      <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
+                        {{ upload.name }}
+                      </span>
+                      
+                      <!-- Upload duration -->
+                      <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
+                        {{ formatUploadDuration(upload.createdAt) }}
+                      </span>
+                    </div>
+                    
+                    <!-- Menu icon -->
+                    <i
+                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        @click.stop="
+                          selectedUploadItem = upload;
+                          refUploadMenu.toggle($event);
+                        "
+                    />
+                  </div>
+
+                  <!-- Progress bar -->
+                  <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                        class="h-1.5 rounded-full transition-all duration-300"
+                        :class="{
+                          'bg-blue-500': upload.status === 'pending' || upload.status === 'processing',
+                          'bg-purple-500': upload.status === 'encrypting',
+                          'bg-orange-500': upload.status === 'quoting',
+                          'bg-yellow-500': upload.status === 'payment',
+                          'bg-green-500': upload.status === 'uploading'
+                        }"
+                        :style="`width: ${upload.progress}%`"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-            <div v-else class="text-center py-8 text-gray-500">
-              No active uploads
+
+            <!-- Completed uploads -->
+            <div v-if="uploadsStore.completedUploads.length > 0" class="space-y-2 mt-8">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                  Completed
+                </h3>
+                <button
+                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                    @click="uploadsStore.clearCompleted()"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div class="space-y-1">
+                <div
+                    v-for="upload in uploadsStore.completedUploads.slice(0, 10)"
+                    :key="upload.id"
+                    class="py-2 flex items-center justify-between"
+                >
+                  <div class="flex items-center gap-3">
+                    <!-- Icon -->
+                    <i 
+                      class="pi text-green-600 dark:text-green-400"
+                      :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
+                    />
+                    
+                    <!-- Name -->
+                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                      {{ upload.name }}
+                    </span>
+                    
+                    <!-- Duration -->
+                    <span class="text-sm text-gray-500 dark:text-gray-400">
+                      took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
+                    </span>
+                  </div>
+                  
+                  <!-- Menu icon -->
+                  <i
+                      class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                      @click.stop="
+                        selectedUploadItem = upload;
+                        refUploadMenu.toggle($event);
+                      "
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Failed uploads -->
+            <div v-if="uploadsStore.failedUploads.length > 0" class="space-y-2 mt-8">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                  Failed
+                </h3>
+                <button
+                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                    @click="uploadsStore.clearFailed()"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div class="space-y-1">
+                <div
+                    v-for="upload in uploadsStore.failedUploads.slice(0, 10)"
+                    :key="upload.id"
+                    class="py-2 flex items-center justify-between"
+                >
+                  <div class="flex items-center gap-3 flex-1">
+                    <!-- Icon -->
+                    <i 
+                      class="pi text-red-600 dark:text-red-400"
+                      :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
+                    />
+                    
+                    <!-- Name -->
+                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                      {{ upload.name }}
+                    </span>
+                    
+                    <!-- Error message -->
+                    <span class="text-sm text-red-600 dark:text-red-400" v-if="upload.error">
+                      - {{ upload.error }}
+                    </span>
+                  </div>
+                  
+                  <div class="flex items-center gap-2">
+                    <i
+                        class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
+                        @click.stop="uploadsStore.retryUpload(upload.id)"
+                        v-tooltip.top="'Retry upload'"
+                    />
+                    <i
+                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        @click.stop="
+                          selectedUploadItem = upload;
+                          refUploadMenu.toggle($event);
+                        "
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="uploadsStore.sortedUploads.length === 0" class="text-center py-8 text-gray-500">
+              No uploads yet
             </div>
           </div>
         </TabPanel>

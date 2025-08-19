@@ -432,6 +432,7 @@ pub async fn upload_private_files_to_vault(
             tracing::debug!("Uploading chunks..");
             
             // Emit uploading progress
+            tracing::debug!("Emitting initial Uploading progress: 0/{} chunks", total_chunks);
             let _ = app_clone.emit("upload-progress", UploadProgress::Uploading {
                 chunks_uploaded: 0,
                 total_chunks,
@@ -450,6 +451,15 @@ pub async fn upload_private_files_to_vault(
                 });
                 return;
             }
+            
+            // Emit final progress update showing all chunks uploaded
+            tracing::debug!("Emitting final Uploading progress: {}/{} chunks", total_chunks, total_chunks);
+            let _ = app_clone.emit("upload-progress", UploadProgress::Uploading {
+                chunks_uploaded: total_chunks,
+                total_chunks,
+                bytes_uploaded: total_size,
+                total_bytes: total_size,
+            });
 
             let result = client
                 .put_user_data_to_vault(&secret_key, receipt.into(), user_data)

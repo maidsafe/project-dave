@@ -16,10 +16,10 @@ export interface UploadItem {
 }
 
 export const useUploadsStore = defineStore('uploads', () => {
-  const uploads = ref<Map<string, UploadItem>>(new Map());
+  const uploads = ref<UploadItem[]>([]);
 
   const sortedUploads = computed(() => {
-    return Array.from(uploads.value.values())
+    return uploads.value
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   });
 
@@ -61,20 +61,26 @@ export const useUploadsStore = defineStore('uploads', () => {
       createdAt: new Date()
     };
 
-    uploads.value.set(uploadId, upload);
+    uploads.value.push(upload);
     return uploadId;
   };
 
   const updateUpload = (uploadId: string, updates: Partial<UploadItem>) => {
-    const upload = uploads.value.get(uploadId);
-    if (upload) {
-      const updated = { ...upload, ...updates };
-      uploads.value.set(uploadId, updated);
+    const index = uploads.value.findIndex(upload => upload.id === uploadId);
+    if (index !== -1) {
+      const updated = { ...uploads.value[index], ...updates };
+      console.log(`>>> Uploads store: updating upload ${uploadId}`, updates, 'new state:', updated);
+      uploads.value[index] = updated;
+    } else {
+      console.log(`>>> Uploads store: upload ${uploadId} not found when trying to update`);
     }
   };
 
   const removeUpload = (uploadId: string) => {
-    uploads.value.delete(uploadId);
+    const index = uploads.value.findIndex(upload => upload.id === uploadId);
+    if (index !== -1) {
+      uploads.value.splice(index, 1);
+    }
   };
 
   const cancelUpload = (uploadId: string) => {
@@ -97,19 +103,11 @@ export const useUploadsStore = defineStore('uploads', () => {
   };
 
   const clearCompleted = () => {
-    const completedIds = Array.from(uploads.value.entries())
-      .filter(([_, upload]) => upload.status === 'completed')
-      .map(([id, _]) => id);
-    
-    completedIds.forEach(id => uploads.value.delete(id));
+    uploads.value = uploads.value.filter(upload => upload.status !== 'completed');
   };
 
   const clearFailed = () => {
-    const failedIds = Array.from(uploads.value.entries())
-      .filter(([_, upload]) => upload.status === 'failed')
-      .map(([id, _]) => id);
-    
-    failedIds.forEach(id => uploads.value.delete(id));
+    uploads.value = uploads.value.filter(upload => upload.status !== 'failed');
   };
 
   return {

@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import { usePaymentStore } from "~/stores/payments";
-import { storeToRefs } from "pinia";
+import {usePaymentStore} from "~/stores/payments";
+import {storeToRefs} from "pinia";
 
 interface UploadStep {
   key: string;
@@ -41,7 +41,7 @@ const {
 
 const handleSelectPayment = (payment: any) => {
   console.log(">>> handleSelectPayment", payment);
-  
+
   // Reset payment timer
   paymentStore.resetExpirationTime(payment.order.id);
 
@@ -102,12 +102,12 @@ let interval: any;
 const startCountdown = () => {
   if (currentPayment.value) {
     remainingTime.value = paymentStore.calculateRemainingTime(currentPayment.value.expires);
-    
+
     interval = setInterval(() => {
       if (currentPayment.value) {
         const time = paymentStore.calculateRemainingTime(currentPayment.value.expires);
         remainingTime.value = time;
-        
+
         if (time === "00:00:00") {
           clearInterval(interval);
         }
@@ -143,16 +143,16 @@ watchEffect(() => {
 
 <template>
   <Dialog
-    :visible="props.visible"
-    modal
-    header="Upload Progress"
-    :style="{width: '32rem'}"
-    position="center"
-    :closable="canClose"
-    :draggable="false"
-    pt:root:class="!border-0"
-    pt:mask:class="backdrop-blur-sm"
-    @hide="emit('close-modal')"
+      :visible="props.visible"
+      modal
+      header="Upload Progress"
+      :style="{width: '32rem'}"
+      position="center"
+      :closable="canClose"
+      :draggable="false"
+      pt:root:class="!border-0"
+      pt:mask:class="backdrop-blur-sm"
+      @hide="emit('close-modal')"
   >
     <template #header>
       <div class="flex items-center gap-3">
@@ -173,16 +173,20 @@ watchEffect(() => {
     <div class="space-y-6">
       <!-- Progress Steps -->
       <div v-if="steps && steps.length > 0" class="space-y-3">
-        <div v-for="step in steps" :key="step.key" class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-autonomi-gray-700">
+        <div v-for="step in steps" :key="step.key"
+             class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-autonomi-gray-700">
           <!-- Status Icon -->
           <div class="flex-shrink-0">
-            <div v-if="step.status === 'completed'" class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+            <div v-if="step.status === 'completed'"
+                 class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
               <i class="pi pi-check text-white text-sm"/>
             </div>
-            <div v-else-if="step.status === 'processing'" class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+            <div v-else-if="step.status === 'processing'"
+                 class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
               <i class="pi pi-spinner pi-spin text-white text-sm"/>
             </div>
-            <div v-else-if="step.status === 'error'" class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+            <div v-else-if="step.status === 'error'"
+                 class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
               <i class="pi pi-times text-white text-sm"/>
             </div>
             <div v-else class="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
@@ -206,7 +210,7 @@ watchEffect(() => {
             <!-- Progress bar for processing steps -->
             <div v-if="step.status === 'processing' && step.progress !== undefined" class="mt-2">
               <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                <div class="bg-blue-500 h-1.5 rounded-full transition-all duration-300" 
+                <div class="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
                      :style="`width: ${step.progress}%`"></div>
               </div>
             </div>
@@ -275,17 +279,17 @@ watchEffect(() => {
     <template #footer>
       <div class="flex justify-end items-center gap-3 py-3">
         <Button
-          label="Cancel"
-          severity="secondary"
-          text
-          @click="handleCancel"
+            label="Cancel"
+            severity="secondary"
+            text
+            @click="handleCancel"
         />
         <Button
-          v-if="currentStep === 'payment-request' && quoteData?.paymentRequired !== false"
-          label="Pay"
-          icon="pi pi-wallet"
-          severity="primary"
-          @click="$emit('pay-upload')"
+            v-if="currentStep === 'payment-request' && quoteData?.paymentRequired !== false"
+            label="Pay & Upload"
+            icon="pi pi-wallet"
+            severity="primary"
+            @click="$emit('pay-upload')"
         />
       </div>
     </template>
