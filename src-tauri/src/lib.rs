@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
-use ant::{app_data::AppData, files::{FileFromVault, VaultStructure}};
+use ant::{
+    app_data::AppData,
+    files::{FileFromVault, VaultStructure},
+};
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
 use serde::{Deserialize, Serialize};
@@ -159,29 +162,28 @@ async fn confirm_payment(
 }
 
 #[tauri::command]
-async fn get_unique_download_path(
-    downloads_path: String,
-    filename: String,
-) -> Result<String, ()> {
+async fn get_unique_download_path(downloads_path: String, filename: String) -> Result<String, ()> {
     use std::path::Path;
-    
+
     let base_path = Path::new(&downloads_path);
     let file_path = base_path.join(&filename);
-    
+
     // If file doesn't exist, return original path
     if !file_path.exists() {
         return Ok(file_path.to_string_lossy().to_string());
     }
-    
+
     // Extract name and extension
-    let stem = file_path.file_stem()
+    let stem = file_path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("file");
-    let extension = file_path.extension()
+    let extension = file_path
+        .extension()
         .and_then(|s| s.to_str())
         .map(|s| format!(".{}", s))
         .unwrap_or_default();
-    
+
     // Try numbered variants until we find one that doesn't exist
     for i in 1..1000 {
         let new_filename = format!("{} ({}){}", stem, i, extension);
@@ -190,7 +192,7 @@ async fn get_unique_download_path(
             return Ok(new_path.to_string_lossy().to_string());
         }
     }
-    
+
     // Fallback if we can't find a unique name
     Err(())
 }
@@ -198,7 +200,6 @@ async fn get_unique_download_path(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(SharedClient::default())
         .manage(PaymentOrderManager::default())

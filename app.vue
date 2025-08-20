@@ -3,7 +3,6 @@ import {createAppKit} from '@reown/appkit/vue';
 import {networks, projectId, wagmiAdapter} from '~/config';
 import {useFileStore} from '~/stores/files';
 import {storeToRefs} from 'pinia';
-import {updater} from './lib/updater';
 import {reconnect} from '@wagmi/core';
 
 createAppKit({
@@ -92,7 +91,6 @@ onMounted(async () => {
       removeSplashScreen.value = true;
     }, 2000);
   }, 2000);
-  updater();
 });
 </script>
 
