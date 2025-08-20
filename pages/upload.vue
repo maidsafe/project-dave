@@ -74,8 +74,15 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
       title: "Invoice",
       details: "Please wait - fetching invoice details.",
     });
+    
+    // Generate archive name
+    const archiveName = files.length === 1 
+      ? files[0].name  // Single file: use filename
+      : `${files.length}_files_${Date.now()}`; // Multiple files: use count and timestamp
+
     const uploadResponse = await invoke("upload_files", {
       files,
+      archiveName,
       vaultKeySignature,
     });
     console.log(">>> UPLOAD.VUE INVOKED UPLOAD_FILES COMPLETE");

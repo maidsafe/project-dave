@@ -1,5 +1,5 @@
 import {invoke} from "@tauri-apps/api/core";
-import type {IFolder, IFile} from "~/types/folder";
+import type {IFolder, IFile, IVaultStructure, IArchive, IFailedArchive, IFileMetadata} from "~/types/folder";
 import {useWalletStore} from "~/stores/wallet";
 
 export const useFileStore = defineStore("files", () => {
@@ -13,10 +13,14 @@ export const useFileStore = defineStore("files", () => {
         paths: any;
         parent: any;
         children: any[] = [];
+        isArchive: boolean = false;
+        archive?: IArchive;
 
-        constructor(name: string, parent = null, paths = null) {
+        constructor(name: string, parent = null, paths = null, isArchive = false, archive?: IArchive) {
             this.name = name;
             this.parent = parent;
+            this.isArchive = isArchive;
+            this.archive = archive;
             // this.paths = paths;
         }
 
@@ -69,8 +73,8 @@ export const useFileStore = defineStore("files", () => {
 
     // State
     const files = ref<IFile[]>([]);
-    const vaultStructure = ref<any>(null);
-    const failedArchives = ref<any[]>([]);
+    const vaultStructure = ref<IVaultStructure | null>(null);
+    const failedArchives = ref<IFailedArchive[]>([]);
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
     const pendingFilesSignature = ref(false);
@@ -92,43 +96,98 @@ export const useFileStore = defineStore("files", () => {
             // Reset rootDirectory
             rootDirectory.value = null;
 
-            if (!files.value.length) {
+            if (!vaultStructure.value?.archives.length) {
                 return;
             }
 
-            console.log(">>> Building Local Drive...");
+            console.log(">>> Building Archive-based Local Drive...");
             rootDirectory.value = new Folder("Root");
 
-            files.value.forEach((file) => {
-                // TODO: Change Parents to a name that will not be used as a folder name
-                const paths = file.path.split("/").filter((name) => !!name); // Removes empty file names
-                let current: any = rootDirectory.value;
+            vaultStructure.value.archives.forEach((archive: IArchive, archiveIndex: number) => {
+                // Check if archive has a name (not empty after sanitization)
+                const hasName = archive.name && archive.name.trim() !== '';
+                
+                if (!hasName) {
+                    // Unnamed archive - add files directly to root
+                    archive.files.forEach((file: IFileMetadata) => {
+                        const fileParts = file.path.split("/").filter(part => part.length > 0);
+                        let current: any = rootDirectory.value;
 
-                paths.forEach((path: string, index: number) => {
-                    if (index === paths.length - 1) {
-                        // current[path] = file;
-                        current.addFile({
-                            ...file,
-                            name: path,
+                        fileParts.forEach((part: string, index: number) => {
+                            if (index === fileParts.length - 1) {
+                                // This is the file - add directly to current folder
+                                current.addFile({
+                                    path: file.path,
+                                    metadata: file.metadata,
+                                    file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
+                                    is_loaded: false,
+                                    is_loading: false,
+                                    load_error: false,
+                                    name: part,
+                                    archive_name: archive.name || `archive_${archiveIndex}`
+                                });
+                            } else {
+                                // This is a subdirectory - create regular folder (not archive folder)
+                                let subFolder = current.getChild(part);
+                                if (!subFolder) {
+                                    subFolder = new Folder(part, current);
+                                    current.addSubfolder(subFolder);
+                                }
+                                current = subFolder;
+                            }
                         });
-                    } else {
-                        // Add subfolder
-                        let newFolder = current.getChild(path);
-                        if (!newFolder) {
-                            newFolder = new Folder(path);
-                            current.addSubfolder(newFolder);
-                        }
-
-                        // Update current folder
-                        current = newFolder;
+                    });
+                } else {
+                    // Named archive - create archive folder with unique name if needed
+                    let archiveFolderName = archive.name;
+                    let counter = 1;
+                    
+                    // Handle duplicate archive names by appending a counter
+                    while (rootDirectory.value!.getChild(archiveFolderName)) {
+                        archiveFolderName = `${archive.name} (${counter})`;
+                        counter++;
                     }
-                });
+
+                    const archiveFolder = new Folder(archiveFolderName, rootDirectory.value, null, true, archive);
+                    rootDirectory.value!.addSubfolder(archiveFolder);
+
+                    // Add files within the archive folder
+                    archive.files.forEach((file: IFileMetadata) => {
+                        const fileParts = file.path.split("/").filter(part => part.length > 0);
+                        let current: any = archiveFolder;
+
+                        fileParts.forEach((part: string, index: number) => {
+                            if (index === fileParts.length - 1) {
+                                // This is the file
+                                current.addFile({
+                                    path: file.path,
+                                    metadata: file.metadata,
+                                    file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
+                                    is_loaded: false,
+                                    is_loading: false,
+                                    load_error: false,
+                                    name: part,
+                                    archive_name: archive.name
+                                });
+                            } else {
+                                // This is a subdirectory within the archive
+                                // Allow duplicate directory names within different archives by not checking globally
+                                let subFolder = current.getChild(part);
+                                if (!subFolder) {
+                                    subFolder = new Folder(part, current);
+                                    current.addSubfolder(subFolder);
+                                }
+                                current = subFolder;
+                            }
+                        });
+                    });
+                }
             });
 
             // Set current directory
             currentDirectory.value = rootDirectory.value;
         } catch (error) {
-            console.log(">>> ERROR: Failed to build local drive", error);
+            console.log(">>> ERROR: Failed to build archive-based local drive", error);
             rootDirectory.value = null;
         }
     };
@@ -158,17 +217,23 @@ export const useFileStore = defineStore("files", () => {
             vaultStructure.value = await invoke("get_vault_structure", {vaultKeySignature});
 
             // Store failed archives
-            failedArchives.value = vaultStructure.value.failed_archives || [];
+            failedArchives.value = vaultStructure.value?.failed_archives || [];
 
-            // Convert structure to files format for building directory
-            files.value = vaultStructure.value.files.map((file: any) => ({
-                path: file.path,
-                metadata: file.metadata,
-                file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
-                is_loaded: false,
-                is_loading: false,
-                load_error: false
-            }));
+            // For backward compatibility, create a flattened files array
+            // but now this is derived from the archive structure
+            files.value = [];
+            vaultStructure.value?.archives.forEach((archive: IArchive) => {
+                archive.files.forEach((file: IFileMetadata) => {
+                    files.value.push({
+                        path: file.path,
+                        metadata: file.metadata,
+                        file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
+                        is_loaded: false,
+                        is_loading: false,
+                        load_error: false
+                    });
+                });
+            });
 
             // Build Root Directory immediately
             buildRootDirectory();

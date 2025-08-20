@@ -4,6 +4,35 @@ export interface IFolder {
   children: IFolder[];
 }
 
+export interface IArchive {
+  name: string;
+  is_private: boolean;
+  files: IFileMetadata[];
+}
+
+export interface IVaultStructure {
+  archives: IArchive[];
+  failed_archives: IFailedArchive[];
+}
+
+export interface IFailedArchive {
+  name: string;
+  is_private: boolean;
+}
+
+export interface IFileMetadata {
+  path: string;
+  metadata: {
+    uploaded: number;
+    created: number;
+    modified: number;
+    size: number;
+  };
+  file_type: 'Public' | 'Private';
+  is_loaded: boolean;
+  archive_name: string;
+}
+
 export interface IFile {
   file_access: {
     Private: any[];

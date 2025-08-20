@@ -467,9 +467,15 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
       }
     }, 30000); // 30 seconds timeout
 
+    // Generate archive name
+    const archiveName = files.length === 1 
+      ? files[0].name  // Single file: use filename
+      : `${files.length}_files_${Date.now()}`; // Multiple files: use count and timestamp
+
     // Start the upload process
     await invoke("upload_files", {
       files,
+      archiveName,
       vaultKeySignature,
     });
 
@@ -1005,7 +1011,7 @@ onUnmounted(() => {
                     </span>
                     </template>
                     <template v-else-if="file?.path">
-                      <!-- This is the file -->
+                      <!-- This is a file -->
                       <i
                           v-if="/\\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
                           class="pi pi-image mr-4"
@@ -1028,10 +1034,12 @@ onUnmounted(() => {
                          v-tooltip.top="'Failed to load file data'"/>
                     </template>
                     <template v-else>
-                      <!-- This is the folder -->
-                      <i class="pi pi-folder mr-4"/><span
-                        class="line-clamp-one text-ellipsis"
-                    >{{ file.name }}</span>
+                      <!-- This is a folder or archive -->
+                      <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
+                      <span class="line-clamp-one text-ellipsis">{{ file.name }}</span>
+                      <span v-if="file.isArchive && file.archive" class="text-xs ml-2 text-amber-600 dark:text-amber-400">
+                        ({{ file.archive.is_private ? 'Private' : 'Public' }} Archive)
+                      </span>
                     </template>
                   </div>
 
@@ -1115,7 +1123,7 @@ onUnmounted(() => {
                     <div class="flex flex-col items-center justify-center flex-1 gap-2">
                       <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-4xl text-red-500"/>
                       <i v-else-if="file.path" class="pi pi-file text-4xl"/>
-                      <i v-else class="pi pi-folder text-4xl"/>
+                      <i v-else :class="file.isArchive ? 'pi pi-box text-4xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-4xl'"/>
 
                       <span
                           class="text-center text-sm truncate w-full cursor-pointer"

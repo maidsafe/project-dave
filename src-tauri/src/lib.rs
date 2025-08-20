@@ -57,6 +57,7 @@ async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result
 async fn upload_files(
     app: AppHandle,
     files: Vec<File>,
+    archive_name: Option<String>,
     vault_key_signature: String,
     shared_client: State<'_, SharedClient>,
     payment_orders: State<'_, PaymentOrderManager>,
@@ -66,9 +67,25 @@ async fn upload_files(
     )
     .expect("Invalid vault key signature");
 
+    // Generate archive name if not provided
+    let archive_name = archive_name.unwrap_or_else(|| {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        if files.len() == 1 {
+            files[0].name.clone()
+        } else {
+            format!("{}_files_{}", files.len(), timestamp)
+        }
+    });
+
     ant::files::upload_private_files_to_vault(
         app,
         files,
+        archive_name,
         &secret_key,
         shared_client,
         payment_orders,

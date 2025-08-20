@@ -2,26 +2,26 @@ use crate::ant::client::SharedClient;
 use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEOUT_SECS};
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::quote::{DataTypes, StoreQuote};
-use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
 use autonomi::client::vault::key::vault_key_from_signature_hex;
+use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
 use autonomi::client::GetError;
 use autonomi::data::DataAddress;
 use autonomi::files::{Metadata, PrivateArchive};
 use autonomi::vault::user_data::UserDataVaultError;
 use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::Duration;
-use std::collections::VecDeque;
 use tauri::{AppHandle, Emitter, State};
 use thiserror::Error as ThisError;
-use tokio::time::timeout;
 use tokio::fs;
+use tokio::time::timeout;
 
 #[derive(Deserialize)]
 pub struct File {
-    name: String,
-    path: PathBuf,
+    pub name: String,
+    pub path: PathBuf,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -107,16 +107,18 @@ pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError
 
 async fn calculate_total_size(files: &[File]) -> Result<u64, UploadError> {
     let mut total_size = 0u64;
-    
+
     for file in files {
-        let metadata = fs::metadata(&file.path).await
+        let metadata = fs::metadata(&file.path)
+            .await
             .map_err(|_| UploadError::Read(file.path.clone()))?;
-            
+
         if metadata.is_dir() {
             // Calculate directory size
             let collected_files = collect_files_from_directory(file.path.clone()).await?;
             for (_, absolute_path) in collected_files {
-                let file_metadata = fs::metadata(&absolute_path).await
+                let file_metadata = fs::metadata(&absolute_path)
+                    .await
                     .map_err(|_| UploadError::Read(absolute_path))?;
                 total_size += file_metadata.len();
             }
@@ -124,13 +126,15 @@ async fn calculate_total_size(files: &[File]) -> Result<u64, UploadError> {
             total_size += metadata.len();
         }
     }
-    
+
     Ok(total_size)
 }
 
 /// Collects files from a directory and its subdirectories, preserving relative paths.
 /// Returns a vector of tuples containing (relative_path, absolute_path).
-pub async fn collect_files_from_directory(dir_path: PathBuf) -> Result<Vec<(PathBuf, PathBuf)>, UploadError> {
+pub async fn collect_files_from_directory(
+    dir_path: PathBuf,
+) -> Result<Vec<(PathBuf, PathBuf)>, UploadError> {
     let mut files = Vec::new();
     let mut queue = VecDeque::new();
 
@@ -142,12 +146,15 @@ pub async fn collect_files_from_directory(dir_path: PathBuf) -> Result<Vec<(Path
     queue.push_back(dir_path.clone());
 
     while let Some(current_dir) = queue.pop_front() {
-        let mut entries = fs::read_dir(&current_dir).await
+        let mut entries = fs::read_dir(&current_dir)
+            .await
             .map_err(|_| UploadError::Read(current_dir.clone()))?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|_| UploadError::Read(current_dir.clone()))? {
-
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|_| UploadError::Read(current_dir.clone()))?
+        {
             let path = entry.path();
 
             if path.is_dir() {
@@ -182,6 +189,7 @@ pub async fn collect_files_from_directory(dir_path: PathBuf) -> Result<Vec<(Path
 pub async fn upload_private_files_to_vault(
     app: AppHandle,
     files: Vec<File>,
+    archive_name: String,
     secret_key: &VaultSecretKey,
     shared_client: State<'_, SharedClient>,
     payment_orders: State<'_, PaymentOrderManager>,
@@ -191,11 +199,15 @@ pub async fn upload_private_files_to_vault(
     // Calculate total size and emit start event
     let total_size = calculate_total_size(&files).await?;
     let total_files = files.len();
-    
-    app.emit("upload-progress", UploadProgress::Started {
-        total_files,
-        total_size,
-    }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
+    app.emit(
+        "upload-progress",
+        UploadProgress::Started {
+            total_files,
+            total_size,
+        },
+    )
+    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
     let mut aggregated_chunks: Vec<Chunk> = vec![];
     let mut aggregated_store_quote = StoreQuote(Default::default());
@@ -205,7 +217,8 @@ pub async fn upload_private_files_to_vault(
 
     for file in files {
         // Check if the path is a directory
-        let path_metadata = fs::metadata(&file.path).await
+        let path_metadata = fs::metadata(&file.path)
+            .await
             .map_err(|_| UploadError::Read(file.path.clone()))?;
 
         if path_metadata.is_dir() {
@@ -214,28 +227,36 @@ pub async fn upload_private_files_to_vault(
 
             for (relative_path, absolute_path) in collected_files {
                 // Emit processing progress
-                app.emit("upload-progress", UploadProgress::Processing {
-                    current_file: relative_path.to_string_lossy().to_string(),
-                    files_processed,
-                    total_files,
-                    bytes_processed,
-                    total_bytes: total_size,
-                }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-                
+                app.emit(
+                    "upload-progress",
+                    UploadProgress::Processing {
+                        current_file: relative_path.to_string_lossy().to_string(),
+                        files_processed,
+                        total_files,
+                        bytes_processed,
+                        total_bytes: total_size,
+                    },
+                )
+                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
                 let bytes: Bytes = read_file_to_bytes(absolute_path.clone()).await?;
                 let file_size = bytes.len() as u64;
-                
+
                 // Emit encrypting progress
-                app.emit("upload-progress", UploadProgress::Encrypting {
-                    current_file: relative_path.to_string_lossy().to_string(),
-                    files_processed,
-                    total_files,
-                }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-                
+                app.emit(
+                    "upload-progress",
+                    UploadProgress::Encrypting {
+                        current_file: relative_path.to_string_lossy().to_string(),
+                        files_processed,
+                        total_files,
+                    },
+                )
+                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
                 let metadata = Metadata::new_with_size(file_size);
                 let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
                     .map_err(|err| UploadError::Encryption(err.to_string()))?;
-                
+
                 bytes_processed += file_size;
 
                 // Add file to archive with its relative path
@@ -265,28 +286,36 @@ pub async fn upload_private_files_to_vault(
         } else {
             // Handle single file
             // Emit processing progress
-            app.emit("upload-progress", UploadProgress::Processing {
-                current_file: file.name.clone(),
-                files_processed,
-                total_files,
-                bytes_processed,
-                total_bytes: total_size,
-            }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-            
+            app.emit(
+                "upload-progress",
+                UploadProgress::Processing {
+                    current_file: file.name.clone(),
+                    files_processed,
+                    total_files,
+                    bytes_processed,
+                    total_bytes: total_size,
+                },
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
             let bytes: Bytes = read_file_to_bytes(file.path.clone()).await?;
             let file_size = bytes.len() as u64;
-            
+
             // Emit encrypting progress
-            app.emit("upload-progress", UploadProgress::Encrypting {
-                current_file: file.name.clone(),
-                files_processed,
-                total_files,
-            }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-            
+            app.emit(
+                "upload-progress",
+                UploadProgress::Encrypting {
+                    current_file: file.name.clone(),
+                    files_processed,
+                    total_files,
+                },
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
             let metadata = Metadata::new_with_size(file_size);
             let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
                 .map_err(|err| UploadError::Encryption(err.to_string()))?;
-                
+
             bytes_processed += file_size;
 
             private_archive.add_file(
@@ -312,7 +341,7 @@ pub async fn upload_private_files_to_vault(
                 aggregated_chunks.push(chunk);
             }
         }
-        
+
         files_processed += 1;
     }
 
@@ -345,7 +374,11 @@ pub async fn upload_private_files_to_vault(
         .await
         .unwrap_or(UserData::new());
 
-    let _ = user_data.add_private_file_archive(DataMapChunk::from(private_archive_datamap));
+    // Add the archive with a name
+    user_data.private_file_archives.insert(
+        DataMapChunk::from(private_archive_datamap),
+        archive_name
+    );
 
     let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
     let scratchpad_exists = client
@@ -383,12 +416,16 @@ pub async fn upload_private_files_to_vault(
     // Calculate total cost
     let total_cost: Amount = payments.iter().map(|(_, _, amount)| *amount).sum();
     let has_payments = !payments.is_empty();
-    
+
     // Emit payment request progress
-    app.emit("upload-progress", UploadProgress::RequestingPayment {
-        files_processed,
-        total_files,
-    }).map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+    app.emit(
+        "upload-progress",
+        UploadProgress::RequestingPayment {
+            files_processed,
+            total_files,
+        },
+    )
+    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
     let (order, mut confirmation_receiver) = payment_orders.create_order(payments.clone()).await;
 
@@ -400,8 +437,11 @@ pub async fn upload_private_files_to_vault(
         "payment_required": has_payments,
         "payments": payments
     });
-    
-    tracing::debug!("Emitting payment-request event with data: {:?}", payment_request);
+
+    tracing::debug!(
+        "Emitting payment-request event with data: {:?}",
+        payment_request
+    );
     app.emit("payment-request", payment_request)
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
@@ -430,15 +470,21 @@ pub async fn upload_private_files_to_vault(
                 autonomi::client::payment::receipt_from_store_quotes(aggregated_store_quote);
 
             tracing::debug!("Uploading chunks..");
-            
+
             // Emit uploading progress
-            tracing::debug!("Emitting initial Uploading progress: 0/{} chunks", total_chunks);
-            let _ = app_clone.emit("upload-progress", UploadProgress::Uploading {
-                chunks_uploaded: 0,
-                total_chunks,
-                bytes_uploaded: 0,
-                total_bytes: total_size,
-            });
+            tracing::debug!(
+                "Emitting initial Uploading progress: 0/{} chunks",
+                total_chunks
+            );
+            let _ = app_clone.emit(
+                "upload-progress",
+                UploadProgress::Uploading {
+                    chunks_uploaded: 0,
+                    total_chunks,
+                    bytes_uploaded: 0,
+                    total_bytes: total_size,
+                },
+            );
 
             let failed_uploads = client
                 .chunk_batch_upload(aggregated_chunks.iter().collect(), &receipt)
@@ -446,42 +492,61 @@ pub async fn upload_private_files_to_vault(
 
             if let Err(err) = failed_uploads {
                 tracing::error!("Upload chunks errored: {err}");
-                let _ = app_clone.emit("upload-progress", UploadProgress::Failed {
-                    error: format!("Upload failed: {}", err),
-                });
+                let _ = app_clone.emit(
+                    "upload-progress",
+                    UploadProgress::Failed {
+                        error: format!("Upload failed: {}", err),
+                    },
+                );
                 return;
             }
-            
+
             // Emit final progress update showing all chunks uploaded
-            tracing::debug!("Emitting final Uploading progress: {}/{} chunks", total_chunks, total_chunks);
-            let _ = app_clone.emit("upload-progress", UploadProgress::Uploading {
-                chunks_uploaded: total_chunks,
+            tracing::debug!(
+                "Emitting final Uploading progress: {}/{} chunks",
                 total_chunks,
-                bytes_uploaded: total_size,
-                total_bytes: total_size,
-            });
+                total_chunks
+            );
+            let _ = app_clone.emit(
+                "upload-progress",
+                UploadProgress::Uploading {
+                    chunks_uploaded: total_chunks,
+                    total_chunks,
+                    bytes_uploaded: total_size,
+                    total_bytes: total_size,
+                },
+            );
 
             let result = client
                 .put_user_data_to_vault(&secret_key, receipt.into(), user_data)
                 .await;
 
             tracing::debug!("Update vault result: {:?}", result);
-            
+
             if result.is_ok() {
                 // Emit completion
-                let _ = app_clone.emit("upload-progress", UploadProgress::Completed {
-                    total_files,
-                    total_bytes: total_size,
-                });
+                let _ = app_clone.emit(
+                    "upload-progress",
+                    UploadProgress::Completed {
+                        total_files,
+                        total_bytes: total_size,
+                    },
+                );
             } else {
-                let _ = app_clone.emit("upload-progress", UploadProgress::Failed {
-                    error: "Failed to update vault".to_string(),
-                });
+                let _ = app_clone.emit(
+                    "upload-progress",
+                    UploadProgress::Failed {
+                        error: "Failed to update vault".to_string(),
+                    },
+                );
             }
         } else {
-            let _ = app_clone.emit("upload-progress", UploadProgress::Failed {
-                error: "Payment was not completed".to_string(),
-            });
+            let _ = app_clone.emit(
+                "upload-progress",
+                UploadProgress::Failed {
+                    error: "Payment was not completed".to_string(),
+                },
+            );
         }
     });
 
@@ -503,8 +568,15 @@ pub struct FailedArchive {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VaultStructure {
-    pub files: Vec<FileMetadata>,
+    pub archives: Vec<ArchiveInfo>,
     pub failed_archives: Vec<FailedArchive>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ArchiveInfo {
+    pub name: String,
+    pub is_private: bool,
+    pub files: Vec<FileMetadata>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -513,6 +585,7 @@ pub struct FileMetadata {
     pub metadata: Metadata,
     pub file_type: FileType,
     pub is_loaded: bool,
+    pub archive_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -536,27 +609,34 @@ pub async fn get_vault_structure(
     // Fetch user data
     let user_data = client.get_user_data_from_vault(secret_key).await?;
 
-    let mut files: Vec<FileMetadata> = vec![];
+    let mut archives: Vec<ArchiveInfo> = vec![];
     let mut failed_archives: Vec<FailedArchive> = vec![];
 
+    // Process private archives
     for (data_map, name) in user_data.private_file_archives {
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
-        // Get private archive
         if let Ok(archive) = client.archive_get(&data_map).await {
-            for (filepath, (_, metadata)) in archive.map() {
-                let filepath = format!("{archive_name}/{}", filepath.display());
+            let mut files: Vec<FileMetadata> = vec![];
 
+            for (filepath, (_, metadata)) in archive.map() {
                 let file = FileMetadata {
-                    path: filepath,
+                    path: filepath.display().to_string(),
                     metadata: metadata.clone(),
                     file_type: FileType::Private,
                     is_loaded: false,
+                    archive_name: archive_name.clone(),
                 };
                 files.push(file);
             }
+
+            archives.push(ArchiveInfo {
+                name: archive_name,
+                is_private: true,
+                files,
+            });
         } else {
-            tracing::error!("Failed to get private archive");
+            tracing::error!("Failed to get private archive: {}", archive_name);
             failed_archives.push(FailedArchive {
                 name: archive_name,
                 is_private: true,
@@ -564,24 +644,31 @@ pub async fn get_vault_structure(
         }
     }
 
+    // Process public archives
     for (archive_addr, name) in user_data.file_archives {
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
 
-        // Get public archive
         if let Ok(archive) = client.archive_get_public(&archive_addr).await {
-            for (filepath, (_, metadata)) in archive.map() {
-                let filepath = format!("{archive_name}/{}", filepath.display());
+            let mut files: Vec<FileMetadata> = vec![];
 
+            for (filepath, (_, metadata)) in archive.map() {
                 let file = FileMetadata {
-                    path: filepath,
+                    path: filepath.display().to_string(),
                     metadata: metadata.clone(),
                     file_type: FileType::Public,
                     is_loaded: false,
+                    archive_name: archive_name.clone(),
                 };
                 files.push(file);
             }
+
+            archives.push(ArchiveInfo {
+                name: archive_name,
+                is_private: false,
+                files,
+            });
         } else {
-            tracing::error!("Failed to get public archive");
+            tracing::error!("Failed to get public archive: {}", archive_name);
             failed_archives.push(FailedArchive {
                 name: archive_name,
                 is_private: false,
@@ -589,7 +676,10 @@ pub async fn get_vault_structure(
         }
     }
 
-    Ok(VaultStructure { files, failed_archives })
+    Ok(VaultStructure {
+        archives,
+        failed_archives,
+    })
 }
 
 pub async fn get_files_from_vault(
@@ -683,13 +773,13 @@ pub async fn get_single_file_data(
         .expect("Invalid vault key signature");
     let client = shared_client.get_client().await?;
     let user_data = client.get_user_data_from_vault(&secret_key).await?;
-    
+
     // Try to find the file in private archives first
     for (data_map, archive_name) in user_data.private_file_archives.iter() {
         // Check if the file path starts with this archive name
         if file_path.starts_with(&format!("{}/", archive_name)) {
             let archive = client.archive_get(data_map).await?;
-            
+
             // Look for the file in this archive
             for (filepath, (file_data_map, metadata)) in archive.map() {
                 let full_path = format!("{}/{}", archive_name, filepath.display());
@@ -703,13 +793,13 @@ pub async fn get_single_file_data(
             }
         }
     }
-    
+
     // Try to find the file in public archives
     for (addr, archive_name) in user_data.file_archives.iter() {
         // Check if the file path starts with this archive name
         if file_path.starts_with(&format!("{}/", archive_name)) {
             let archive = client.archive_get_public(addr).await?;
-            
+
             // Look for the file in this archive
             for (filepath, (file_addr, metadata)) in archive.map() {
                 let full_path = format!("{}/{}", archive_name, filepath.display());
@@ -723,6 +813,6 @@ pub async fn get_single_file_data(
             }
         }
     }
-    
+
     Err(VaultError::FileNotFound)
 }
