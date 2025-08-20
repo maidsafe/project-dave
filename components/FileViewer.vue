@@ -375,10 +375,13 @@ const filteredFiles = computed(() => {
   }
 });
 
-// Combine regular files and failed archives
+// Combine regular files and failed archives (only in root directory)
 const combinedFiles = computed(() => {
   const regularFiles = filteredFiles.value || [];
-  const failedArchiveFiles = failedArchives.value.map(archive => ({
+  
+  // Only show failed archives in the root directory
+  const isRootDirectory = fileStore.currentDirectory?.name === 'Root';
+  const failedArchiveFiles = isRootDirectory ? failedArchives.value.map(archive => ({
     name: archive.name,
     is_failed_archive: true,
     is_private: archive.is_private,
@@ -387,7 +390,7 @@ const combinedFiles = computed(() => {
     load_error: true,
     path: `failed-archive://${archive.name}`,
     metadata: {}
-  }));
+  })) : [];
 
   return [...regularFiles, ...failedArchiveFiles];
 });
@@ -1005,7 +1008,7 @@ onUnmounted(() => {
                     <template v-if="file.is_failed_archive">
                       <!-- This is a failed archive -->
                       <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
-                      <i class="pi pi-folder-open mr-2 text-red-500"/>
+                      <i class="pi pi-box mr-2 text-red-500"/>
                       <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
                       {{ file.name }} <span class="text-xs">({{ file.is_private ? 'Private' : 'Public' }})</span>
                     </span>

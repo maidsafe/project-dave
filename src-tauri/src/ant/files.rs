@@ -375,10 +375,9 @@ pub async fn upload_private_files_to_vault(
         .unwrap_or(UserData::new());
 
     // Add the archive with a name
-    user_data.private_file_archives.insert(
-        DataMapChunk::from(private_archive_datamap),
-        archive_name
-    );
+    user_data
+        .private_file_archives
+        .insert(DataMapChunk::from(private_archive_datamap), archive_name);
 
     let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
     let scratchpad_exists = client
@@ -620,6 +619,9 @@ pub async fn get_vault_structure(
             let mut files: Vec<FileMetadata> = vec![];
 
             for (filepath, (_, metadata)) in archive.map() {
+                println!("archive name: {:?}", archive_name);
+                println!("filepath: {:?}", filepath);
+
                 let file = FileMetadata {
                     path: filepath.display().to_string(),
                     metadata: metadata.clone(),
