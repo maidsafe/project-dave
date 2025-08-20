@@ -34,3 +34,18 @@
 .p-tabview-ink-bar {
     height: 2px;
 }
+
+/* Disable overscroll/bounce behavior */
+html, body {
+    overscroll-behavior: none;
+    height: 100%;
+}
+
+#__nuxt {
+    height: 100%;
+}
+
+/* Disable overscroll for scrollable areas */
+.overscroll-none {
+    overscroll-behavior: none;
+}

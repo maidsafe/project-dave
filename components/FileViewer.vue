@@ -616,11 +616,11 @@ const formatUploadDuration = (startTime: Date, endTime?: Date): string => {
   const start = new Date(startTime);
   const end = endTime ? new Date(endTime) : new Date();
   const durationMs = end.getTime() - start.getTime();
-  
+
   const seconds = Math.floor(durationMs / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
-  
+
   if (hours > 0) {
     return `${hours}h ${minutes % 60}m`;
   } else if (minutes > 0) {
@@ -878,7 +878,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="mt-10">
+  <div>
     <!-- Tab System -->
     <div>
       <!-- Upload Controls -->
@@ -959,124 +959,126 @@ onUnmounted(() => {
           <!-- Files Table -->
           <div
               v-if="viewTypeVault === 'list'"
-              class="mt-6 grid grid-cols-12 font-semibold mb-10"
+              class="mt-6 max-h-[60vh] overflow-y-auto overscroll-none"
           >
-            <div
-                class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] text-autonomi-red-300"
-            >
-              Name
-            </div>
-            <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
-              Upload Date
-            </div>
-            <div class="col-span-1 text-autonomi-red-300">
-              <i class="pi pi-user"/>
-            </div>
-
-            <!-- Spacer -->
-            <div class="col-span-12 h-10"/>
-
-            <!-- Files Rows -->
-            <template v-if="combinedFiles.length">
+            <div class="grid grid-cols-12 font-semibold mb-10">
               <div
-                  v-for="file in combinedFiles"
-                  :key="file.path || file.name"
-                  class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
-                  @click="handleChangeDirectory(file)"
-                  :class="{
+                  class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] text-autonomi-red-300"
+              >
+                Name
+              </div>
+              <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
+                Upload Date
+              </div>
+              <div class="col-span-1 text-autonomi-red-300">
+                <i class="pi pi-user"/>
+              </div>
+
+              <!-- Spacer -->
+              <div class="col-span-12 h-10"/>
+
+              <!-- Files Rows -->
+              <template v-if="combinedFiles.length">
+                <div
+                    v-for="file in combinedFiles"
+                    :key="file.path || file.name"
+                    class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
+                    @click="handleChangeDirectory(file)"
+                    :class="{
                   'cursor-pointer': !file.path || file.is_failed_archive,
                   'opacity-75': file.is_loading,
                   'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
                   'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive)
                 }"
-              >
-                <!-- Folder/File Name -->
-                <div
-                    class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] flex items-center"
                 >
-                  <template v-if="file.is_failed_archive">
-                    <!-- This is a failed archive -->
-                    <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
-                    <i class="pi pi-folder-open mr-2 text-red-500"/>
-                    <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
+                  <!-- Folder/File Name -->
+                  <div
+                      class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] flex items-center"
+                  >
+                    <template v-if="file.is_failed_archive">
+                      <!-- This is a failed archive -->
+                      <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
+                      <i class="pi pi-folder-open mr-2 text-red-500"/>
+                      <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
                       {{ file.name }} <span class="text-xs">({{ file.is_private ? 'Private' : 'Public' }})</span>
                     </span>
-                  </template>
-                  <template v-else-if="file?.path">
-                    <!-- This is the file -->
-                    <i
-                        v-if="/\\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
-                        class="pi pi-image mr-4"
-                    />
-                    <i
-                        v-else-if="/\\.(pdf)$/i.test(file.name)"
-                        class="pi pi-file-pdf mr-4"
-                    />
-                    <i v-else-if="/\\.(zip)$/i.test(file.name)" class="pi pi-box mr-4"/>
-                    <i v-else class="pi pi-file mr-4"/>
+                    </template>
+                    <template v-else-if="file?.path">
+                      <!-- This is the file -->
+                      <i
+                          v-if="/\\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
+                          class="pi pi-image mr-4"
+                      />
+                      <i
+                          v-else-if="/\\.(pdf)$/i.test(file.name)"
+                          class="pi pi-file-pdf mr-4"
+                      />
+                      <i v-else-if="/\\.(zip)$/i.test(file.name)" class="pi pi-box mr-4"/>
+                      <i v-else class="pi pi-file mr-4"/>
 
-                    <span
-                        class="text-ellipsis overflow-hidden cursor-pointer"
-                        @click.stop="handleFileNameClick(file)">
+                      <span
+                          class="text-ellipsis overflow-hidden cursor-pointer"
+                          @click.stop="handleFileNameClick(file)">
                       {{ file.name }}
                     </span>
-                    <!-- Loading indicators for files -->
-                    <i v-if="file.is_loading" class="pi pi-spinner pi-spin ml-2 text-sm text-blue-500"/>
-                    <i v-else-if="file.load_error" class="pi pi-exclamation-triangle ml-2 text-sm text-red-500"
-                       v-tooltip.top="'Failed to load file data'"/>
-                  </template>
-                  <template v-else>
-                    <!-- This is the folder -->
-                    <i class="pi pi-folder mr-4"/><span
-                      class="line-clamp-one text-ellipsis"
-                  >{{ file.name }}</span>
-                  </template>
-                </div>
+                      <!-- Loading indicators for files -->
+                      <i v-if="file.is_loading" class="pi pi-spinner pi-spin ml-2 text-sm text-blue-500"/>
+                      <i v-else-if="file.load_error" class="pi pi-exclamation-triangle ml-2 text-sm text-red-500"
+                         v-tooltip.top="'Failed to load file data'"/>
+                    </template>
+                    <template v-else>
+                      <!-- This is the folder -->
+                      <i class="pi pi-folder mr-4"/><span
+                        class="line-clamp-one text-ellipsis"
+                    >{{ file.name }}</span>
+                    </template>
+                  </div>
 
-                <!-- Upload Date -->
-                <div
-                    class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
-                >
-                  {{
-                    file?.metadata?.uploaded && !file.is_failed_archive
-                        ? secondsToDate(file.metadata.uploaded).toLocaleString()
-                        : ''
-                  }}
-                </div>
+                  <!-- Upload Date -->
+                  <div
+                      class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
+                  >
+                    {{
+                      file?.metadata?.uploaded && !file.is_failed_archive
+                          ? secondsToDate(file.metadata.uploaded).toLocaleString()
+                          : ''
+                    }}
+                  </div>
 
-                <!-- Menu -->
-                <template v-if="file.path && !file.is_failed_archive">
-                  <div class="col-span-1">
-                    <i
-                        class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
-                        @click.stop="
+                  <!-- Menu -->
+                  <template v-if="file.path && !file.is_failed_archive">
+                    <div class="col-span-1">
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
+                          @click.stop="
                         $event => {
                           selectedFileItem = file;
                           refFilesMenu.toggle($event);
                         }
                       "
-                    />
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="col-span-1"></div>
-                </template>
-              </div>
-            </template>
-            <template v-else>
-              <div class="col-span-12 p-8 text-center text-gray-500">
-                <div v-if="pendingVaultStructure">
-                  <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+                      />
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="col-span-1"></div>
+                  </template>
                 </div>
-                <div v-else>No files found.</div>
-              </div>
-            </template>
+              </template>
+              <template v-else>
+                <div class="col-span-12 p-8 text-center text-gray-500">
+                  <div v-if="pendingVaultStructure">
+                    <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+                  </div>
+                  <div v-else>No files found.</div>
+                </div>
+              </template>
+            </div>
           </div>
 
           <!-- Grid View -->
           <div
               v-else-if="viewTypeVault === 'grid'"
-              class="mt-6"
+              class="mt-6 max-h-[60vh] overflow-y-auto overscroll-none"
           >
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               <div v-if="!combinedFiles.length" class="col-span-full p-8 text-center text-gray-500">
@@ -1129,335 +1131,339 @@ onUnmounted(() => {
 
         <!-- Uploads Tab -->
         <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="1">
-          <div class="mx-[6rem] space-y-4">
-            <!-- Active Uploads -->
-            <div v-if="uploadsStore.activeUploads.length > 0" class="space-y-2">
-              <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
-                In Progress
-              </h3>
-              <div class="space-y-1">
-                <div
-                    v-for="upload in uploadsStore.activeUploads"
-                    :key="upload.id"
-                    class="py-3"
-                >
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-3 flex-1">
-                      <!-- Icon -->
-                      <i 
-                        class="pi text-autonomi-blue-600 dark:text-autonomi-blue-400"
-                        :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
-                      />
-                      
-                      <!-- Name in blue -->
-                      <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
+          <div class="mx-[6rem] max-h-[60vh] overflow-y-auto overscroll-none">
+            <div class="space-y-4">
+              <!-- Active Uploads -->
+              <div v-if="uploadsStore.activeUploads.length > 0" class="space-y-2">
+                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
+                  In Progress
+                </h3>
+                <div class="space-y-1">
+                  <div
+                      v-for="upload in uploadsStore.activeUploads"
+                      :key="upload.id"
+                      class="py-3"
+                  >
+                    <div class="flex items-center justify-between mb-2">
+                      <div class="flex items-center gap-3 flex-1">
+                        <!-- Icon -->
+                        <i
+                            class="pi text-autonomi-blue-600 dark:text-autonomi-blue-400"
+                            :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
+                        />
+
+                        <!-- Name in blue -->
+                        <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
                         {{ upload.name }}
                       </span>
-                      
-                      <!-- Upload duration -->
-                      <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
+
+                        <!-- Upload duration -->
+                        <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
                         {{ formatUploadDuration(upload.createdAt) }}
                       </span>
-                    </div>
-                    
-                    <!-- Menu icon -->
-                    <i
-                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        @click.stop="
+                      </div>
+
+                      <!-- Menu icon -->
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
                           selectedUploadItem = upload;
                           refUploadMenu.toggle($event);
                         "
-                    />
-                  </div>
+                      />
+                    </div>
 
-                  <!-- Progress bar -->
-                  <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                    <div
-                        class="h-1.5 rounded-full transition-all duration-300"
-                        :class="{
+                    <!-- Progress bar -->
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                      <div
+                          class="h-1.5 rounded-full transition-all duration-300"
+                          :class="{
                           'bg-blue-500': upload.status === 'pending' || upload.status === 'processing',
                           'bg-purple-500': upload.status === 'encrypting',
                           'bg-orange-500': upload.status === 'quoting',
                           'bg-yellow-500': upload.status === 'payment',
                           'bg-green-500': upload.status === 'uploading'
                         }"
-                        :style="`width: ${upload.progress}%`"
-                    />
+                          :style="`width: ${upload.progress}%`"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Completed uploads -->
-            <div v-if="uploadsStore.completedUploads.length > 0" class="space-y-2 mt-8">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
-                  Completed
-                </h3>
-                <button
-                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
-                    @click="uploadsStore.clearCompleted()"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div class="space-y-1">
-                <div
-                    v-for="upload in uploadsStore.completedUploads.slice(0, 10)"
-                    :key="upload.id"
-                    class="py-2 flex items-center justify-between"
-                >
-                  <div class="flex items-center gap-3">
-                    <!-- Icon -->
-                    <i 
-                      class="pi text-green-600 dark:text-green-400"
-                      :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
-                    />
-                    
-                    <!-- Name -->
-                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+              <!-- Completed uploads -->
+              <div v-if="uploadsStore.completedUploads.length > 0" class="space-y-2 mt-8">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                    Completed
+                  </h3>
+                  <button
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      @click="uploadsStore.clearCompleted()"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div class="space-y-1">
+                  <div
+                      v-for="upload in uploadsStore.completedUploads.slice(0, 10)"
+                      :key="upload.id"
+                      class="py-2 flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-3">
+                      <!-- Icon -->
+                      <i
+                          class="pi text-green-600 dark:text-green-400"
+                          :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
+                      />
+
+                      <!-- Name -->
+                      <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
                       {{ upload.name }}
                     </span>
-                    
-                    <!-- Duration -->
-                    <span class="text-sm text-gray-500 dark:text-gray-400">
+
+                      <!-- Duration -->
+                      <span class="text-sm text-gray-500 dark:text-gray-400">
                       took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
                     </span>
-                  </div>
-                  
-                  <!-- Menu icon -->
-                  <i
-                      class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                      @click.stop="
-                        selectedUploadItem = upload;
-                        refUploadMenu.toggle($event);
-                      "
-                  />
-                </div>
-              </div>
-            </div>
+                    </div>
 
-            <!-- Failed uploads -->
-            <div v-if="uploadsStore.failedUploads.length > 0" class="space-y-2 mt-8">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
-                  Failed
-                </h3>
-                <button
-                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
-                    @click="uploadsStore.clearFailed()"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div class="space-y-1">
-                <div
-                    v-for="upload in uploadsStore.failedUploads.slice(0, 10)"
-                    :key="upload.id"
-                    class="py-2 flex items-center justify-between"
-                >
-                  <div class="flex items-center gap-3 flex-1">
-                    <!-- Icon -->
-                    <i 
-                      class="pi text-red-600 dark:text-red-400"
-                      :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
-                    />
-                    
-                    <!-- Name -->
-                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
-                      {{ upload.name }}
-                    </span>
-                    
-                    <!-- Error message -->
-                    <span class="text-sm text-red-600 dark:text-red-400" v-if="upload.error">
-                      - {{ upload.error }}
-                    </span>
-                  </div>
-                  
-                  <div class="flex items-center gap-2">
-                    <i
-                        class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
-                        @click.stop="uploadsStore.retryUpload(upload.id)"
-                        v-tooltip.top="'Retry upload'"
-                    />
+                    <!-- Menu icon -->
                     <i
                         class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                         @click.stop="
-                          selectedUploadItem = upload;
-                          refUploadMenu.toggle($event);
-                        "
+                        selectedUploadItem = upload;
+                        refUploadMenu.toggle($event);
+                      "
                     />
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div v-if="uploadsStore.sortedUploads.length === 0" class="text-center py-8 text-gray-500">
-              No uploads yet
+              <!-- Failed uploads -->
+              <div v-if="uploadsStore.failedUploads.length > 0" class="space-y-2 mt-8">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                    Failed
+                  </h3>
+                  <button
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      @click="uploadsStore.clearFailed()"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div class="space-y-1">
+                  <div
+                      v-for="upload in uploadsStore.failedUploads.slice(0, 10)"
+                      :key="upload.id"
+                      class="py-2 flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-3 flex-1">
+                      <!-- Icon -->
+                      <i
+                          class="pi text-red-600 dark:text-red-400"
+                          :class="upload.totalFiles > 1 ? 'pi-folder' : 'pi-file'"
+                      />
+
+                      <!-- Name -->
+                      <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                      {{ upload.name }}
+                    </span>
+
+                      <!-- Error message -->
+                      <span class="text-sm text-red-600 dark:text-red-400" v-if="upload.error">
+                      - {{ upload.error }}
+                    </span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <i
+                          class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
+                          @click.stop="uploadsStore.retryUpload(upload.id)"
+                          v-tooltip.top="'Retry upload'"
+                      />
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
+                          selectedUploadItem = upload;
+                          refUploadMenu.toggle($event);
+                        "
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="uploadsStore.sortedUploads.length === 0" class="text-center py-8 text-gray-500">
+                No uploads yet
+              </div>
             </div>
           </div>
         </TabPanel>
 
         <!-- Downloads Tab -->
         <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="2">
-          <div class="mx-[6rem] space-y-4">
-            <!-- Active Downloads -->
-            <div v-if="downloadsStore.activeDownloads.length > 0" class="space-y-2">
-              <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
-                In Progress
-              </h3>
-              <div class="space-y-1">
-                <div
-                    v-for="download in downloadsStore.activeDownloads"
-                    :key="download.id"
-                    class="py-3"
-                >
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-3 flex-1">
-                      <!-- Icon -->
-                      <i class="pi pi-file text-autonomi-blue-600 dark:text-autonomi-blue-400" />
-                      
-                      <!-- Name in blue -->
-                      <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
+          <div class="mx-[6rem] max-h-[60vh] overflow-y-auto overscroll-none">
+            <div class="space-y-4">
+              <!-- Active Downloads -->
+              <div v-if="downloadsStore.activeDownloads.length > 0" class="space-y-2">
+                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
+                  In Progress
+                </h3>
+                <div class="space-y-1">
+                  <div
+                      v-for="download in downloadsStore.activeDownloads"
+                      :key="download.id"
+                      class="py-3"
+                  >
+                    <div class="flex items-center justify-between mb-2">
+                      <div class="flex items-center gap-3 flex-1">
+                        <!-- Icon -->
+                        <i class="pi pi-file text-autonomi-blue-600 dark:text-autonomi-blue-400"/>
+
+                        <!-- Name in blue -->
+                        <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
                         {{ download.fileName }}
                       </span>
-                      
-                      <!-- Download duration -->
-                      <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
+
+                        <!-- Download duration -->
+                        <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
                         {{ formatUploadDuration(download.createdAt) }}
                       </span>
+                      </div>
+
+                      <!-- Menu icon -->
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
+                          selectedDownloadItem = download;
+                          refDownloadMenu.toggle($event);
+                        "
+                      />
                     </div>
-                    
+
+                    <!-- Progress bar -->
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                      <div
+                          class="h-1.5 rounded-full transition-all duration-300"
+                          :class="{
+                          'bg-blue-500': download.status === 'loading',
+                          'bg-green-500': download.status === 'downloading'
+                        }"
+                          :style="`width: ${download.progress}%`"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Completed Downloads -->
+              <div v-if="downloadsStore.completedDownloads.length > 0" class="space-y-2 mt-8">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                    Completed
+                  </h3>
+                  <button
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      @click="downloadsStore.clearCompleted()"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div class="space-y-1">
+                  <div
+                      v-for="download in downloadsStore.completedDownloads.slice(0, 10)"
+                      :key="download.id"
+                      class="py-2 flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-3">
+                      <!-- Icon -->
+                      <i class="pi pi-file text-green-600 dark:text-green-400"/>
+
+                      <!-- Name -->
+                      <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                      {{ download.fileName }}
+                    </span>
+
+                      <!-- Duration -->
+                      <span class="text-sm text-gray-500 dark:text-gray-400">
+                      took {{ formatUploadDuration(download.createdAt, download.completedAt) }}
+                    </span>
+
+                      <!-- Download location -->
+                      <span class="text-sm text-gray-500 dark:text-gray-400" v-if="download.downloadPath">
+                      - {{ download.downloadPath.split('/').pop() }}
+                    </span>
+                    </div>
+
                     <!-- Menu icon -->
                     <i
                         class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                         @click.stop="
-                          selectedDownloadItem = download;
-                          refDownloadMenu.toggle($event);
-                        "
-                    />
-                  </div>
-
-                  <!-- Progress bar -->
-                  <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                    <div
-                        class="h-1.5 rounded-full transition-all duration-300"
-                        :class="{
-                          'bg-blue-500': download.status === 'loading',
-                          'bg-green-500': download.status === 'downloading'
-                        }"
-                        :style="`width: ${download.progress}%`"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Completed Downloads -->
-            <div v-if="downloadsStore.completedDownloads.length > 0" class="space-y-2 mt-8">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
-                  Completed
-                </h3>
-                <button
-                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
-                    @click="downloadsStore.clearCompleted()"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div class="space-y-1">
-                <div
-                    v-for="download in downloadsStore.completedDownloads.slice(0, 10)"
-                    :key="download.id"
-                    class="py-2 flex items-center justify-between"
-                >
-                  <div class="flex items-center gap-3">
-                    <!-- Icon -->
-                    <i class="pi pi-file text-green-600 dark:text-green-400" />
-                    
-                    <!-- Name -->
-                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
-                      {{ download.fileName }}
-                    </span>
-                    
-                    <!-- Duration -->
-                    <span class="text-sm text-gray-500 dark:text-gray-400">
-                      took {{ formatUploadDuration(download.createdAt, download.completedAt) }}
-                    </span>
-                    
-                    <!-- Download location -->
-                    <span class="text-sm text-gray-500 dark:text-gray-400" v-if="download.downloadPath">
-                      - {{ download.downloadPath.split('/').pop() }}
-                    </span>
-                  </div>
-                  
-                  <!-- Menu icon -->
-                  <i
-                      class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                      @click.stop="
                         selectedDownloadItem = download;
                         refDownloadMenu.toggle($event);
                       "
-                  />
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            <!-- Failed Downloads -->
-            <div v-if="downloadsStore.failedDownloads.length > 0" class="space-y-2 mt-8">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
-                  Failed
-                </h3>
-                <button
-                    class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
-                    @click="downloadsStore.clearFailed()"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div class="space-y-1">
-                <div
-                    v-for="download in downloadsStore.failedDownloads.slice(0, 10)"
-                    :key="download.id"
-                    class="py-2 flex items-center justify-between"
-                >
-                  <div class="flex items-center gap-3 flex-1">
-                    <!-- Icon -->
-                    <i class="pi pi-file text-red-600 dark:text-red-400" />
-                    
-                    <!-- Name -->
-                    <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+
+              <!-- Failed Downloads -->
+              <div v-if="downloadsStore.failedDownloads.length > 0" class="space-y-2 mt-8">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                    Failed
+                  </h3>
+                  <button
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      @click="downloadsStore.clearFailed()"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div class="space-y-1">
+                  <div
+                      v-for="download in downloadsStore.failedDownloads.slice(0, 10)"
+                      :key="download.id"
+                      class="py-2 flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-3 flex-1">
+                      <!-- Icon -->
+                      <i class="pi pi-file text-red-600 dark:text-red-400"/>
+
+                      <!-- Name -->
+                      <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
                       {{ download.fileName }}
                     </span>
-                    
-                    <!-- Error message -->
-                    <span class="text-sm text-red-600 dark:text-red-400" v-if="download.error">
+
+                      <!-- Error message -->
+                      <span class="text-sm text-red-600 dark:text-red-400" v-if="download.error">
                       - {{ download.error }}
                     </span>
-                  </div>
-                  
-                  <div class="flex items-center gap-2">
-                    <i
-                        class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
-                        @click.stop="downloadsStore.retryDownload(download.id)"
-                        v-tooltip.top="'Retry download'"
-                    />
-                    <i
-                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        @click.stop="
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <i
+                          class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
+                          @click.stop="downloadsStore.retryDownload(download.id)"
+                          v-tooltip.top="'Retry download'"
+                      />
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
                           selectedDownloadItem = download;
                           refDownloadMenu.toggle($event);
                         "
-                    />
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            
-            <div v-if="downloadsStore.sortedDownloads.length === 0" class="text-center py-8 text-gray-500">
-              No downloads yet
+
+              <div v-if="downloadsStore.sortedDownloads.length === 0" class="text-center py-8 text-gray-500">
+                No downloads yet
+              </div>
             </div>
           </div>
         </TabPanel>

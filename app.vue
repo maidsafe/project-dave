@@ -95,7 +95,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-autonomi-gray-50 dark:bg-autonomi-blue-600 relative">
+  <div class="h-screen flex flex-col bg-autonomi-gray-50 dark:bg-autonomi-blue-600 relative overflow-hidden">
     <div
         v-if="!removeSplashScreen"
         class="absolute w-full h-full bg-white top-0 left-0 z-50 transition-all duration-1000"
@@ -112,7 +112,7 @@ onMounted(async () => {
       <div class="sticky top-0 z-20">
         <Header/>
       </div>
-      <div class="flex flex-1">
+      <div class="flex flex-1 min-h-0">
         <!-- SideBar -->
         <div
             class="pb-4 w-[290px] transition-all duration-300 hidden lg:flex flex-col rounded-tr-2xl bg-white dark:bg-white/10 overflow-hidden items-center pt-[35px] shrink-0"
@@ -130,12 +130,12 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="flex-1">
-          <NuxtPage
-              @open-login="walletStore.showConnectWallet"
-              @close-login="walletStore.hideConnectWallet"
-              @show-notify="handleShowNotification"
-              @hide-notify="handleHideNotification"
+        <div class="flex-1 min-h-0">
+          <NuxtPage class="h-full"
+                    @open-login="walletStore.showConnectWallet"
+                    @close-login="walletStore.hideConnectWallet"
+                    @show-notify="handleShowNotification"
+                    @hide-notify="handleHideNotification"
           />
           <Toast position="bottom-right"/>
         </div>
