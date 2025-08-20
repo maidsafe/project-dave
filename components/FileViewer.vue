@@ -959,7 +959,8 @@ onUnmounted(() => {
           <!-- Files Table -->
           <div
               v-if="viewTypeVault === 'list'"
-              class="mt-6 max-h-[60vh] overflow-y-auto overscroll-none"
+              class="mt-6 overflow-y-auto overscroll-none"
+              style="height: calc(100vh - 280px);"
           >
             <div class="grid grid-cols-12 font-semibold mb-10">
               <div
@@ -1078,7 +1079,8 @@ onUnmounted(() => {
           <!-- Grid View -->
           <div
               v-else-if="viewTypeVault === 'grid'"
-              class="mt-6 max-h-[60vh] overflow-y-auto overscroll-none"
+              class="mt-6 overflow-y-auto overscroll-none"
+              style="height: calc(100vh - 280px);"
           >
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               <div v-if="!combinedFiles.length" class="col-span-full p-8 text-center text-gray-500">
@@ -1131,7 +1133,7 @@ onUnmounted(() => {
 
         <!-- Uploads Tab -->
         <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="1">
-          <div class="mx-[6rem] max-h-[60vh] overflow-y-auto overscroll-none">
+          <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Uploads -->
               <div v-if="uploadsStore.activeUploads.length > 0" class="space-y-2">
@@ -1304,7 +1306,7 @@ onUnmounted(() => {
 
         <!-- Downloads Tab -->
         <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="2">
-          <div class="mx-[6rem] max-h-[60vh] overflow-y-auto overscroll-none">
+          <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Downloads -->
               <div v-if="downloadsStore.activeDownloads.length > 0" class="space-y-2">

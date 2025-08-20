@@ -49,3 +49,8 @@ html, body {
 .overscroll-none {
     overscroll-behavior: none;
 }
+
+/* Basic TabView height management */
+.p-tabview-panels {
+    min-height: 0;
+}
