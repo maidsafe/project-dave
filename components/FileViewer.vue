@@ -1080,7 +1080,7 @@ onUnmounted(() => {
                       <!-- This is a failed archive -->
                       <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
                       <i class="pi pi-box mr-2 text-red-500"/>
-                      <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
+                      <span class="text-ellipsis overflow-hidden whitespace-nowrap text-red-600 dark:text-red-400">
                       {{ file.name }}
                     </span>
                     </template>
@@ -1098,7 +1098,7 @@ onUnmounted(() => {
                       <i v-else class="pi pi-file mr-4"/>
 
                       <span
-                          class="text-ellipsis overflow-hidden cursor-pointer"
+                          class="text-ellipsis overflow-hidden whitespace-nowrap cursor-pointer"
                           @click.stop="handleFileNameClick(file)">
                       {{ file.name }}
                     </span>
@@ -1110,7 +1110,7 @@ onUnmounted(() => {
                     <template v-else>
                       <!-- This is a folder or archive -->
                       <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
-                      <span class="line-clamp-one text-ellipsis">{{ file.name }}</span>
+                      <span class="text-ellipsis overflow-hidden whitespace-nowrap">{{ file.name }}</span>
                     </template>
                   </div>
 
@@ -1198,7 +1198,7 @@ onUnmounted(() => {
                          :class="file.isArchive ? 'pi pi-box text-4xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-4xl'"/>
 
                       <span
-                          class="text-center text-sm truncate w-full cursor-pointer"
+                          class="text-center text-sm text-ellipsis overflow-hidden whitespace-nowrap w-full cursor-pointer"
                           @click.stop="file.path ? handleFileNameClick(file) : null"
                       >
                         {{ file.name }}
