@@ -31,6 +31,10 @@ export interface IFileMetadata {
   file_type: 'Public' | 'Private';
   is_loaded: boolean;
   archive_name: string;
+  access_data?: {
+    Public?: any[];
+    Private?: any[];
+  };
 }
 
 export interface IFile {

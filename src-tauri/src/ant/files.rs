@@ -585,6 +585,7 @@ pub struct FileMetadata {
     pub file_type: FileType,
     pub is_loaded: bool,
     pub archive_name: String,
+    pub access_data: Option<PublicOrPrivateFile>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -618,7 +619,7 @@ pub async fn get_vault_structure(
         if let Ok(archive) = client.archive_get(&data_map).await {
             let mut files: Vec<FileMetadata> = vec![];
 
-            for (filepath, (_, metadata)) in archive.map() {
+            for (filepath, (data_map, metadata)) in archive.map() {
                 println!("archive name: {:?}", archive_name);
                 println!("filepath: {:?}", filepath);
 
@@ -628,6 +629,7 @@ pub async fn get_vault_structure(
                     file_type: FileType::Private,
                     is_loaded: false,
                     archive_name: archive_name.clone(),
+                    access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
                 };
                 files.push(file);
             }
@@ -653,13 +655,14 @@ pub async fn get_vault_structure(
         if let Ok(archive) = client.archive_get_public(&archive_addr).await {
             let mut files: Vec<FileMetadata> = vec![];
 
-            for (filepath, (_, metadata)) in archive.map() {
+            for (filepath, (data_addr, metadata)) in archive.map() {
                 let file = FileMetadata {
                     path: filepath.display().to_string(),
                     metadata: metadata.clone(),
                     file_type: FileType::Public,
                     is_loaded: false,
                     archive_name: archive_name.clone(),
+                    access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
                 };
                 files.push(file);
             }

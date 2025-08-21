@@ -539,7 +539,16 @@ const handleDownloadFile = async (fileToDownload?: any) => {
     const downloadId = downloadsStore.createDownload(file);
 
     let fileData = file;
-    if (!file.is_loaded && !file.is_loading) {
+    
+    // Check if we already have access_data from vault structure
+    if (file.access_data && !file.file_access) {
+      // Convert access_data format to file_access format
+      fileData = {
+        ...file,
+        file_access: file.access_data,
+        is_loaded: true
+      };
+    } else if (!file.is_loaded && !file.is_loading && !file.file_access) {
       downloadsStore.updateDownload(downloadId, {status: 'loading'});
 
       try {

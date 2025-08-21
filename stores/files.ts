@@ -119,8 +119,9 @@ export const useFileStore = defineStore("files", () => {
                                 current.addFile({
                                     path: file.path,
                                     metadata: file.metadata,
-                                    file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
-                                    is_loaded: false,
+                                    file_access: file.access_data || (file.file_type === "Private" ? {Private: null} : {Public: null}),
+                                    access_data: file.access_data,
+                                    is_loaded: !!file.access_data,
                                     is_loading: false,
                                     load_error: false,
                                     name: part,
@@ -162,8 +163,9 @@ export const useFileStore = defineStore("files", () => {
                                 current.addFile({
                                     path: file.path,
                                     metadata: file.metadata,
-                                    file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
-                                    is_loaded: false,
+                                    file_access: file.access_data || (file.file_type === "Private" ? {Private: null} : {Public: null}),
+                                    access_data: file.access_data,
+                                    is_loaded: !!file.access_data,
                                     is_loading: false,
                                     load_error: false,
                                     name: part,
