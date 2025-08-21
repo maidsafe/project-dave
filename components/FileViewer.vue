@@ -193,14 +193,20 @@ const menuFiles = computed(() => {
     items.push({
       label: 'Retry Download',
       icon: 'pi pi-refresh',
-      command: () => handleDownloadFile(file),
+      command: () => {
+        handleDownloadFile(file);
+        refFilesMenu.value.hide();
+      },
     });
   } else if (file?.path) {
     // Only show download for files (not folders)
     items.push({
       label: 'Download',
       icon: 'pi pi-download',
-      command: () => handleDownloadFile(file),
+      command: () => {
+        handleDownloadFile(file);
+        refFilesMenu.value.hide();
+      },
     });
   }
 
@@ -211,6 +217,7 @@ const menuFiles = computed(() => {
       icon: 'pi pi-info-circle',
       command: () => {
         isVisibleFileInfo.value = true;
+        refFilesMenu.value.hide();
       },
     });
   }
