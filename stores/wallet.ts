@@ -287,6 +287,14 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const getVaultKeySignature = async (): Promise<string> => {
+        // Check for development environment variable first
+        const config = useRuntimeConfig();
+        const devVaultSignature = config.public.devVaultSignature;
+        if (devVaultSignature) {
+            console.log("Using development vault key signature from ENV");
+            return devVaultSignature;
+        }
+
         if (!cachedVaultKeySignature.value) {
             const hex = toHex(VAULT_SECRET_KEY_SEED);
             const ethSignedMessageHash = toEthSignedMessageHash(hex);

@@ -86,6 +86,11 @@ export default defineNuxtConfig({
             autoprefixer: {},
         },
     },
+    runtimeConfig: {
+        public: {
+            devVaultSignature: process.env.VITE_DEV_VAULT_SIGNATURE || ''
+        }
+    },
     modules: ["@primevue/nuxt-module", "@pinia/nuxt"],
     primevue: {
         options: {

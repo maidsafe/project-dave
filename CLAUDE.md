@@ -15,6 +15,9 @@ npm run tauri dev
 
 # Start only the Nuxt frontend dev server (port 1420)
 npm run dev
+
+# For development: Skip wallet signing by providing vault signature via ENV
+VITE_DEV_VAULT_SIGNATURE=0xYourSignatureHere npm run tauri dev
 ```
 
 ### Build
