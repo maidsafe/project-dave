@@ -120,6 +120,22 @@ async fn get_vault_structure(
 }
 
 #[tauri::command]
+async fn get_vault_structure_streaming(
+    app: AppHandle,
+    vault_key_signature: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), ()> {
+    let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    )
+    .expect("Invalid vault key signature");
+
+    ant::files::get_vault_structure_streaming(app, &secret_key, shared_client)
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+}
+
+#[tauri::command]
 async fn get_files_from_vault(
     vault_key_signature: String,
     shared_client: State<'_, SharedClient>,
@@ -239,6 +255,7 @@ pub async fn run() {
             upload_files,
             send_payment_order_message,
             get_vault_structure,
+            get_vault_structure_streaming,
             get_files_from_vault,
             download_private_file,
             download_public_file,

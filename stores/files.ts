@@ -75,6 +75,7 @@ export const useFileStore = defineStore("files", () => {
     const files = ref<IFile[]>([]);
     const vaultStructure = ref<IVaultStructure | null>(null);
     const failedArchives = ref<IFailedArchive[]>([]);
+    const loadingArchives = ref<{name: string, is_private: boolean}[]>([]);
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
     const pendingFilesSignature = ref(false);
@@ -238,50 +239,32 @@ export const useFileStore = defineStore("files", () => {
     };
 
     const getVaultStructure = async () => {
-        console.log(">>> Getting vault structure...");
+        console.log(">>> Getting vault structure with streaming...");
+        
+        // IMMEDIATELY clear all state to show loading
+        vaultStructure.value = null;
+        files.value = [];
+        failedArchives.value = [];
+        loadingArchives.value = [];
+        rootDirectory.value = null;
+        currentDirectory.value = null;
+        pendingVaultStructure.value = true;
+
         try {
             // Get vault key signature
             pendingFilesSignature.value = true;
             let vaultKeySignature = await walletStore.getVaultKeySignature();
             pendingFilesSignature.value = false;
 
-            // Get vault structure (fast - just metadata)
-            pendingVaultStructure.value = true;
-            vaultStructure.value = await invoke("get_vault_structure", {vaultKeySignature});
+            // Initialize vault structure 
+            vaultStructure.value = {
+                archives: [],
+                failed_archives: [],
+                files: []
+            };
 
-            // Store failed archives
-            failedArchives.value = vaultStructure.value?.failed_archives || [];
-
-            // For backward compatibility, create a flattened files array
-            // but now this is derived from the archive structure and individual files
-            files.value = [];
-            vaultStructure.value?.archives.forEach((archive: IArchive) => {
-                archive.files.forEach((file: IFileMetadata) => {
-                    files.value.push({
-                        path: file.path,
-                        metadata: file.metadata,
-                        file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
-                        is_loaded: false,
-                        is_loading: false,
-                        load_error: false
-                    });
-                });
-            });
-
-            // Add individual files to the flattened array
-            vaultStructure.value?.files?.forEach((file: IFileMetadata) => {
-                files.value.push({
-                    path: file.path,
-                    metadata: file.metadata,
-                    file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
-                    is_loaded: file.is_loaded, // Individual files may already be loaded
-                    is_loading: false,
-                    load_error: false
-                });
-            });
-
-            // Build Root Directory immediately
-            buildRootDirectory();
+            // Start streaming vault structure updates
+            await invoke("get_vault_structure_streaming", {vaultKeySignature});
 
         } catch (error: any) {
             console.log(">>> ERROR: Failed to get vault structure:", error);
@@ -298,7 +281,108 @@ export const useFileStore = defineStore("files", () => {
             throw new Error("Failed to get vault structure");
         } finally {
             pendingFilesSignature.value = false;
-            pendingVaultStructure.value = false;
+            // Note: don't set pendingVaultStructure to false here, it will be set when streaming completes
+        }
+    };
+
+    // Handle vault updates from streaming
+    const handleVaultUpdate = (update: any) => {
+        console.log(">>> Received vault update:", update.update_type, update);
+        
+        if (!vaultStructure.value) {
+            vaultStructure.value = {
+                archives: [],
+                failed_archives: [],
+                files: []
+            };
+        }
+
+        switch (update.update_type) {
+            case "IndividualFiles":
+                // Add individual files immediately
+                vaultStructure.value.files = update.files;
+                
+                // Update flattened files array
+                update.files.forEach((file: IFileMetadata) => {
+                    files.value.push({
+                        path: file.path,
+                        metadata: file.metadata,
+                        file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
+                        is_loaded: file.is_loaded,
+                        is_loading: false,
+                        load_error: false
+                    });
+                });
+
+                // Build initial directory structure with individual files
+                buildRootDirectory();
+                
+                // Hide loading once we have some content
+                if (update.files.length > 0) {
+                    pendingVaultStructure.value = false;
+                }
+                break;
+
+            case "ArchiveLoading":
+                if (update.loading_archive) {
+                    // Add to loading archives list
+                    loadingArchives.value.push(update.loading_archive);
+                }
+                break;
+
+            case "ArchiveLoaded":
+                if (update.archive) {
+                    // Remove from loading list
+                    loadingArchives.value = loadingArchives.value.filter(
+                        a => a.name !== update.archive!.name
+                    );
+                    
+                    // Add the archive
+                    vaultStructure.value.archives.push(update.archive);
+                    
+                    // Add archive files to flattened array
+                    update.archive.files.forEach((file: IFileMetadata) => {
+                        files.value.push({
+                            path: file.path,
+                            metadata: file.metadata,
+                            file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
+                            is_loaded: false,
+                            is_loading: false,
+                            load_error: false
+                        });
+                    });
+
+                    // Rebuild directory structure to include new archive
+                    buildRootDirectory();
+                    
+                    // Hide loading once we have some content
+                    if (files.value.length > 0) {
+                        pendingVaultStructure.value = false;
+                    }
+                }
+                break;
+
+            case "ArchiveFailed":
+                if (update.failed_archive) {
+                    // Remove from loading list
+                    loadingArchives.value = loadingArchives.value.filter(
+                        a => a.name !== update.failed_archive!.name
+                    );
+                    
+                    vaultStructure.value.failed_archives.push(update.failed_archive);
+                    failedArchives.value.push(update.failed_archive);
+                    
+                    // Rebuild directory to show failed archives
+                    buildRootDirectory();
+                }
+                break;
+
+            case "Complete":
+                // Clear any remaining loading archives and finish loading
+                loadingArchives.value = [];
+                pendingVaultStructure.value = false;
+                console.log(">>> Vault structure streaming completed");
+                break;
         }
     };
 
@@ -366,6 +450,7 @@ export const useFileStore = defineStore("files", () => {
         files,
         vaultStructure,
         failedArchives,
+        loadingArchives,
         rootDirectory,
         currentDirectory,
         currentDirectoryFiles,
@@ -377,5 +462,6 @@ export const useFileStore = defineStore("files", () => {
         getAllFiles,
         getVaultStructure,
         loadSingleFileData,
+        handleVaultUpdate,
     };
 });

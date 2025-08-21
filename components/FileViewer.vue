@@ -28,6 +28,7 @@ const {
   rootDirectory,
   files,
   failedArchives,
+  loadingArchives,
 } = storeToRefs(fileStore);
 const {uploadProgress} = storeToRefs(uploadStore);
 const userStore = useUserStore();
@@ -395,12 +396,13 @@ const filteredFiles = computed(() => {
   }
 });
 
-// Combine regular files and failed archives (only in root directory)
+// Combine regular files, failed archives, and loading archives (only in root directory)
 const combinedFiles = computed(() => {
   const regularFiles = filteredFiles.value || [];
 
-  // Only show failed archives in the root directory
+  // Only show failed and loading archives in the root directory
   const isRootDirectory = fileStore.currentDirectory?.name === 'Root';
+  
   const failedArchiveFiles = isRootDirectory ? failedArchives.value.map(archive => ({
     name: archive.name,
     is_failed_archive: true,
@@ -412,7 +414,18 @@ const combinedFiles = computed(() => {
     metadata: {}
   })) : [];
 
-  return [...regularFiles, ...failedArchiveFiles];
+  const loadingArchiveFiles = isRootDirectory ? loadingArchives.value.map(archive => ({
+    name: archive.name,
+    is_loading_archive: true,
+    is_private: archive.is_private,
+    is_loaded: false,
+    is_loading: true,
+    load_error: false,
+    path: `loading-archive://${archive.name}`,
+    metadata: {}
+  })) : [];
+
+  return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles];
 });
 
 // Computed for loading progress
@@ -717,6 +730,12 @@ const showInFileManager = async (filePath: string) => {
 // Set up event listeners early, before component mount
 const setupEventListeners = async () => {
   const {listen} = await import("@tauri-apps/api/event");
+
+  // Listen for vault updates from streaming
+  await listen("vault-update", (event: any) => {
+    console.log(">>> Received vault-update event:", event.payload);
+    fileStore.handleVaultUpdate(event.payload);
+  });
 
   // Listen for payment request events (simplified)
   await listen("payment-request", (event: any) => {
@@ -1064,12 +1083,13 @@ onUnmounted(() => {
                     v-for="file in combinedFiles"
                     :key="file.path || file.name"
                     class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
-                    @click="handleChangeDirectory(file)"
+                    @click="!file.is_loading_archive ? handleChangeDirectory(file) : null"
                     :class="{
-                  'cursor-pointer': !file.path || file.is_failed_archive,
-                  'opacity-75': file.is_loading,
+                  'cursor-pointer': (!file.path || file.is_failed_archive) && !file.is_loading_archive,
+                  'opacity-75': file.is_loading || file.is_loading_archive,
                   'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
-                  'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive)
+                  'bg-blue-50 dark:bg-blue-900/20': file.is_loading_archive,
+                  'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive || file.is_loading_archive)
                 }"
                 >
                   <!-- Folder/File Name -->
@@ -1082,6 +1102,14 @@ onUnmounted(() => {
                       <i class="pi pi-box mr-2 text-red-500"/>
                       <span class="text-ellipsis overflow-hidden whitespace-nowrap text-red-600 dark:text-red-400">
                       {{ file.name }}
+                    </span>
+                    </template>
+                    <template v-else-if="file.is_loading_archive">
+                      <!-- This is a loading archive -->
+                      <i class="pi pi-spinner pi-spin mr-4 text-blue-500"/>
+                      <i class="pi pi-box mr-2 text-blue-500"/>
+                      <span class="text-ellipsis overflow-hidden whitespace-nowrap text-blue-600 dark:text-blue-400">
+                      {{ file.name }} (loading...)
                     </span>
                     </template>
                     <template v-else-if="file?.path">
@@ -1126,7 +1154,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- Menu -->
-                  <template v-if="file.path && !file.is_failed_archive">
+                  <template v-if="file.path && !file.is_failed_archive && !file.is_loading_archive">
                     <div class="col-span-1">
                       <i
                           class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
@@ -1172,11 +1200,16 @@ onUnmounted(() => {
                 <div
                     v-for="file in combinedFiles"
                     :key="file.path || file.name"
-                    class="aspect-square h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-4 border cursor-pointer"
-                    @click="handleChangeDirectory(file)"
+                    class="aspect-square h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-4 border"
+                    :class="{
+                      'cursor-pointer': !file.is_loading_archive,
+                      'cursor-default opacity-75': file.is_loading_archive,
+                      'bg-blue-50 dark:bg-blue-900/20': file.is_loading_archive
+                    }"
+                    @click="!file.is_loading_archive ? handleChangeDirectory(file) : null"
                 >
                   <div class="flex flex-col items-center justify-center w-full h-full">
-                    <template v-if="file.path">
+                    <template v-if="file.path && !file.is_loading_archive">
                       <!-- Menu -->
                       <div class="self-end">
                         <i
@@ -1190,9 +1223,13 @@ onUnmounted(() => {
                         />
                       </div>
                     </template>
+                    <template v-else>
+                      <div class="self-end"></div>
+                    </template>
 
                     <div class="flex flex-col items-center justify-center flex-1 gap-2">
                       <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-4xl text-red-500"/>
+                      <i v-else-if="file.is_loading_archive" class="pi pi-spinner pi-spin text-4xl text-blue-500"/>
                       <i v-else-if="file.path" class="pi pi-file text-4xl"/>
                       <i v-else
                          :class="file.isArchive ? 'pi pi-box text-4xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-4xl'"/>
@@ -1201,7 +1238,7 @@ onUnmounted(() => {
                           class="text-center text-sm text-ellipsis overflow-hidden whitespace-nowrap w-full cursor-pointer"
                           @click.stop="file.path ? handleFileNameClick(file) : null"
                       >
-                        {{ file.name }}
+                        {{ file.is_loading_archive ? `${file.name} (loading...)` : file.name }}
                       </span>
                     </div>
                   </div>
