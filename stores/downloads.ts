@@ -2,6 +2,7 @@ export interface DownloadItem {
   id: string;
   fileName: string;
   filePath: string; // Path in vault
+  fileObject: any; // Store the complete file object for retry
   status: 'pending' | 'loading' | 'downloading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   fileSize?: number;
@@ -41,6 +42,7 @@ export const useDownloadsStore = defineStore('downloads', () => {
       id: downloadId,
       fileName: file.name || 'unknown_file',
       filePath: file.path,
+      fileObject: file, // Store complete file object for retry
       status: 'pending',
       progress: 0,
       fileSize: file.metadata?.size,
@@ -76,15 +78,8 @@ export const useDownloadsStore = defineStore('downloads', () => {
     });
   };
 
-  const retryDownload = (downloadId: string) => {
-    updateDownload(downloadId, {
-      status: 'pending',
-      progress: 0,
-      downloadedBytes: 0,
-      error: undefined,
-      completedAt: undefined
-    });
-  };
+  // Note: Retry functionality is now handled directly in FileViewer.vue
+  // by removing the failed download and creating a fresh download attempt
 
   const clearCompleted = () => {
     const completedIds = Array.from(downloads.value.entries())
@@ -112,7 +107,6 @@ export const useDownloadsStore = defineStore('downloads', () => {
     updateDownload,
     removeDownload,
     cancelDownload,
-    retryDownload,
     clearCompleted,
     clearFailed
   };

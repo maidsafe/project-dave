@@ -276,7 +276,18 @@ const menuDownloads = computed(() => {
       icon: 'pi pi-refresh',
       command: () => {
         if (selectedDownloadItem.value) {
-          downloadsStore.retryDownload(selectedDownloadItem.value.id);
+          // Remove the failed download entry and start a new download
+          const failedDownload = selectedDownloadItem.value;
+          console.log('>>> Retry download - failedDownload:', failedDownload);
+          
+          downloadsStore.removeDownload(failedDownload.id);
+          // Use the stored file object to retry download
+          if (failedDownload.fileObject) {
+            console.log('>>> Retry download - calling handleDownloadFile with stored fileObject');
+            handleDownloadFile(failedDownload.fileObject);
+          } else {
+            console.log('>>> Retry download - no fileObject stored in failed download');
+          }
         }
       },
     });
@@ -1489,7 +1500,19 @@ onUnmounted(() => {
                     <div class="flex items-center gap-2">
                       <i
                           class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
-                          @click.stop="downloadsStore.retryDownload(download.id)"
+                          @click.stop="() => {
+                            // Remove the failed download entry and start a new download
+                            console.log('>>> Inline retry - failedDownload:', download);
+                            
+                            downloadsStore.removeDownload(download.id);
+                            // Use the stored file object to retry download
+                            if (download.fileObject) {
+                              console.log('>>> Inline retry - calling handleDownloadFile with stored fileObject');
+                              handleDownloadFile(download.fileObject);
+                            } else {
+                              console.log('>>> Inline retry - no fileObject stored in failed download');
+                            }
+                          }"
                           v-tooltip.top="'Retry download'"
                       />
                       <i
