@@ -1081,7 +1081,7 @@ onUnmounted(() => {
                       <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
                       <i class="pi pi-box mr-2 text-red-500"/>
                       <span class="text-ellipsis overflow-hidden text-red-600 dark:text-red-400">
-                      {{ file.name }} <span class="text-xs">({{ file.is_private ? 'Private' : 'Public' }})</span>
+                      {{ file.name }}
                     </span>
                     </template>
                     <template v-else-if="file?.path">
@@ -1111,10 +1111,6 @@ onUnmounted(() => {
                       <!-- This is a folder or archive -->
                       <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
                       <span class="line-clamp-one text-ellipsis">{{ file.name }}</span>
-                      <span v-if="file.isArchive && file.archive"
-                            class="text-xs ml-2 text-amber-600 dark:text-amber-400">
-                        ({{ file.archive.is_private ? 'Private' : 'Public' }} Archive)
-                      </span>
                     </template>
                   </div>
 
