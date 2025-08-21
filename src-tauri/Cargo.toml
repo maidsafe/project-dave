@@ -24,6 +24,7 @@ dirs-next = "~2.0.0"
 directories = "5.0"
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 serde = { version = "1", features = ["derive"] }

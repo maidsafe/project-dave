@@ -181,6 +181,16 @@ async fn confirm_payment(
 }
 
 #[tauri::command]
+async fn show_item_in_file_manager(app: AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    
+    match app.opener().reveal_item_in_dir(&path) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to reveal item: {}", e)),
+    }
+}
+
+#[tauri::command]
 async fn get_unique_download_path(downloads_path: String, filename: String) -> Result<String, ()> {
     use std::path::Path;
 
@@ -224,6 +234,7 @@ pub async fn run() {
         .manage(PaymentOrderManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             upload_files,
             send_payment_order_message,
@@ -236,6 +247,7 @@ pub async fn run() {
             get_unique_download_path,
             app_data,
             app_data_store,
+            show_item_in_file_manager,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -137,6 +137,34 @@ onMounted(async () => {
                     @show-notify="handleShowNotification"
                     @hide-notify="handleHideNotification"
           />
+          <Toast position="bottom-right" group="download-success">
+            <template #message="{ message }">
+              <div class="flex items-start gap-3">
+                <div class="flex-1">
+                  <div class="font-semibold text-green-800 dark:text-green-200">
+                    {{ message.summary }}
+                  </div>
+                  <div class="text-sm text-green-700 dark:text-green-300 mt-1">
+                    {{ message.detail }}
+                  </div>
+                  <button
+                      v-if="message.data?.filePath"
+                      @click="async () => {
+                      try {
+                        const { invoke } = await import('@tauri-apps/api/core');
+                        await invoke('show_item_in_file_manager', { path: message.data.filePath });
+                      } catch (error) {
+                        console.error('Failed to show file:', error);
+                      }
+                    }"
+                      class="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 mt-2 block"
+                  >
+                    Show in File Manager
+                  </button>
+                </div>
+              </div>
+            </template>
+          </Toast>
           <Toast position="bottom-right"/>
         </div>
 

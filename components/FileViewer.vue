@@ -11,6 +11,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {downloadDir} from '@tauri-apps/api/path';
 import {open} from '@tauri-apps/plugin-dialog';
 import {basename} from '@tauri-apps/api/path';
+// Remove direct plugin import - we'll use the backend command instead
 
 const toast = useToast();
 const fileStore = useFileStore();
@@ -279,7 +280,7 @@ const menuDownloads = computed(() => {
           // Remove the failed download entry and start a new download
           const failedDownload = selectedDownloadItem.value;
           console.log('>>> Retry download - failedDownload:', failedDownload);
-          
+
           downloadsStore.removeDownload(failedDownload.id);
           // Use the stored file object to retry download
           if (failedDownload.fileObject) {
@@ -307,12 +308,12 @@ const menuDownloads = computed(() => {
 
   if (download?.status === 'completed' && download?.downloadPath) {
     items.push({
-      label: 'Show in Finder',
+      label: 'Show in File Manager',
       icon: 'pi pi-folder-open',
       command: () => {
         if (selectedDownloadItem.value?.downloadPath) {
-          // This would need Tauri's shell API to open file location
-          console.log('Show file location:', selectedDownloadItem.value.downloadPath);
+          showInFileManager(selectedDownloadItem.value.downloadPath);
+          refDownloadMenu.value.hide();
         }
       },
     });
@@ -324,6 +325,7 @@ const menuDownloads = computed(() => {
     command: () => {
       if (selectedDownloadItem.value) {
         downloadsStore.removeDownload(selectedDownloadItem.value.id);
+        refDownloadMenu.value.hide();
       }
     },
   });
@@ -396,7 +398,7 @@ const filteredFiles = computed(() => {
 // Combine regular files and failed archives (only in root directory)
 const combinedFiles = computed(() => {
   const regularFiles = filteredFiles.value || [];
-  
+
   // Only show failed archives in the root directory
   const isRootDirectory = fileStore.currentDirectory?.name === 'Root';
   const failedArchiveFiles = isRootDirectory ? failedArchives.value.map(archive => ({
@@ -489,9 +491,9 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
     }, 30000); // 30 seconds timeout
 
     // Generate archive name
-    const archiveName = files.length === 1 
-      ? files[0].name  // Single file: use filename
-      : `${files.length}_files_${Date.now()}`; // Multiple files: use count and timestamp
+    const archiveName = files.length === 1
+        ? files[0].name  // Single file: use filename
+        : `${files.length}_files_${Date.now()}`; // Multiple files: use count and timestamp
 
     // Start the upload process
     await invoke("upload_files", {
@@ -557,7 +559,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
     const downloadId = downloadsStore.createDownload(file);
 
     let fileData = file;
-    
+
     // Check if we already have access_data from vault structure
     if (file.access_data && !file.file_access) {
       // access_data is already in the correct PublicOrPrivateFile format
@@ -599,7 +601,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
       console.log('Unique path:', uniquePath);
 
       console.log('Download fileData.file_access:', fileData.file_access);
-      
+
       if (fileData.file_access.Private) {
         console.log('Downloading private file with dataMap:', fileData.file_access.Private);
         // Convert Vue Proxy to plain object
@@ -626,17 +628,25 @@ const handleDownloadFile = async (fileToDownload?: any) => {
       });
 
       const finalFileName = uniquePath.split('/').pop() || fileName;
+      
+      // Show a toast notification with action button
+      console.log('>>> Adding download success toast for:', finalFileName, 'at path:', uniquePath);
+      
       toast.add({
         severity: 'success',
         summary: 'Download Complete',
         detail: `File saved as: ${finalFileName}`,
-        life: 4000,
+        life: 8000,
+        group: 'download-success',
+        data: {
+          filePath: uniquePath
+        }
       });
     } catch (error: any) {
       console.error('Download error:', error);
       console.error('Error message:', error.message);
       console.error('Error details:', error);
-      
+
       downloadsStore.updateDownload(downloadId, {
         status: 'failed',
         error: error.message || 'Download failed',
@@ -682,6 +692,26 @@ const formatUploadDuration = (startTime: Date, endTime?: Date): string => {
 
 const secondsToDate = (seconds: number): Date => {
   return new Date(seconds * 1000);
+};
+
+const showInFileManager = async (filePath: string) => {
+  try {
+    console.log('>>> showInFileManager called with path:', filePath);
+
+    // Call the Rust backend command to reveal the file in the file manager
+    await invoke('show_item_in_file_manager', { path: filePath });
+
+    // No success toast - the file manager opening is feedback enough
+  } catch (error: any) {
+    console.error('Failed to show file in file manager:', error);
+    console.error('Error details:', error.message, error.stack);
+    toast.add({
+      severity: 'error',
+      summary: 'Failed to Open',
+      detail: `Could not open file location: ${error.message || error || 'Unknown error'}`,
+      life: 3000,
+    });
+  }
 };
 
 // Set up event listeners early, before component mount
@@ -1081,7 +1111,8 @@ onUnmounted(() => {
                       <!-- This is a folder or archive -->
                       <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
                       <span class="line-clamp-one text-ellipsis">{{ file.name }}</span>
-                      <span v-if="file.isArchive && file.archive" class="text-xs ml-2 text-amber-600 dark:text-amber-400">
+                      <span v-if="file.isArchive && file.archive"
+                            class="text-xs ml-2 text-amber-600 dark:text-amber-400">
                         ({{ file.archive.is_private ? 'Private' : 'Public' }} Archive)
                       </span>
                     </template>
@@ -1167,7 +1198,8 @@ onUnmounted(() => {
                     <div class="flex flex-col items-center justify-center flex-1 gap-2">
                       <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-4xl text-red-500"/>
                       <i v-else-if="file.path" class="pi pi-file text-4xl"/>
-                      <i v-else :class="file.isArchive ? 'pi pi-box text-4xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-4xl'"/>
+                      <i v-else
+                         :class="file.isArchive ? 'pi pi-box text-4xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-4xl'"/>
 
                       <span
                           class="text-center text-sm truncate w-full cursor-pointer"
