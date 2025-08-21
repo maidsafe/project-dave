@@ -569,6 +569,7 @@ pub struct FailedArchive {
 pub struct VaultStructure {
     pub archives: Vec<ArchiveInfo>,
     pub failed_archives: Vec<FailedArchive>,
+    pub files: Vec<FileMetadata>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -681,9 +682,39 @@ pub async fn get_vault_structure(
         }
     }
 
+    // Process individual files
+    let mut individual_files: Vec<FileMetadata> = vec![];
+
+    // Process individual private files
+    for (data_map, name) in &user_data.private_files {
+        let file = FileMetadata {
+            path: name.clone(),
+            metadata: autonomi::files::Metadata::new_with_size(0), // We don't have size info for individual files
+            file_type: FileType::Private,
+            is_loaded: true, // Individual files have their access data immediately available
+            archive_name: String::new(), // No archive name for individual files
+            access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
+        };
+        individual_files.push(file);
+    }
+
+    // Process individual public files
+    for (data_addr, name) in &user_data.public_files {
+        let file = FileMetadata {
+            path: name.clone(),
+            metadata: autonomi::files::Metadata::new_with_size(0), // We don't have size info for individual files
+            file_type: FileType::Public,
+            is_loaded: true, // Individual files have their access data immediately available
+            archive_name: String::new(), // No archive name for individual files
+            access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
+        };
+        individual_files.push(file);
+    }
+
     Ok(VaultStructure {
         archives,
         failed_archives,
+        files: individual_files,
     })
 }
 
@@ -746,6 +777,26 @@ pub async fn get_files_from_vault(
         }
     }
 
+    // Add individual private files
+    for (data_map, name) in &user_data.private_files {
+        let file = FileFromVault {
+            path: name.clone(),
+            metadata: autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
+            file_access: PublicOrPrivateFile::Private(data_map.clone()),
+        };
+        files.push(file);
+    }
+
+    // Add individual public files
+    for (data_addr, name) in &user_data.public_files {
+        let file = FileFromVault {
+            path: name.clone(),
+            metadata: autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
+            file_access: PublicOrPrivateFile::Public(*data_addr),
+        };
+        files.push(file);
+    }
+
     Ok(files)
 }
 
@@ -756,7 +807,7 @@ pub async fn download_private_file(
 ) -> Result<(), DownloadError> {
     let client = shared_client.get_client().await?;
     let result = client.file_download(data_map, to_dest.clone()).await;
-    
+
     // If download failed, clean up any zero-byte file that might have been created
     if result.is_err() && to_dest.exists() {
         if let Ok(metadata) = std::fs::metadata(&to_dest) {
@@ -765,7 +816,7 @@ pub async fn download_private_file(
             }
         }
     }
-    
+
     result?;
     Ok(())
 }
@@ -777,7 +828,7 @@ pub async fn download_public_file(
 ) -> Result<(), DownloadError> {
     let client = shared_client.get_client().await?;
     let result = client.file_download_public(addr, to_dest.clone()).await;
-    
+
     // If download failed, clean up any zero-byte file that might have been created
     if result.is_err() && to_dest.exists() {
         if let Ok(metadata) = std::fs::metadata(&to_dest) {
@@ -786,7 +837,7 @@ pub async fn download_public_file(
             }
         }
     }
-    
+
     result?;
     Ok(())
 }

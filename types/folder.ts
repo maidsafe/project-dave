@@ -13,6 +13,7 @@ export interface IArchive {
 export interface IVaultStructure {
   archives: IArchive[];
   failed_archives: IFailedArchive[];
+  files: IFileMetadata[];
 }
 
 export interface IFailedArchive {

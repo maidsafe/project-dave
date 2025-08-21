@@ -96,7 +96,7 @@ export const useFileStore = defineStore("files", () => {
             // Reset rootDirectory
             rootDirectory.value = null;
 
-            if (!vaultStructure.value?.archives.length) {
+            if (!vaultStructure.value?.archives.length && !vaultStructure.value?.files?.length) {
                 return;
             }
 
@@ -186,6 +186,37 @@ export const useFileStore = defineStore("files", () => {
                 }
             });
 
+            // Process individual files (not in archives)
+            vaultStructure.value?.files?.forEach((file: IFileMetadata) => {
+                const fileParts = file.path.split("/").filter(part => part.length > 0);
+                let current: any = rootDirectory.value;
+
+                fileParts.forEach((part: string, index: number) => {
+                    if (index === fileParts.length - 1) {
+                        // This is the file - add directly to current folder
+                        current.addFile({
+                            path: file.path,
+                            metadata: file.metadata,
+                            file_access: file.access_data,
+                            access_data: file.access_data,
+                            is_loaded: file.is_loaded,
+                            is_loading: false,
+                            load_error: false,
+                            name: part,
+                            archive_name: "" // Individual files have no archive
+                        });
+                    } else {
+                        // This is a subdirectory - create regular folder (not archive folder)
+                        let subFolder = current.getChild(part);
+                        if (!subFolder) {
+                            subFolder = new Folder(part, current);
+                            current.addSubfolder(subFolder);
+                        }
+                        current = subFolder;
+                    }
+                });
+            });
+
             // Set current directory
             currentDirectory.value = rootDirectory.value;
         } catch (error) {
@@ -222,7 +253,7 @@ export const useFileStore = defineStore("files", () => {
             failedArchives.value = vaultStructure.value?.failed_archives || [];
 
             // For backward compatibility, create a flattened files array
-            // but now this is derived from the archive structure
+            // but now this is derived from the archive structure and individual files
             files.value = [];
             vaultStructure.value?.archives.forEach((archive: IArchive) => {
                 archive.files.forEach((file: IFileMetadata) => {
@@ -234,6 +265,18 @@ export const useFileStore = defineStore("files", () => {
                         is_loading: false,
                         load_error: false
                     });
+                });
+            });
+
+            // Add individual files to the flattened array
+            vaultStructure.value?.files?.forEach((file: IFileMetadata) => {
+                files.value.push({
+                    path: file.path,
+                    metadata: file.metadata,
+                    file_access: file.file_type === "Private" ? {Private: null} : {Public: null},
+                    is_loaded: file.is_loaded, // Individual files may already be loaded
+                    is_loading: false,
+                    load_error: false
                 });
             });
 
