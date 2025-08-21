@@ -119,7 +119,7 @@ export const useFileStore = defineStore("files", () => {
                                 current.addFile({
                                     path: file.path,
                                     metadata: file.metadata,
-                                    file_access: file.access_data || (file.file_type === "Private" ? {Private: null} : {Public: null}),
+                                    file_access: file.access_data,
                                     access_data: file.access_data,
                                     is_loaded: !!file.access_data,
                                     is_loading: false,
@@ -163,7 +163,7 @@ export const useFileStore = defineStore("files", () => {
                                 current.addFile({
                                     path: file.path,
                                     metadata: file.metadata,
-                                    file_access: file.access_data || (file.file_type === "Private" ? {Private: null} : {Public: null}),
+                                    file_access: file.access_data,
                                     access_data: file.access_data,
                                     is_loaded: !!file.access_data,
                                     is_loading: false,

@@ -755,7 +755,18 @@ pub async fn download_private_file(
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
     let client = shared_client.get_client().await?;
-    client.file_download(data_map, to_dest).await?;
+    let result = client.file_download(data_map, to_dest.clone()).await;
+    
+    // If download failed, clean up any zero-byte file that might have been created
+    if result.is_err() && to_dest.exists() {
+        if let Ok(metadata) = std::fs::metadata(&to_dest) {
+            if metadata.len() == 0 {
+                let _ = std::fs::remove_file(&to_dest);
+            }
+        }
+    }
+    
+    result?;
     Ok(())
 }
 
@@ -765,7 +776,18 @@ pub async fn download_public_file(
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
     let client = shared_client.get_client().await?;
-    client.file_download_public(addr, to_dest).await?;
+    let result = client.file_download_public(addr, to_dest.clone()).await;
+    
+    // If download failed, clean up any zero-byte file that might have been created
+    if result.is_err() && to_dest.exists() {
+        if let Ok(metadata) = std::fs::metadata(&to_dest) {
+            if metadata.len() == 0 {
+                let _ = std::fs::remove_file(&to_dest);
+            }
+        }
+    }
+    
+    result?;
     Ok(())
 }
 

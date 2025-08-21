@@ -152,10 +152,12 @@ async fn download_public_file(
     addr: DataAddress,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
-) -> Result<(), ()> {
+) -> Result<(), CommandError> {
     ant::files::download_public_file(&addr, to_dest, shared_client)
         .await
-        .map_err(|_err| ()) // TODO: Map to serializable error
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
 }
 
 #[tauri::command]

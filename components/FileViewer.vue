@@ -542,7 +542,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
     
     // Check if we already have access_data from vault structure
     if (file.access_data && !file.file_access) {
-      // Convert access_data format to file_access format
+      // access_data is already in the correct PublicOrPrivateFile format
       fileData = {
         ...file,
         file_access: file.access_data,
@@ -573,19 +573,29 @@ const handleDownloadFile = async (fileToDownload?: any) => {
 
     try {
       const downloadsPath = await downloadDir();
+      console.log('Downloads path:', downloadsPath);
       const uniquePath = await invoke('get_unique_download_path', {
         downloadsPath,
         filename: fileName
       }) as string;
+      console.log('Unique path:', uniquePath);
 
+      console.log('Download fileData.file_access:', fileData.file_access);
+      
       if (fileData.file_access.Private) {
+        console.log('Downloading private file with dataMap:', fileData.file_access.Private);
+        // Convert Vue Proxy to plain object
+        const dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
         await invoke('download_private_file', {
-          dataMap: fileData.file_access.Private,
+          dataMap: dataMap,
           toDest: uniquePath,
         });
       } else if (fileData.file_access.Public) {
+        console.log('Downloading public file with addr:', fileData.file_access.Public);
+        // Convert Vue Proxy to plain object  
+        const addr = JSON.parse(JSON.stringify(fileData.file_access.Public));
         await invoke('download_public_file', {
-          addr: fileData.file_access.Public,
+          addr: addr,
           toDest: uniquePath,
         });
       }
@@ -605,6 +615,10 @@ const handleDownloadFile = async (fileToDownload?: any) => {
         life: 4000,
       });
     } catch (error: any) {
+      console.error('Download error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error details:', error);
+      
       downloadsStore.updateDownload(downloadId, {
         status: 'failed',
         error: error.message || 'Download failed',
@@ -613,7 +627,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
       toast.add({
         severity: 'error',
         summary: 'Download Failed',
-        detail: 'Failed to download the file.',
+        detail: `Failed to download the file: ${error.message || 'Unknown error'}`,
         life: 3000,
       });
     }
