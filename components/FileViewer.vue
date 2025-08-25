@@ -402,7 +402,7 @@ const combinedFiles = computed(() => {
 
   // Only show failed and loading archives in the root directory
   const isRootDirectory = fileStore.currentDirectory?.name === 'Root';
-  
+
   const failedArchiveFiles = isRootDirectory ? failedArchives.value.map(archive => ({
     name: archive.name,
     is_failed_archive: true,
@@ -643,10 +643,10 @@ const handleDownloadFile = async (fileToDownload?: any) => {
       });
 
       const finalFileName = uniquePath.split('/').pop() || fileName;
-      
+
       // Show a toast notification with action button
       console.log('>>> Adding download success toast for:', finalFileName, 'at path:', uniquePath);
-      
+
       toast.add({
         severity: 'success',
         summary: 'Download Complete',
@@ -714,7 +714,7 @@ const showInFileManager = async (filePath: string) => {
     console.log('>>> showInFileManager called with path:', filePath);
 
     // Call the Rust backend command to reveal the file in the file manager
-    await invoke('show_item_in_file_manager', { path: filePath });
+    await invoke('show_item_in_file_manager', {path: filePath});
 
     // No success toast - the file manager opening is feedback enough
   } catch (error: any) {
@@ -1191,7 +1191,7 @@ onUnmounted(() => {
               class="mt-6 overflow-y-auto overscroll-none"
               style="height: calc(100vh - 280px);"
           >
-            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div class="px-3 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
               <div v-if="!combinedFiles.length" class="col-span-full p-8 text-center text-gray-500">
                 <div v-if="pendingVaultStructure">
                   <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
@@ -1202,7 +1202,7 @@ onUnmounted(() => {
                 <div
                     v-for="file in combinedFiles"
                     :key="file.path || file.name"
-                    class="aspect-square h-[200px] text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-4 border"
+                    class="aspect-square w-full text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-3 border flex flex-col"
                     :class="{
                       'cursor-pointer': !file.is_loading_archive,
                       'cursor-default opacity-75': file.is_loading_archive,
@@ -1210,34 +1210,38 @@ onUnmounted(() => {
                     }"
                     @click="!file.is_loading_archive ? handleChangeDirectory(file) : null"
                 >
-                  <div class="flex flex-col items-center justify-center w-full h-full">
-                    <template v-if="file.path && !file.is_loading_archive">
-                      <!-- Menu -->
-                      <div class="self-end">
-                        <i
-                            class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
-                            @click.stop="
-                            $event => {
-                              selectedFileItem = file;
-                              refFilesMenu.toggle($event);
-                            }
-                          "
-                        />
-                      </div>
-                    </template>
-                    <template v-else>
-                      <div class="self-end"></div>
-                    </template>
+                  <template v-if="file.path && !file.is_loading_archive">
+                    <!-- Menu -->
+                    <div class="self-end mb-2">
+                      <i
+                          class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                          @click.stop="
+                          $event => {
+                            selectedFileItem = file;
+                            refFilesMenu.toggle($event);
+                          }
+                        "
+                      />
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="self-end mb-2 h-4"></div>
+                  </template>
 
-                    <div class="flex flex-col items-center justify-center flex-1 gap-2">
-                      <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-4xl text-red-500"/>
-                      <i v-else-if="file.is_loading_archive" class="pi pi-spinner pi-spin text-4xl text-blue-500"/>
-                      <i v-else-if="file.path" class="pi pi-file text-4xl"/>
+                  <div class="flex flex-col items-center justify-center flex-1 min-h-0">
+                    <div class="flex-shrink-0 mb-3">
+                      <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-3xl text-red-500"/>
+                      <i v-else-if="file.is_loading_archive" class="pi pi-spinner pi-spin text-3xl text-blue-500"/>
+                      <i v-else-if="file.path" class="pi pi-file text-3xl"/>
                       <i v-else
-                         :class="file.isArchive ? 'pi pi-box text-4xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-4xl'"/>
+                         :class="file.isArchive ? 'pi pi-box text-3xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-3xl'"/>
+                    </div>
 
+                    <div class="w-full px-1 min-h-0">
                       <span
-                          class="text-center text-sm text-ellipsis overflow-hidden whitespace-nowrap w-full cursor-pointer"
+                          class="text-center text-xs block w-full cursor-pointer overflow-hidden text-ellipsis"
+                          style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word;"
+                          :title="file.is_loading_archive ? `${file.name} (loading...)` : file.name"
                           @click.stop="file.path ? handleFileNameClick(file) : null"
                       >
                         {{ file.is_loading_archive ? `${file.name} (loading...)` : file.name }}
