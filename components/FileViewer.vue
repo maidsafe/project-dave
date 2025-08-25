@@ -605,7 +605,9 @@ const handleDownloadFile = async (fileToDownload?: any) => {
     downloadsStore.updateDownload(downloadId, {status: 'downloading'});
 
     try {
-      const downloadsPath = await downloadDir();
+      // Get custom download path from settings, fallback to default
+      const appData = await invoke('app_data') as any;
+      const downloadsPath = appData.download_path || await downloadDir();
       console.log('Downloads path:', downloadsPath);
       const uniquePath = await invoke('get_unique_download_path', {
         downloadsPath,
