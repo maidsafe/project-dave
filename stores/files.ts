@@ -331,8 +331,11 @@ export const useFileStore = defineStore("files", () => {
 
             case "ArchiveLoading":
                 if (update.loading_archive) {
-                    // Add to loading archives list
-                    loadingArchives.value.push(update.loading_archive);
+                    // Add to loading archives list, avoiding duplicates
+                    const exists = loadingArchives.value.some(a => a.name === update.loading_archive!.name && a.address === update.loading_archive!.address);
+                    if (!exists) {
+                        loadingArchives.value.push(update.loading_archive);
+                    }
                 }
                 break;
 
@@ -372,11 +375,15 @@ export const useFileStore = defineStore("files", () => {
                 if (update.failed_archive) {
                     // Remove from loading list
                     loadingArchives.value = loadingArchives.value.filter(
-                        a => a.name !== update.failed_archive!.name
+                        a => a.name !== update.failed_archive!.name && a.address !== update.failed_archive!.address
                     );
                     
-                    vaultStructure.value.failed_archives.push(update.failed_archive);
-                    failedArchives.value.push(update.failed_archive);
+                    // Add to failed archives list, avoiding duplicates
+                    const exists = failedArchives.value.some(a => a.name === update.failed_archive!.name && a.address === update.failed_archive!.address);
+                    if (!exists) {
+                        vaultStructure.value.failed_archives.push(update.failed_archive);
+                        failedArchives.value.push(update.failed_archive);
+                    }
                     
                     // Rebuild directory to show failed archives
                     buildRootDirectory();
