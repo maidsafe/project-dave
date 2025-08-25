@@ -144,8 +144,14 @@ export const useFileStore = defineStore("files", () => {
                     let archiveFolderName = archive.name;
                     let counter = 1;
                     
-                    // Handle duplicate archive names by appending a counter
+                    // Handle duplicate archive names by checking if it's actually a different archive
                     while (rootDirectory.value!.getChild(archiveFolderName)) {
+                        const existingChild = rootDirectory.value!.getChild(archiveFolderName);
+                        // If it's the same archive (same address), don't create a duplicate
+                        if (existingChild && existingChild.archive && existingChild.archive.address === archive.address) {
+                            // Same archive, don't add counter - just skip creating a new folder
+                            return;
+                        }
                         archiveFolderName = `${archive.name} (${counter})`;
                         counter++;
                     }
