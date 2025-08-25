@@ -6,6 +6,7 @@ use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use ant::{
     app_data::AppData,
     files::{FileFromVault, VaultStructure},
+    local_storage::LocalFileData,
 };
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
@@ -207,6 +208,86 @@ async fn show_item_in_file_manager(app: AppHandle, path: String) -> Result<(), S
 }
 
 #[tauri::command]
+async fn get_local_files() -> Result<LocalFileData, CommandError> {
+    ant::local_storage::get_all_local_files()
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
+async fn load_local_private_archive(
+    local_addr: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<Vec<FileFromVault>, CommandError> {
+    let client = shared_client.get_client().await.map_err(|err| CommandError {
+        message: err.to_string(),
+    })?;
+    
+    let archive_datamap = ant::local_storage::get_local_private_archive_access(&local_addr)
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+    
+    let archive = client.archive_get(&archive_datamap).await.map_err(|err| CommandError {
+        message: err.to_string(),
+    })?;
+    
+    let mut files = Vec::new();
+    for (filepath, (data_map, metadata)) in archive.map() {
+        files.push(ant::files::FileFromVault::new(
+            filepath.display().to_string(),
+            metadata.clone(),
+            ant::files::PublicOrPrivateFile::Private(data_map.clone()),
+        ));
+    }
+    
+    Ok(files)
+}
+
+#[tauri::command]
+async fn load_local_public_archive(
+    address_hex: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<Vec<FileFromVault>, CommandError> {
+    let client = shared_client.get_client().await.map_err(|err| CommandError {
+        message: err.to_string(),
+    })?;
+    
+    let archive_address = ant::local_storage::get_local_public_archive_address(&address_hex)
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+    
+    let archive = client.archive_get_public(&archive_address).await.map_err(|err| CommandError {
+        message: err.to_string(),
+    })?;
+    
+    let mut files = Vec::new();
+    for (filepath, (data_addr, metadata)) in archive.map() {
+        files.push(ant::files::FileFromVault::new(
+            filepath.display().to_string(),
+            metadata.clone(),
+            ant::files::PublicOrPrivateFile::Public(*data_addr),
+        ));
+    }
+    
+    Ok(files)
+}
+
+#[tauri::command]
+async fn get_local_structure_streaming(
+    app: AppHandle,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), CommandError> {
+    ant::local_storage::get_local_structure_streaming(app, shared_client)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
 async fn get_unique_download_path(downloads_path: String, filename: String) -> Result<String, ()> {
     use std::path::Path;
 
@@ -262,6 +343,10 @@ pub async fn run() {
             get_single_file_data,
             confirm_payment,
             get_unique_download_path,
+            get_local_files,
+            get_local_structure_streaming,
+            load_local_private_archive,
+            load_local_public_archive,
             app_data,
             app_data_store,
             show_item_in_file_manager,

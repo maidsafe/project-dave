@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import {useFileStore} from '~/stores/files';
+import {useLocalFilesStore} from '~/stores/localFiles';
 import {useToast} from 'primevue/usetoast';
 import {useUserStore} from '~/stores/user';
 import {useUploadStore} from '~/stores/upload';
@@ -15,6 +16,7 @@ import {basename} from '@tauri-apps/api/path';
 
 const toast = useToast();
 const fileStore = useFileStore();
+const localFilesStore = useLocalFilesStore();
 const uploadStore = useUploadStore();
 const uploadsStore = useUploadsStore();
 const downloadsStore = useDownloadsStore();
@@ -30,11 +32,21 @@ const {
   failedArchives,
   loadingArchives,
 } = storeToRefs(fileStore);
+
+const {
+  pendingLocalStructure,
+  currentDirectory: localCurrentDirectory,
+  currentDirectoryFiles: localCurrentDirectoryFiles,
+  rootDirectory: localRootDirectory,
+  localFiles,
+  failedArchives: localFailedArchives,
+  loadingArchives: localLoadingArchives,
+} = storeToRefs(localFilesStore);
 const {uploadProgress} = storeToRefs(uploadStore);
 const userStore = useUserStore();
 const {query} = storeToRefs(userStore);
 
-const activeTab = ref(0); // 0: Files, 1: Uploads, 2: Downloads
+const activeTab = ref(0); // 0: Files, 1: Local Files, 2: Uploads, 3: Downloads
 const viewTypeVault = ref<'grid' | 'list'>('list');
 const breadcrumbs = ref<any[]>([]);
 const isVisibleFileInfo = ref(false);
@@ -53,6 +65,7 @@ const quoteData = ref<any>(null);
 const uploadError = ref<string>('');
 const pendingUploadFiles = ref<any>(null);
 const currentUploadId = ref<string | null>(null);
+const localBreadcrumbs = ref<any[]>([]);
 
 // Upload modal functionality
 const initializeUploadSteps = () => {
@@ -739,6 +752,12 @@ const setupEventListeners = async () => {
     fileStore.handleVaultUpdate(event.payload);
   });
 
+  // Listen for local file updates from streaming
+  await listen("local-update", (event: any) => {
+    console.log(">>> Received local-update event:", event.payload);
+    localFilesStore.handleLocalUpdate(event.payload);
+  });
+
   // Listen for payment request events (simplified)
   await listen("payment-request", (event: any) => {
     console.log(">>> Received payment-request event:", event.payload);
@@ -871,7 +890,7 @@ const setupEventListeners = async () => {
           // Close modal and show progress table (but keep upload ID active)
           showUploadModal.value = false;
           // Switch to uploads tab to show the active upload
-          activeTab.value = 1;
+          activeTab.value = 2;
           // Don't call handleCancelUploadModal() here - we need currentUploadId for subsequent events
           pendingUploadFiles.value = null;
           uploadSteps.value = [];
@@ -911,6 +930,10 @@ const setupEventListeners = async () => {
         setTimeout(() => {
           fileStore.getAllFiles();
           uploadStore.resetUpload();
+          // Also refresh local files if on that tab
+          if (activeTab.value === 1) {
+            loadLocalFiles();
+          }
         }, 2000);
         break;
 
@@ -941,8 +964,103 @@ setupEventListeners().catch(err => {
   console.error('>>> Error setting up event listeners:', err);
 });
 
+// Function to load local files structure
+const loadLocalFiles = async () => {
+  try {
+    await localFilesStore.getLocalStructure();
+  } catch (error) {
+    console.error('Failed to load local files:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Failed to Load Local Files',
+      detail: 'Could not retrieve local files',
+      life: 3000,
+    });
+  }
+};
+
 // Auto-detect stuck uploads (runs every 30 seconds)
 let stuckUploadCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+// Watch for tab changes to load local files when needed
+watch(activeTab, (newTab) => {
+  if (newTab === 1 && !localRootDirectory.value) {
+    loadLocalFiles();
+  }
+});
+
+// Get current local directory files for display (similar to vault files)
+const localDirectoryFiles = computed(() => {
+  if (!localCurrentDirectory.value) {
+    return [];
+  }
+  return localCurrentDirectoryFiles.value || [];
+});
+
+// Combine local files with loading and failed archive states (similar to vault files)
+const combinedLocalFiles = computed(() => {
+  const regularFiles = localDirectoryFiles.value || [];
+
+  // Only show failed and loading archives in the root directory
+  const isRootDirectory = localCurrentDirectory.value === localRootDirectory.value;
+
+  const failedArchiveFiles = isRootDirectory ? localFailedArchives.value.map(archive => ({
+    name: archive.name,
+    is_failed_archive: true,
+    is_private: archive.is_private,
+    is_loaded: false,
+    is_loading: false,
+    load_error: true,
+    path: `failed-archive://${archive.address}`,
+    address: archive.address,
+    metadata: {}
+  })) : [];
+
+  const loadingArchiveFiles = isRootDirectory ? localLoadingArchives.value.map(archive => ({
+    name: archive.name,
+    is_loading_archive: true,
+    is_private: archive.is_private,
+    is_loaded: false,
+    is_loading: true,
+    load_error: false,
+    path: `loading-archive://${archive.address}`,
+    address: archive.address,
+    metadata: {}
+  })) : [];
+
+  return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles];
+});
+
+// Handle local directory/file navigation (similar to vault files)
+const handleLocalChangeDirectory = (target: any) => {
+  if (!target?.children && !target?.path) {
+    return;
+  } else {
+    localBreadcrumbs.value.push(target);
+    localFilesStore.changeDirectory(target);
+  }
+};
+
+// Handle local file name click
+const handleLocalFileNameClick = (file: any) => {
+  if (file.path) {
+    selectedFileItem.value = file;
+    isVisibleFileInfo.value = true;
+  }
+};
+
+// Go back in local directory
+const handleLocalGoBack = (target: any) => {
+  localBreadcrumbs.value.pop();
+  localFilesStore.changeDirectory(target);
+};
+
+// Handle local breadcrumb click
+const handleLocalBreadcrumbClick = (crumb: any) => {
+  const index = localBreadcrumbs.value.findIndex(breadcrumb => breadcrumb === crumb);
+  localBreadcrumbs.value = localBreadcrumbs.value.slice(0, index + 1);
+  localFilesStore.changeDirectory(crumb);
+};
 
 onMounted(async () => {
   try {
@@ -990,9 +1108,9 @@ onUnmounted(() => {
 
         <div class="flex items-center gap-3">
           <div
-              v-if="currentDirectory?.parent"
+              v-if="(currentDirectory?.parent) || (activeTab === 1 && localCurrentDirectory?.parent)"
               class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
-              @click="handleGoBack(currentDirectory.parent)"
+              @click="activeTab === 1 ? handleLocalGoBack(localCurrentDirectory.parent) : handleGoBack(currentDirectory.parent)"
           >
             <i class="pi pi-reply -scale-x-100 translate"/>
           </div>
@@ -1007,9 +1125,10 @@ onUnmounted(() => {
           </div>
 
           <div
+              v-if="activeTab === 0 || activeTab === 1"
               class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-              v-tooltip.bottom="'Refresh files'"
-              @click="fileStore.getAllFiles()"
+              v-tooltip.bottom="activeTab === 0 ? 'Refresh vault files' : 'Refresh local files'"
+              @click="activeTab === 0 ? fileStore.getAllFiles() : loadLocalFiles()"
           >
             <i class="pi pi-refresh"/>
           </div>
@@ -1254,8 +1373,239 @@ onUnmounted(() => {
           </div>
         </TabPanel>
 
+        <!-- Local Files Tab -->
+        <TabPanel header="Local Files" :value="1">
+
+          <!-- Local Files Breadcrumbs -->
+          <div
+              v-if="localBreadcrumbs?.length > 0"
+              class="mx-[6rem] flex gap-4 items-center text-sm font-semibold flex-wrap my-4"
+          >
+            <div
+                class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
+                @click="handleLocalBreadcrumbClick(localRootDirectory)"
+            >
+              Local Files
+            </div>
+            <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"/>
+
+            <template v-for="(crumb, index) in localBreadcrumbs" :key="index">
+              <div
+                  :class="`cursor-pointer transition-all duration-300 ${
+                  index === localBreadcrumbs.length - 1
+                    ? 'text-autonomi-text-secondary'
+                    : 'text-autonomi-text-primary/70'
+                }`"
+                  @click="handleLocalBreadcrumbClick(crumb)"
+              >
+                {{ crumb.name }}
+              </div>
+              <i
+                  v-if="index !== localBreadcrumbs.length - 1"
+                  class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"
+              />
+            </template>
+          </div>
+          
+          <!-- Files Table (List View) -->
+          <div
+              v-if="viewTypeVault === 'list'"
+              class="mt-6 overflow-y-auto overscroll-none"
+              style="height: calc(100vh - 280px);"
+          >
+            <div class="grid grid-cols-12 font-semibold mb-10">
+              <div
+                  class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] text-autonomi-red-300"
+              >
+                Name
+              </div>
+              <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
+                Upload Date
+              </div>
+              <div class="col-span-1 text-autonomi-red-300">
+                <i class="pi pi-user"/>
+              </div>
+
+              <!-- Spacer -->
+              <div class="col-span-12 h-10"/>
+
+              <!-- Files Rows -->
+              <template v-if="combinedLocalFiles.length">
+                <div
+                    v-for="file in combinedLocalFiles"
+                    :key="file.path || file.name"
+                    class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
+                    @click="!file.is_loading_archive ? handleLocalChangeDirectory(file) : null"
+                    :class="{
+                      'cursor-pointer': (!file.path || file.is_failed_archive) && !file.is_loading_archive,
+                      'opacity-75': file.is_loading || file.is_loading_archive,
+                      'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
+                      'bg-blue-50 dark:bg-blue-900/20': file.is_loading_archive,
+                      'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive || file.is_loading_archive)
+                    }"
+                >
+                  <!-- Folder/File Name -->
+                  <div
+                      class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] flex items-center"
+                  >
+                    <template v-if="file.is_failed_archive">
+                      <!-- This is a failed archive -->
+                      <i class="pi pi-exclamation-triangle mr-4 text-red-500"/>
+                      <i class="pi pi-box mr-2 text-red-500"/>
+                      <span class="text-ellipsis overflow-hidden whitespace-nowrap text-red-600 dark:text-red-400">
+                        {{ file.name }}
+                      </span>
+                    </template>
+                    <template v-else-if="file.is_loading_archive">
+                      <!-- This is a loading archive -->
+                      <i class="pi pi-spinner pi-spin mr-4 text-blue-500"/>
+                      <i class="pi pi-box mr-2 text-blue-500"/>
+                      <span class="text-ellipsis overflow-hidden whitespace-nowrap text-blue-600 dark:text-blue-400">
+                        {{ file.name }} (loading...)
+                      </span>
+                    </template>
+                    <template v-else-if="file?.path">
+                      <!-- This is a file -->
+                      <i
+                          v-if="/\\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(file.name)"
+                          class="pi pi-image mr-4"
+                      />
+                      <i
+                          v-else-if="/\\.(pdf)$/i.test(file.name)"
+                          class="pi pi-file-pdf mr-4"
+                      />
+                      <i v-else-if="/\\.(zip)$/i.test(file.name)" class="pi pi-box mr-4"/>
+                      <i v-else class="pi pi-file mr-4"/>
+
+                      <span
+                          class="text-ellipsis overflow-hidden whitespace-nowrap cursor-pointer"
+                          @click.stop="handleLocalFileNameClick(file)">
+                        {{ file.name }}
+                      </span>
+                      <!-- Loading indicators for files -->
+                      <i v-if="file.is_loading" class="pi pi-spinner pi-spin ml-2 text-sm text-blue-500"/>
+                      <i v-else-if="file.load_error" class="pi pi-exclamation-triangle ml-2 text-sm text-red-500"
+                         v-tooltip.top="'Failed to load file data'"/>
+                    </template>
+                    <template v-else>
+                      <!-- This is a folder or archive -->
+                      <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
+                      <span class="text-ellipsis overflow-hidden whitespace-nowrap">{{ file.name }}</span>
+                    </template>
+                  </div>
+
+                  <!-- Upload Date -->
+                  <div
+                      class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
+                  >
+                    {{
+                      file?.metadata?.uploaded && !file.is_failed_archive
+                          ? secondsToDate(file.metadata.uploaded).toLocaleString()
+                          : ''
+                    }}
+                  </div>
+
+                  <!-- Menu -->
+                  <template v-if="file.path && !file.is_failed_archive && !file.is_loading_archive">
+                    <div class="col-span-1">
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
+                          @click.stop="
+                        $event => {
+                          selectedFileItem = file;
+                          refFilesMenu.toggle($event);
+                        }
+                      "
+                      />
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="col-span-1"></div>
+                  </template>
+                </div>
+              </template>
+              <template v-else>
+                <div class="col-span-12 p-8 text-center text-gray-500">
+                  <div v-if="pendingLocalStructure">
+                    <i class="pi pi-spinner pi-spin mr-4"/>Loading local files...
+                  </div>
+                  <div v-else>No local files found. Files will appear here after you upload them.</div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Grid View -->
+          <div
+              v-else-if="viewTypeVault === 'grid'"
+              class="mt-6 overflow-y-auto overscroll-none"
+              style="height: calc(100vh - 280px);"
+          >
+            <div class="px-3 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              <div v-if="!combinedLocalFiles.length" class="col-span-full p-8 text-center text-gray-500">
+                <div v-if="pendingLocalStructure">
+                  <i class="pi pi-spinner pi-spin mr-4"/>Loading local files...
+                </div>
+                <div v-else>No local files found. Files will appear here after you upload them.</div>
+              </div>
+              <template v-else>
+                <div
+                    v-for="file in combinedLocalFiles"
+                    :key="file.path || file.name"
+                    class="aspect-square w-full text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-3 border flex flex-col"
+                    :class="{
+                      'cursor-pointer': !file.is_loading_archive,
+                      'cursor-default opacity-75': file.is_loading_archive,
+                      'bg-blue-50 dark:bg-blue-900/20': file.is_loading_archive
+                    }"
+                    @click="!file.is_loading_archive ? handleLocalChangeDirectory(file) : null"
+                >
+                  <template v-if="file.path && !file.is_loading_archive">
+                    <!-- Menu -->
+                    <div class="self-end mb-2">
+                      <i
+                          class="pi pi-ellipsis-h cursor-pointer hover:text-autonomi-gray-600"
+                          @click.stop="
+                          $event => {
+                            selectedFileItem = file;
+                            refFilesMenu.toggle($event);
+                          }
+                        "
+                      />
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="self-end mb-2 h-4"></div>
+                  </template>
+
+                  <div class="flex flex-col items-center justify-center flex-1 min-h-0">
+                    <div class="flex-shrink-0 mb-3">
+                      <i v-if="file.is_failed_archive" class="pi pi-exclamation-triangle text-3xl text-red-500"/>
+                      <i v-else-if="file.is_loading_archive" class="pi pi-spinner pi-spin text-3xl text-blue-500"/>
+                      <i v-else-if="file.path" class="pi pi-file text-3xl"/>
+                      <i v-else
+                         :class="file.isArchive ? 'pi pi-box text-3xl text-amber-600 dark:text-amber-400' : 'pi pi-folder text-3xl'"/>
+                    </div>
+
+                    <div class="w-full px-1 min-h-0">
+                      <span
+                          class="text-center text-xs block w-full cursor-pointer overflow-hidden text-ellipsis"
+                          style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word;"
+                          :title="file.is_loading_archive ? `${file.name} (loading...)` : file.name"
+                          @click.stop="file.path ? handleLocalFileNameClick(file) : null"
+                      >
+                        {{ file.is_loading_archive ? `${file.name} (loading...)` : file.name }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </TabPanel>
+
         <!-- Uploads Tab -->
-        <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="1">
+        <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="2">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Uploads -->
@@ -1428,7 +1778,7 @@ onUnmounted(() => {
         </TabPanel>
 
         <!-- Downloads Tab -->
-        <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="2">
+        <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="3">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Downloads -->
@@ -1762,10 +2112,37 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- Show type for local files -->
+        <div v-if="selectedFileItem?.type" class="py-3">
+          <div>Type</div>
+          <div class="text-autonomi-text-primary">
+            <template v-if="selectedFileItem.type === 'public_archive'">
+              Public Archive
+            </template>
+            <template v-else-if="selectedFileItem.type === 'private_archive'">
+              Private Archive
+            </template>
+            <template v-else-if="selectedFileItem.type === 'public_file'">
+              Public File
+            </template>
+            <template v-else-if="selectedFileItem.type === 'private_file'">
+              Private File
+            </template>
+          </div>
+        </div>
+
+        <!-- Show address for local files -->
+        <div v-if="selectedFileItem?.address" class="py-3">
+          <div>Address</div>
+          <div class="text-autonomi-text-primary font-mono text-xs break-all">
+            {{ selectedFileItem.address }}
+          </div>
+        </div>
+
         <div class="py-3">
           <div>Size</div>
           <div class="text-autonomi-text-primary">
-            {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : '' }}
+            {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : 'Unknown' }}
           </div>
         </div>
 
@@ -1777,7 +2154,7 @@ onUnmounted(() => {
                   ? secondsToDate(
                       selectedFileItem.metadata.modified,
                   ).toLocaleString()
-                  : ''
+                  : 'Unknown'
             }}
           </div>
         </div>
@@ -1790,7 +2167,7 @@ onUnmounted(() => {
                   ? secondsToDate(
                       selectedFileItem.metadata.created,
                   ).toLocaleString()
-                  : ''
+                  : 'Unknown'
             }}
           </div>
         </div>

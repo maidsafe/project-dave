@@ -1,4 +1,5 @@
 use crate::ant::client::SharedClient;
+use crate::ant::local_storage;
 use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEOUT_SECS};
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::quote::{DataTypes, StoreQuote};
@@ -377,7 +378,7 @@ pub async fn upload_private_files_to_vault(
     // Add the archive with a name
     user_data
         .private_file_archives
-        .insert(DataMapChunk::from(private_archive_datamap), archive_name);
+        .insert(DataMapChunk::from(private_archive_datamap.clone()), archive_name.clone());
 
     let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
     let scratchpad_exists = client
@@ -447,6 +448,8 @@ pub async fn upload_private_files_to_vault(
     let secret_key = secret_key.clone();
     let app_clone = app.clone();
     let total_chunks = aggregated_chunks.len();
+    let archive_name_clone = archive_name.clone();
+    let private_archive_datamap_clone = private_archive_datamap.clone();
 
     tokio::spawn(async move {
         let order_successful = loop {
@@ -517,12 +520,21 @@ pub async fn upload_private_files_to_vault(
             );
 
             let result = client
-                .put_user_data_to_vault(&secret_key, receipt.into(), user_data)
+                .put_user_data_to_vault(&secret_key, receipt.into(), user_data.clone())
                 .await;
 
             tracing::debug!("Update vault result: {:?}", result);
 
             if result.is_ok() {
+                // Save to local storage
+                if let Err(e) = local_storage::write_local_private_file_archive(
+                    private_archive_datamap_clone.address.to_hex(),
+                    private_archive_datamap_clone.address().to_string(),
+                    &archive_name_clone,
+                ) {
+                    tracing::error!("Failed to save archive to local storage: {}", e);
+                }
+                
                 // Emit completion
                 let _ = app_clone.emit(
                     "upload-progress",
@@ -557,6 +569,16 @@ pub struct FileFromVault {
     path: String,
     metadata: Metadata,
     file_access: PublicOrPrivateFile,
+}
+
+impl FileFromVault {
+    pub fn new(path: String, metadata: Metadata, file_access: PublicOrPrivateFile) -> Self {
+        Self {
+            path,
+            metadata,
+            file_access,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -996,11 +1018,11 @@ pub async fn get_files_from_vault(
         for (filepath, (data_map, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
 
-            let file = FileFromVault {
-                path: filepath,
-                metadata: metadata.clone(),
-                file_access: PublicOrPrivateFile::Private(data_map.clone()),
-            };
+            let file = FileFromVault::new(
+                filepath,
+                metadata.clone(),
+                PublicOrPrivateFile::Private(data_map.clone()),
+            );
             files.push(file);
         }
     }
@@ -1019,32 +1041,32 @@ pub async fn get_files_from_vault(
         for (filepath, (data_addr, metadata)) in archive.map() {
             let filepath = format!("{archive_name}/{}", filepath.display());
 
-            let file = FileFromVault {
-                path: filepath,
-                metadata: metadata.clone(),
-                file_access: PublicOrPrivateFile::Public(*data_addr),
-            };
+            let file = FileFromVault::new(
+                filepath,
+                metadata.clone(),
+                PublicOrPrivateFile::Public(*data_addr),
+            );
             files.push(file);
         }
     }
 
     // Add individual private files
     for (data_map, name) in &user_data.private_files {
-        let file = FileFromVault {
-            path: name.clone(),
-            metadata: autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
-            file_access: PublicOrPrivateFile::Private(data_map.clone()),
-        };
+        let file = FileFromVault::new(
+            name.clone(),
+            autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
+            PublicOrPrivateFile::Private(data_map.clone()),
+        );
         files.push(file);
     }
 
     // Add individual public files
     for (data_addr, name) in &user_data.public_files {
-        let file = FileFromVault {
-            path: name.clone(),
-            metadata: autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
-            file_access: PublicOrPrivateFile::Public(*data_addr),
-        };
+        let file = FileFromVault::new(
+            name.clone(),
+            autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
+            PublicOrPrivateFile::Public(*data_addr),
+        );
         files.push(file);
     }
 
@@ -1113,11 +1135,11 @@ pub async fn get_single_file_data(
             for (filepath, (file_data_map, metadata)) in archive.map() {
                 let full_path = format!("{}/{}", archive_name, filepath.display());
                 if full_path == file_path {
-                    return Ok(FileFromVault {
-                        path: file_path.to_string(),
-                        metadata: metadata.clone(),
-                        file_access: PublicOrPrivateFile::Private(file_data_map.clone()),
-                    });
+                    return Ok(FileFromVault::new(
+                        file_path.to_string(),
+                        metadata.clone(),
+                        PublicOrPrivateFile::Private(file_data_map.clone()),
+                    ));
                 }
             }
         }
@@ -1133,11 +1155,11 @@ pub async fn get_single_file_data(
             for (filepath, (file_addr, metadata)) in archive.map() {
                 let full_path = format!("{}/{}", archive_name, filepath.display());
                 if full_path == file_path {
-                    return Ok(FileFromVault {
-                        path: file_path.to_string(),
-                        metadata: metadata.clone(),
-                        file_access: PublicOrPrivateFile::Public(*file_addr),
-                    });
+                    return Ok(FileFromVault::new(
+                        file_path.to_string(),
+                        metadata.clone(),
+                        PublicOrPrivateFile::Public(*file_addr),
+                    ));
                 }
             }
         }
