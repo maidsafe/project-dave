@@ -81,6 +81,7 @@ export const useFileStore = defineStore("files", () => {
     const pendingFilesSignature = ref(false);
     const pendingVaultStructure = ref(false);
     const loadedFiles = ref<Map<string, any>>(new Map());
+    const currentLoadCode = ref<string | null>(null);
 
     // Computed
     const currentDirectoryFiles = computed(() => {
@@ -244,8 +245,18 @@ export const useFileStore = defineStore("files", () => {
         }
     };
 
+    // Generate a unique temp code for this load operation
+    const generateTempCode = () => {
+        return `vault_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    };
+
     const getVaultStructure = async () => {
         console.log(">>> Getting vault structure with streaming...");
+        
+        // Generate new temp code for this load operation
+        const tempCode = generateTempCode();
+        currentLoadCode.value = tempCode;
+        console.log(">>> Generated temp code for vault load:", tempCode);
         
         // IMMEDIATELY clear all state to show loading
         vaultStructure.value = null;
@@ -269,8 +280,8 @@ export const useFileStore = defineStore("files", () => {
                 files: []
             };
 
-            // Start streaming vault structure updates
-            await invoke("get_vault_structure_streaming", {vaultKeySignature});
+            // Start streaming vault structure updates with temp code
+            await invoke("get_vault_structure_streaming", {vaultKeySignature, tempCode});
 
         } catch (error: any) {
             console.log(">>> ERROR: Failed to get vault structure:", error);
@@ -294,6 +305,12 @@ export const useFileStore = defineStore("files", () => {
     // Handle vault updates from streaming
     const handleVaultUpdate = (update: any) => {
         console.log(">>> Received vault update:", update.update_type, update);
+        
+        // Validate temp code - ignore update if it doesn't match current load operation
+        if (!update.temp_code || update.temp_code !== currentLoadCode.value) {
+            console.log(">>> Ignoring vault update - temp code mismatch:", update.temp_code, "vs", currentLoadCode.value);
+            return;
+        }
         
         if (!vaultStructure.value) {
             vaultStructure.value = {

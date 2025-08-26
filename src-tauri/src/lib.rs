@@ -124,6 +124,7 @@ async fn get_vault_structure(
 async fn get_vault_structure_streaming(
     app: AppHandle,
     vault_key_signature: String,
+    temp_code: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), ()> {
     let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
@@ -131,7 +132,7 @@ async fn get_vault_structure_streaming(
     )
     .expect("Invalid vault key signature");
 
-    ant::files::get_vault_structure_streaming(app, &secret_key, shared_client)
+    ant::files::get_vault_structure_streaming(app, &secret_key, temp_code, shared_client)
         .await
         .map_err(|_err| ()) // TODO: Map to serializable error
 }
@@ -278,9 +279,10 @@ async fn load_local_public_archive(
 #[tauri::command]
 async fn get_local_structure_streaming(
     app: AppHandle,
+    temp_code: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
-    ant::local_storage::get_local_structure_streaming(app, shared_client)
+    ant::local_storage::get_local_structure_streaming(app, temp_code, shared_client)
         .await
         .map_err(|err| CommandError {
             message: err.to_string(),

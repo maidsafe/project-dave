@@ -268,6 +268,7 @@ pub struct LocalUpdate {
     pub loading_archive: Option<LocalLoadingArchive>,
     pub files: Vec<LocalIndividualFile>,
     pub is_complete: bool,
+    pub temp_code: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -381,6 +382,7 @@ pub fn get_all_local_files() -> Result<LocalFileData, LocalStorageError> {
 /// Get local file structure with streaming updates similar to vault files
 pub async fn get_local_structure_streaming(
     app: AppHandle,
+    temp_code: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), LocalStorageError> {
     let client = shared_client.get_client().await
@@ -419,6 +421,7 @@ pub async fn get_local_structure_streaming(
             loading_archive: None,
             files: individual_files,
             is_complete: false,
+            temp_code: temp_code.clone(),
         };
         app.emit("local-update", update).map_err(|e| LocalStorageError::WriteError(
             std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
@@ -447,9 +450,11 @@ pub async fn get_local_structure_streaming(
             }),
             files: vec![],
             is_complete: false,
+            temp_code: temp_code.clone(),
         };
         let _ = app.emit("local-update", loading_update);
         
+        let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match get_local_private_archive_access(&archive_address) {
                 Ok(archive_datamap) => {
@@ -480,6 +485,7 @@ pub async fn get_local_structure_streaming(
                                 loading_archive: None,
                                 files: vec![],
                                 is_complete: false,
+                                temp_code: temp_code.clone(),
                             };
 
                             let _ = app.emit("local-update", update);
@@ -498,6 +504,7 @@ pub async fn get_local_structure_streaming(
                                 loading_archive: None,
                                 files: vec![],
                                 is_complete: false,
+                                temp_code: temp_code.clone(),
                             };
 
                             let _ = app.emit("local-update", update);
@@ -518,6 +525,7 @@ pub async fn get_local_structure_streaming(
                         loading_archive: None,
                         files: vec![],
                         is_complete: false,
+                        temp_code: temp_code.clone(),
                     };
 
                     let _ = app.emit("local-update", update);
@@ -546,9 +554,11 @@ pub async fn get_local_structure_streaming(
             }),
             files: vec![],
             is_complete: false,
+            temp_code: temp_code.clone(),
         };
         let _ = app.emit("local-update", loading_update);
         
+        let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match get_local_public_archive_address(&archive_address) {
                 Ok(archive_addr) => {
@@ -579,6 +589,7 @@ pub async fn get_local_structure_streaming(
                                 loading_archive: None,
                                 files: vec![],
                                 is_complete: false,
+                                temp_code: temp_code.clone(),
                             };
 
                             let _ = app.emit("local-update", update);
@@ -597,6 +608,7 @@ pub async fn get_local_structure_streaming(
                                 loading_archive: None,
                                 files: vec![],
                                 is_complete: false,
+                                temp_code: temp_code.clone(),
                             };
 
                             let _ = app.emit("local-update", update);
@@ -617,6 +629,7 @@ pub async fn get_local_structure_streaming(
                         loading_archive: None,
                         files: vec![],
                         is_complete: false,
+                        temp_code: temp_code.clone(),
                     };
 
                     let _ = app.emit("local-update", update);
@@ -639,6 +652,7 @@ pub async fn get_local_structure_streaming(
         loading_archive: None,
         files: vec![],
         is_complete: true,
+        temp_code: temp_code.clone(),
     };
     app.emit("local-update", completion_update).map_err(|e| LocalStorageError::WriteError(
         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())

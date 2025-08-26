@@ -602,6 +602,7 @@ pub struct VaultUpdate {
     pub loading_archive: Option<LoadingArchive>,
     pub files: Vec<FileMetadata>,
     pub is_complete: bool,
+    pub temp_code: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -768,6 +769,7 @@ pub async fn get_vault_structure(
 pub async fn get_vault_structure_streaming(
     app: tauri::AppHandle,
     secret_key: &VaultSecretKey,
+    temp_code: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), VaultError> {
     let client = shared_client.get_client().await?;
@@ -813,6 +815,7 @@ pub async fn get_vault_structure_streaming(
             loading_archive: None,
             files: individual_files,
             is_complete: false,
+            temp_code: temp_code.clone(),
         };
         app.emit("vault-update", update).map_err(|_| VaultError::FileNotFound)?;
     }
@@ -837,9 +840,11 @@ pub async fn get_vault_structure_streaming(
             }),
             files: vec![],
             is_complete: false,
+            temp_code: temp_code.clone(),
         };
         let _ = app.emit("vault-update", loading_update);
         
+        let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match client.archive_get(&data_map).await {
                 Ok(archive) => {
@@ -870,6 +875,7 @@ pub async fn get_vault_structure_streaming(
                         loading_archive: None,
                         files: vec![],
                         is_complete: false,
+                        temp_code: temp_code.clone(),
                     };
 
                     let _ = app.emit("vault-update", update);
@@ -887,6 +893,7 @@ pub async fn get_vault_structure_streaming(
                         loading_archive: None,
                         files: vec![],
                         is_complete: false,
+                        temp_code: temp_code.clone(),
                     };
 
                     let _ = app.emit("vault-update", update);
@@ -913,9 +920,11 @@ pub async fn get_vault_structure_streaming(
             }),
             files: vec![],
             is_complete: false,
+            temp_code: temp_code.clone(),
         };
         let _ = app.emit("vault-update", loading_update);
         
+        let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match client.archive_get_public(&archive_addr).await {
                 Ok(archive) => {
@@ -946,6 +955,7 @@ pub async fn get_vault_structure_streaming(
                         loading_archive: None,
                         files: vec![],
                         is_complete: false,
+                        temp_code: temp_code.clone(),
                     };
 
                     let _ = app.emit("vault-update", update);
@@ -963,6 +973,7 @@ pub async fn get_vault_structure_streaming(
                         loading_archive: None,
                         files: vec![],
                         is_complete: false,
+                        temp_code: temp_code.clone(),
                     };
 
                     let _ = app.emit("vault-update", update);
@@ -985,6 +996,7 @@ pub async fn get_vault_structure_streaming(
         loading_archive: None,
         files: vec![],
         is_complete: true,
+        temp_code: temp_code.clone(),
     };
     app.emit("vault-update", completion_update).map_err(|_| VaultError::FileNotFound)?;
 

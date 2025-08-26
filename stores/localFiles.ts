@@ -84,6 +84,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
     const currentDirectory = ref<IFolder | null>(null);
     const pendingLocalStructure = ref(false);
     const loadedArchives = ref<Map<string, any>>(new Map());
+    const currentLoadCode = ref<string | null>(null);
 
     // Computed
     const currentDirectoryFiles = computed(() => {
@@ -252,8 +253,18 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
         }
     };
 
+    // Generate a unique temp code for this load operation
+    const generateTempCode = () => {
+        return `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    };
+
     const getLocalStructure = async () => {
         console.log(">>> Getting local file structure with streaming...");
+        
+        // Generate new temp code for this load operation
+        const tempCode = generateTempCode();
+        currentLoadCode.value = tempCode;
+        console.log(">>> Generated temp code for local load:", tempCode);
         
         // Clear all state to show loading
         localStructure.value = null;
@@ -272,8 +283,8 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                 files: []
             };
 
-            // Start streaming local structure updates
-            await invoke("get_local_structure_streaming");
+            // Start streaming local structure updates with temp code
+            await invoke("get_local_structure_streaming", { tempCode });
 
         } catch (error: any) {
             console.log(">>> ERROR: Failed to get local structure:", error);
@@ -352,6 +363,12 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
     // Handle local updates from streaming
     const handleLocalUpdate = (update: any) => {
         console.log(">>> Received local update:", update.update_type, update);
+        
+        // Validate temp code - ignore update if it doesn't match current load operation
+        if (!update.temp_code || update.temp_code !== currentLoadCode.value) {
+            console.log(">>> Ignoring local update - temp code mismatch:", update.temp_code, "vs", currentLoadCode.value);
+            return;
+        }
         
         if (!localStructure.value) {
             localStructure.value = {
