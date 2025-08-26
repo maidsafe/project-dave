@@ -96,7 +96,6 @@ onBeforeUnmount(() => {
       >
         <div class="flex gap-2 cursor-pointer" @click="navigateTo('/')">
           <IconLogo/>
-          <p class="text-autonomi-text-primary">Beta</p>
         </div>
 
         <!-- SEARCH -->
