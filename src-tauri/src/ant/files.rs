@@ -7,6 +7,7 @@ use autonomi::client::vault::key::vault_key_from_signature_hex;
 use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
 use autonomi::client::GetError;
 use autonomi::data::DataAddress;
+use autonomi::files::archive_private::PrivateArchiveDataMap;
 use autonomi::files::{Metadata, PrivateArchive};
 use autonomi::vault::user_data::UserDataVaultError;
 use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
@@ -376,9 +377,10 @@ pub async fn upload_private_files_to_vault(
         .unwrap_or(UserData::new());
 
     // Add the archive with a name
-    user_data
-        .private_file_archives
-        .insert(DataMapChunk::from(private_archive_datamap.clone()), archive_name.clone());
+    user_data.private_file_archives.insert(
+        DataMapChunk::from(private_archive_datamap.clone()),
+        archive_name.clone(),
+    );
 
     let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
     let scratchpad_exists = client
@@ -449,7 +451,7 @@ pub async fn upload_private_files_to_vault(
     let app_clone = app.clone();
     let total_chunks = aggregated_chunks.len();
     let archive_name_clone = archive_name.clone();
-    let private_archive_datamap_clone = private_archive_datamap.clone();
+    let private_archive_datamap_clone = PrivateArchiveDataMap::from(private_archive_datamap);
 
     tokio::spawn(async move {
         let order_successful = loop {
@@ -528,13 +530,13 @@ pub async fn upload_private_files_to_vault(
             if result.is_ok() {
                 // Save to local storage
                 if let Err(e) = local_storage::write_local_private_file_archive(
-                    private_archive_datamap_clone.address.to_hex(),
-                    private_archive_datamap_clone.address().to_string(),
+                    private_archive_datamap_clone.to_hex(),
+                    private_archive_datamap_clone.address(),
                     &archive_name_clone,
                 ) {
                     tracing::error!("Failed to save archive to local storage: {}", e);
                 }
-                
+
                 // Emit completion
                 let _ = app_clone.emit(
                     "upload-progress",
@@ -817,7 +819,8 @@ pub async fn get_vault_structure_streaming(
             is_complete: false,
             temp_code: temp_code.clone(),
         };
-        app.emit("vault-update", update).map_err(|_| VaultError::FileNotFound)?;
+        app.emit("vault-update", update)
+            .map_err(|_| VaultError::FileNotFound)?;
     }
 
     // Process archives concurrently
@@ -828,7 +831,7 @@ pub async fn get_vault_structure_streaming(
         let client = client.clone();
         let app = app.clone();
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
-        
+
         // Emit loading status immediately
         let loading_update = VaultUpdate {
             update_type: VaultUpdateType::ArchiveLoading,
@@ -843,13 +846,13 @@ pub async fn get_vault_structure_streaming(
             temp_code: temp_code.clone(),
         };
         let _ = app.emit("vault-update", loading_update);
-        
+
         let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match client.archive_get(&data_map).await {
                 Ok(archive) => {
                     let mut files: Vec<FileMetadata> = vec![];
-                    
+
                     for (filepath, (data_map, metadata)) in archive.map() {
                         let file = FileMetadata {
                             path: filepath.display().to_string(),
@@ -908,7 +911,7 @@ pub async fn get_vault_structure_streaming(
         let client = client.clone();
         let app = app.clone();
         let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
-        
+
         // Emit loading status immediately
         let loading_update = VaultUpdate {
             update_type: VaultUpdateType::ArchiveLoading,
@@ -923,13 +926,13 @@ pub async fn get_vault_structure_streaming(
             temp_code: temp_code.clone(),
         };
         let _ = app.emit("vault-update", loading_update);
-        
+
         let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match client.archive_get_public(&archive_addr).await {
                 Ok(archive) => {
                     let mut files: Vec<FileMetadata> = vec![];
-                    
+
                     for (filepath, (data_addr, metadata)) in archive.map() {
                         let file = FileMetadata {
                             path: filepath.display().to_string(),
@@ -998,7 +1001,8 @@ pub async fn get_vault_structure_streaming(
         is_complete: true,
         temp_code: temp_code.clone(),
     };
-    app.emit("vault-update", completion_update).map_err(|_| VaultError::FileNotFound)?;
+    app.emit("vault-update", completion_update)
+        .map_err(|_| VaultError::FileNotFound)?;
 
     Ok(())
 }
