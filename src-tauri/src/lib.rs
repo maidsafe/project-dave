@@ -68,31 +68,54 @@ async fn upload_files(
     )
     .expect("Invalid vault key signature");
 
-    // Generate archive name if not provided
-    let archive_name = archive_name.unwrap_or_else(|| {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        
-        if files.len() == 1 {
-            files[0].name.clone()
-        } else {
-            format!("{}_files_{}", files.len(), timestamp)
+    // Check if this is a single file upload (not a directory)
+    let is_single_file = files.len() == 1 && {
+        use std::fs;
+        match fs::metadata(&files[0].path) {
+            Ok(metadata) => metadata.is_file(),
+            Err(_) => false, // If we can't read metadata, assume it's not a single file
         }
-    });
+    };
 
-    ant::files::upload_private_files_to_vault(
-        app,
-        files,
-        archive_name,
-        &secret_key,
-        shared_client,
-        payment_orders,
-    )
-    .await
-    .map_err(|_err| ()) // TODO: Map to serializable error
+    if is_single_file {
+        // Upload single file directly without archive
+        ant::files::upload_single_private_file_to_vault(
+            app,
+            files.into_iter().next().unwrap(), // Safe because we checked len() == 1
+            &secret_key,
+            shared_client,
+            payment_orders,
+        )
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+    } else {
+        // Generate archive name if not provided
+        let archive_name = archive_name.unwrap_or_else(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            if files.len() == 1 {
+                files[0].name.clone()
+            } else {
+                format!("{}_files_{}", files.len(), timestamp)
+            }
+        });
+
+        // Upload multiple files or directories as archive
+        ant::files::upload_private_files_to_vault(
+            app,
+            files,
+            archive_name,
+            &secret_key,
+            shared_client,
+            payment_orders,
+        )
+        .await
+        .map_err(|_err| ()) // TODO: Map to serializable error
+    }
 }
 
 #[tauri::command]
