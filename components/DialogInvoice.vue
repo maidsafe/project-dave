@@ -14,6 +14,7 @@ interface QuoteData {
   totalFiles: number;
   totalSize: string;
   totalCostFormatted?: string;
+  pricePerMB?: string;
   paymentRequired?: boolean;
   paymentOrderId?: string;
   totalCostNano?: string;
@@ -68,8 +69,8 @@ const canClose = computed(() => {
 });
 
 const showQuoteData = computed(() => {
-  // Show quote data once we have it (this IS the payment request)
-  return props.quoteData && (props.currentStep === 'quoting' || props.currentStep === 'payment-request');
+  // Show quote data only when we have the payment request
+  return props.quoteData && props.currentStep === 'payment-request' && props.quoteData.totalCostFormatted;
 });
 
 const showPendingPayments = computed(() => {
@@ -78,6 +79,10 @@ const showPendingPayments = computed(() => {
 
 const hasActivePayment = computed(() => {
   return currentPayment.value && props.currentStep === 'payment-request';
+});
+
+const isPaymentProcessing = computed(() => {
+  return props.steps?.some(step => step.key === 'payment-request' && step.status === 'processing' && step.message?.includes('wallet authorization'));
 });
 
 const totalPaymentAmount = computed(() => {
@@ -164,7 +169,7 @@ watchEffect(() => {
             Upload Progress
           </h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">
-            Preparing your files for upload
+            Getting quote for your files
           </p>
         </div>
       </div>
@@ -253,6 +258,12 @@ watchEffect(() => {
                 {{ quoteData.totalSize }}
               </span>
             </div>
+            <div v-if="quoteData.pricePerMB" class="flex justify-between text-sm">
+              <span class="text-gray-600 dark:text-gray-400">Price per MB:</span>
+              <span class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
+                {{ quoteData.pricePerMB }}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -286,9 +297,10 @@ watchEffect(() => {
         />
         <Button
             v-if="currentStep === 'payment-request' && quoteData?.paymentRequired !== false"
-            label="Pay & Upload"
-            icon="pi pi-wallet"
+            :label="isPaymentProcessing ? 'Processing...' : 'Pay & Upload'"
+            :icon="isPaymentProcessing ? 'pi pi-spinner pi-spin' : 'pi pi-wallet'"
             severity="primary"
+            :disabled="isPaymentProcessing"
             @click="$emit('pay-upload')"
         />
       </div>

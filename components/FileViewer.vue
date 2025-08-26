@@ -71,18 +71,6 @@ const localBreadcrumbs = ref<any[]>([]);
 const initializeUploadSteps = () => {
   uploadSteps.value = [
     {
-      key: 'processing',
-      label: 'Processing Files',
-      status: 'pending',
-      message: 'Reading and preparing files...'
-    },
-    {
-      key: 'encrypting',
-      label: 'Encrypting',
-      status: 'pending',
-      message: 'Encrypting files for secure storage...'
-    },
-    {
       key: 'quoting',
       label: 'Getting Quote',
       status: 'pending',
@@ -141,9 +129,19 @@ const handlePayUpload = async () => {
     // Update UI to show payment in progress
     updateStepStatus('payment-request', 'processing', 'Requesting wallet authorization...');
 
+    // Show wallet payment notification
+    emit("show-notify", {
+      notifyType: "info",
+      title: "Payment required",
+      details: "Please approve the payment in your mobile wallet.",
+    });
+
     // Process payment through wallet
     const txHashes = await walletStore.payForQuotes(quoteData.value.rawQuoteData.payments);
     console.log(">>> Payment successful, transaction hashes:", txHashes);
+
+    // Hide wallet payment notification
+    emit("hide-notify");
 
     // Update UI to show wallet payment successful
     updateStepStatus('payment-request', 'processing', 'Payment confirmed, notifying backend...');
@@ -159,6 +157,9 @@ const handlePayUpload = async () => {
   } catch (error) {
     console.error("Payment failed:", error);
     updateStepStatus('payment-request', 'error', 'Payment failed');
+
+    // Hide wallet payment notification on error
+    emit("hide-notify");
 
     let errorMessage = 'Could not process payment. Please try again.';
     let errorSummary = 'Payment Failed';
@@ -512,21 +513,7 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
     // The modal will show progress through all steps including payment
     console.log(">>> FILEVIEWER STARTING UPLOAD PROCESS");
 
-    // Set a timeout for the quote phase
-    const quoteTimeout = setTimeout(() => {
-      if (currentUploadStep.value === 'quoting' && !quoteData.value?.rawQuoteData) {
-        console.error(">>> Quote timeout - no payment order received after 30 seconds");
-        uploadError.value = "Quote request timed out. Please check your network connection and try again.";
-        updateStepStatus('quoting', 'error', 'Quote request timed out');
-        if (currentUploadId.value) {
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'failed',
-            error: 'Quote request timed out',
-            completedAt: new Date()
-          });
-        }
-      }
-    }, 30000); // 30 seconds timeout
+    // No timeout for quote phase - it can take a while
 
     // Generate archive name
     const archiveName = files.length === 1
@@ -540,8 +527,6 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
       vaultKeySignature,
     });
 
-    // Clear timeout if we got this far
-    clearTimeout(quoteTimeout);
 
   } catch (error: any) {
     emit("hide-notify");
@@ -875,11 +860,23 @@ const setupEventListeners = async () => {
     if (showUploadModal.value && event.payload) {
       const paymentData = event.payload;
 
+      // Calculate price per MB
+      let pricePerMB = '0 ATTO';
+      if (quoteData.value?.totalFiles && paymentData.total_cost_nano) {
+        const totalSizeBytes = quoteData.value.totalSize ? parseFloat(quoteData.value.totalSize.split(' ')[0]) * (quoteData.value.totalSize.includes('MB') ? 1024*1024 : quoteData.value.totalSize.includes('KB') ? 1024 : quoteData.value.totalSize.includes('GB') ? 1024*1024*1024 : 1) : 0;
+        if (totalSizeBytes > 0) {
+          const totalCostNano = parseInt(paymentData.total_cost_nano);
+          const costPerMB = Math.round((totalCostNano / totalSizeBytes) * 1024 * 1024);
+          pricePerMB = `${costPerMB} ATTO`;
+        }
+      }
+
       // Update quote data with payment information
       quoteData.value = {
         ...quoteData.value,
         totalCostNano: paymentData.total_cost_nano || "0",
         totalCostFormatted: paymentData.total_cost_formatted || "0 ATTO",
+        pricePerMB,
         paymentRequired: paymentData.payment_required || false,
         paymentOrderId: paymentData.order_id,
         rawQuoteData: {
@@ -913,18 +910,18 @@ const setupEventListeners = async () => {
         uploadStore.startUpload(payload.total_files || 0, payload.total_size || 0);
         if (currentUploadId.value) {
           uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'processing',
+            status: 'encrypting',
             totalSize: payload.total_size || 0
           });
         }
         if (showUploadModal.value) {
-          updateStepStatus('processing', 'processing', `Processing ${payload.total_files} file(s)...`);
-
-          // Set quote data with real file info
+          // Set quote data with real file info immediately
           quoteData.value = {
             totalFiles: payload.total_files,
             totalSize: formatBytes(payload.total_size || 0)
           };
+          // Start with quoting step
+          updateStepStatus('quoting', 'processing', `Preparing ${payload.total_files} file(s)...`);
         }
         break;
 
@@ -937,7 +934,7 @@ const setupEventListeners = async () => {
         if (currentUploadId.value) {
           const progress = payload.total_bytes > 0 ? Math.round((payload.bytes_processed / payload.total_bytes) * 100) : 0;
           uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'processing',
+            status: 'encrypting',
             currentFile: payload.current_file,
             filesProcessed: payload.files_processed || 0,
             bytesProcessed: payload.bytes_processed || 0,
@@ -946,7 +943,7 @@ const setupEventListeners = async () => {
         }
         if (showUploadModal.value) {
           const progress = payload.total_bytes > 0 ? Math.round((payload.bytes_processed / payload.total_bytes) * 100) : 0;
-          updateStepStatus('processing', 'processing', `Processing: ${payload.current_file}`, progress);
+          updateStepStatus('quoting', 'processing', `Processing: ${payload.current_file}`, progress);
         }
         break;
 
@@ -955,12 +952,22 @@ const setupEventListeners = async () => {
         if (currentUploadId.value) {
           uploadsStore.updateUpload(currentUploadId.value, {
             status: 'encrypting',
-            currentFile: payload.current_file
+            currentFile: payload.current_file,
+            filesProcessed: payload.files_processed || 0
           });
         }
         if (showUploadModal.value) {
-          updateStepStatus('processing', 'completed', 'Files processed');
-          updateStepStatus('encrypting', 'processing', `Encrypting: ${payload.current_file}`);
+          // Check if this is the last file
+          const filesProcessed = payload.files_processed || 0;
+          const totalFiles = payload.total_files || 0;
+          const isLastFile = filesProcessed >= totalFiles && totalFiles > 0;
+          
+          if (isLastFile) {
+            // After last file, backend still needs to prepare the archive
+            updateStepStatus('quoting', 'processing', `Finalizing preparation...`);
+          } else {
+            updateStepStatus('quoting', 'processing', `Processing: ${payload.current_file} (${filesProcessed + 1}/${totalFiles})`);
+          }
         }
         break;
 
@@ -972,9 +979,8 @@ const setupEventListeners = async () => {
           });
         }
         if (showUploadModal.value) {
-          updateStepStatus('encrypting', 'completed', 'Files encrypted');
           updateStepStatus('quoting', 'processing', 'Getting storage quote...');
-          // Note: Payment request will be shown when we get the payment-order event
+          // Note: Payment request will be shown when we get the payment-request event
         }
         break;
 
