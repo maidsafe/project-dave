@@ -1,13 +1,15 @@
 <script lang="ts" setup>
-import { useToast } from "primevue/usetoast";
-import { invoke } from "@tauri-apps/api/core";
-import { onMounted } from "vue";
-import { toRaw } from "vue";
+import {useToast} from "primevue/usetoast";
+import {invoke} from "@tauri-apps/api/core";
+import {open} from "@tauri-apps/plugin-shell";
+import {onMounted} from "vue";
+import {toRaw} from "vue";
+
 type SettingsView =
-  | "network-settings"
-  | "receiver-settings"
-  | "syslog"
-  | "other-settings";
+    | "network-settings"
+    | "receiver-settings"
+    | "syslog"
+    | "other-settings";
 const refSyslogMenu = ref();
 const selectedSyslog = ref<any>(null); // TODO: Replace with actual type
 const view = ref<SettingsView>("network-settings");
@@ -67,7 +69,7 @@ const supportLinks = ref([
   },
   {
     name: "Follow on X",
-    link: "https://forum.autonomi.community/",
+    link: "https://x.com/WithAutonomi",
     target: "_blank",
     icon: "pi pi-twitter",
   },
@@ -210,11 +212,13 @@ const downloadPath = ref("");
 const bootstrapPeers = ref("");
 const saveSettingsErrorMessage = ref("");
 const name = ref("");
+
 async function loadSettings() {
   let app_data: any = await invoke("app_data");
   downloadPath.value = app_data.download_path;
   bootstrapPeers.value = app_data.peers.join(",");
 }
+
 onMounted(async () => {
   try {
     const response = await loadSettings();
@@ -272,7 +276,7 @@ onMounted(async () => {
       <div v-if="view === 'receiver-settings'">
         <!-- Autonomi forwarders -->
         <div
-          class="flex items-center justify-between pr-[66px] pl-[110px] py-7 bg-autonomi-gray-100 gap-10"
+            class="flex items-center justify-between pr-[66px] pl-[110px] py-7 bg-autonomi-gray-100 gap-10"
         >
           <div>
             <h3 class="text-autonomi-header-text-dark text-lg font-semibold">
@@ -292,12 +296,12 @@ onMounted(async () => {
 
         <!-- Port & Channels -->
         <div
-          class="flex flex-col items-center justify-between pr-[66px] pl-[110px] py-7 text-sm"
+            class="flex flex-col items-center justify-between pr-[66px] pl-[110px] py-7 text-sm"
         >
           <div class="w-full flex flex-col gap-y-4">
             <div class="flex flex-wrap gap-y-4">
               <div
-                class="text-autonomi-header-text-dark text-sm font-semibold w-[200px]"
+                  class="text-autonomi-header-text-dark text-sm font-semibold w-[200px]"
               >
                 Port
               </div>
@@ -306,7 +310,7 @@ onMounted(async () => {
 
             <div class="flex flex-wrap gap-y-4">
               <div
-                class="text-autonomi-header-text-dark text-sm font-semibold w-[200px]"
+                  class="text-autonomi-header-text-dark text-sm font-semibold w-[200px]"
               >
                 Maximum channels
               </div>
@@ -317,7 +321,7 @@ onMounted(async () => {
 
         <!-- HTTP Event collector forwarders -->
         <div
-          class="flex items-center justify-between pr-[66px] pl-[110px] py-7 bg-autonomi-gray-100 gap-10"
+            class="flex items-center justify-between pr-[66px] pl-[110px] py-7 bg-autonomi-gray-100 gap-10"
         >
           <div>
             <h3 class="text-autonomi-header-text-dark text-lg font-semibold">
@@ -337,70 +341,70 @@ onMounted(async () => {
 
         <!-- FORWARDERS DRAWER -->
         <Drawer
-          v-model:visible="isEditForwarders"
-          header="Forwarders"
-          position="right"
-          class="!h-auto !w-[380px] rounded-l-2xl"
+            v-model:visible="isEditForwarders"
+            header="Forwarders"
+            position="right"
+            class="!h-auto !w-[380px] rounded-l-2xl"
         >
           <div
-            class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[80%] mx-auto"
+              class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[80%] mx-auto"
           >
             <h3 class="text-lg text-autonomi-header-text-dark font-semibold">
               Port Number
             </h3>
             <p
-              class="text-autonomi-text-primary mt-2 text-center max-w-[70%] text-xs"
+                class="text-autonomi-text-primary mt-2 text-center max-w-[70%] text-xs"
             >
               Choose the start of the range below, edit this text to suit.
             </p>
 
             <div class="flex items-center gap-2 font-semibold mt-4">
               <InputText
-                value="3001"
-                class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
-                placeholder="Port number"
+                  value="3001"
+                  class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
+                  placeholder="Port number"
               />
               <span class="text-autonomi-text-secondary font-semibold"
-                >to 3999</span
+              >to 3999</span
               >
             </div>
 
             <CommonButton
-              variant="secondary"
-              class="mt-4"
-              @click="handleUpdatePortNumber"
+                variant="secondary"
+                class="mt-4"
+                @click="handleUpdatePortNumber"
             >
               Confirm
             </CommonButton>
           </div>
 
           <div
-            class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[80%] mx-auto"
+              class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[80%] mx-auto"
           >
             <h3 class="text-lg text-autonomi-header-text-dark font-semibold">
               Max Channels
             </h3>
             <p
-              class="text-autonomi-text-primary mt-2 text-center max-w-[70%] text-xs"
+                class="text-autonomi-text-primary mt-2 text-center max-w-[70%] text-xs"
             >
               Choose the start of the range below, edit this text to suit.
             </p>
 
             <div class="flex items-center gap-2 font-semibold mt-4">
               <span class="text-autonomi-text-secondary font-semibold"
-                >100 to</span
+              >100 to</span
               >
               <InputText
-                value="300"
-                class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
-                placeholder="Port number"
+                  value="300"
+                  class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
+                  placeholder="Port number"
               />
             </div>
 
             <CommonButton
-              variant="secondary"
-              class="mt-4"
-              @click="handleUpdateMaxChannels"
+                variant="secondary"
+                class="mt-4"
+                @click="handleUpdateMaxChannels"
             >
               Confirm
             </CommonButton>
@@ -409,38 +413,38 @@ onMounted(async () => {
 
         <!-- EVENT COLLECTOR DRAWER -->
         <Drawer
-          v-model:visible="isEditEventCollector"
-          header="Event Collector"
-          position="right"
-          class="!h-auto !w-[380px] rounded-l-2xl"
+            v-model:visible="isEditEventCollector"
+            header="Event Collector"
+            position="right"
+            class="!h-auto !w-[380px] rounded-l-2xl"
         >
           <div
-            class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[80%] mx-auto"
+              class="border-t border-t-autonomi-text-primary/10 flex flex-col items-center py-7 w-[80%] mx-auto"
           >
             <h3 class="text-lg text-autonomi-header-text-dark font-semibold">
               Event Collector
             </h3>
             <p
-              class="text-autonomi-text-primary mt-2 text-center max-w-[70%] text-xs"
+                class="text-autonomi-text-primary mt-2 text-center max-w-[70%] text-xs"
             >
               Choose the start of the range below, edit this text to suit.
             </p>
 
             <div class="flex items-center gap-2 font-semibold mt-4">
               <InputText
-                value="8799"
-                class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
-                placeholder="Port number"
+                  value="8799"
+                  class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
+                  placeholder="Port number"
               />
               <span class="text-autonomi-text-secondary font-semibold"
-                >to 9099</span
+              >to 9099</span
               >
             </div>
 
             <CommonButton
-              variant="secondary"
-              class="mt-4"
-              @click="handleUpdateEventCollector"
+                variant="secondary"
+                class="mt-4"
+                @click="handleUpdateEventCollector"
             >
               Confirm
             </CommonButton>
@@ -464,11 +468,11 @@ onMounted(async () => {
 
             <div>
               <CommonButton
-                @click="handleEditForwarders"
-                variant="secondary"
-                size="medium"
+                  @click="handleEditForwarders"
+                  variant="secondary"
+                  size="medium"
               >
-                <i class="pi pi-plus" /> Add port
+                <i class="pi pi-plus"/> Add port
               </CommonButton>
             </div>
           </div>
@@ -500,7 +504,7 @@ onMounted(async () => {
           <!-- Body -->
           <template v-for="log in dataSyslog" :key="log.id">
             <div
-              class="pr-[66px] pl-[110px] py-4 grid grid-cols-12 even:bg-autonomi-gray-100"
+                class="pr-[66px] pl-[110px] py-4 grid grid-cols-12 even:bg-autonomi-gray-100"
             >
               <div class="col-span-2 text-autonomi-text-primary">
                 {{ log.port }}
@@ -519,14 +523,14 @@ onMounted(async () => {
               </div>
               <div class="col-span-2 flex justify-end">
                 <button
-                  @click="
+                    @click="
                     ($event) => {
                       selectedSyslog = log;
                       handleToggleSyslogMenu($event);
                     }
                   "
                 >
-                  <i class="pi pi-ellipsis-v" />
+                  <i class="pi pi-ellipsis-v"/>
                 </button>
               </div>
             </div>
@@ -539,12 +543,12 @@ onMounted(async () => {
             <div>
               <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
                 <li
-                  v-for="item in menuSyslog"
-                  :key="item.label"
-                  class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
-                  @click="item.command"
+                    v-for="item in menuSyslog"
+                    :key="item.label"
+                    class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                    @click="item.command"
                 >
-                  <i :class="item.icon" />
+                  <i :class="item.icon"/>
                   <div>
                     {{ item.label }}
                   </div>
@@ -584,15 +588,14 @@ onMounted(async () => {
         </h3>
 
         <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-7">
-          <NuxtLink
-            v-for="link in supportLinks"
-            :to="link.link"
-            :target="link.target"
-            class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 dark:bg-white/90 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3"
+          <button
+              v-for="link in supportLinks"
+              @click="() => open(link.link)"
+              class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 dark:bg-white/90 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3 cursor-pointer"
           >
-            <i :class="`${link.icon} text-autonomi-blue-600 mr-1`" />
+            <i :class="`${link.icon} text-autonomi-blue-600 mr-1`"/>
             {{ link.name }}
-          </NuxtLink>
+          </button>
         </div>
       </div>
     </div>
