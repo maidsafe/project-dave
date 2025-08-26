@@ -414,7 +414,7 @@ const combinedFiles = computed(() => {
   const regularFiles = filteredFiles.value || [];
 
   // Only show failed and loading archives in the root directory
-  const isRootDirectory = fileStore.currentDirectory?.name === 'Root';
+  const isRootDirectory = currentDirectory.value === rootDirectory.value;
 
   const failedArchiveFiles = isRootDirectory ? failedArchives.value.map(archive => ({
     name: archive.name,
