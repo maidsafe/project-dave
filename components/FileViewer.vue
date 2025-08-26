@@ -1033,7 +1033,7 @@ const combinedLocalFiles = computed(() => {
 
 // Handle local directory/file navigation (similar to vault files)
 const handleLocalChangeDirectory = (target: any) => {
-  if (!target?.children && !target?.path) {
+  if (!target?.children) {
     return;
   } else {
     localBreadcrumbs.value.push(target);
