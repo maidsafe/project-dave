@@ -103,7 +103,7 @@ export const useFileStore = defineStore("files", () => {
             }
 
             console.log(">>> Building Archive-based Local Drive...");
-            rootDirectory.value = new Folder("Root");
+            rootDirectory.value = new Folder("Vault");
 
             vaultStructure.value.archives.forEach((archive: IArchive, archiveIndex: number) => {
                 // Check if archive has a name (not empty after sanitization)
