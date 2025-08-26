@@ -235,6 +235,18 @@ const menuFiles = computed(() => {
         refFilesMenu.value.hide();
       },
     });
+    
+    // Show data address for public files
+    if (file?.file_access?.Public || file?.access_data?.Public || file?.type === 'public_file' || file?.type === 'public_archive') {
+      items.push({
+        label: 'Data Address',
+        icon: 'pi pi-clipboard',
+        command: () => {
+          handleCopyDataAddress(file);
+          refFilesMenu.value.hide();
+        },
+      });
+    }
   }
 
   return items;
@@ -552,6 +564,105 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
       severity: "error",
       summary: "Error starting upload",
       detail: error.message,
+      life: 3000,
+    });
+  }
+};
+
+const handleCopyDataAddress = async (file: any) => {
+  try {
+    let dataAddress = '';
+    
+    // Extract data address based on file structure
+    if (file?.file_access?.Public) {
+      // For vault files, Public contains the data address
+      dataAddress = file.file_access.Public;
+    } else if (file?.access_data?.Public) {
+      // Alternative structure
+      dataAddress = file.access_data.Public;
+    } else if (file?.address) {
+      // For local files, use the address directly
+      dataAddress = file.address;
+    }
+    
+    if (dataAddress) {
+      await navigator.clipboard.writeText(dataAddress);
+      toast.add({
+        severity: 'success',
+        summary: 'Copied',
+        detail: 'Data address copied to clipboard',
+        life: 2000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Could not find data address',
+        life: 3000,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to copy data address:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy to clipboard',
+      life: 3000,
+    });
+  }
+};
+
+const handleCopySecretKey = async (file: any) => {
+  try {
+    let secretKey = '';
+    
+    // Extract secret key based on file structure
+    if (file?.file_access?.Private) {
+      // For vault files, Private contains the secret key/datamap
+      // Convert to hex string if it's an array
+      if (Array.isArray(file.file_access.Private)) {
+        secretKey = '0x' + file.file_access.Private.map((byte: number) => 
+          byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        secretKey = file.file_access.Private;
+      }
+    } else if (file?.access_data?.Private) {
+      // Alternative structure
+      if (Array.isArray(file.access_data.Private)) {
+        secretKey = '0x' + file.access_data.Private.map((byte: number) => 
+          byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        secretKey = file.access_data.Private;
+      }
+    } else if (file?.address && (file?.type === 'private_file' || file?.type === 'private_archive')) {
+      // For local private files, use the address
+      secretKey = file.address;
+    }
+    
+    if (secretKey) {
+      await navigator.clipboard.writeText(secretKey);
+      toast.add({
+        severity: 'success',
+        summary: 'Copied',
+        detail: 'Data access copied to clipboard',
+        life: 2000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Could not find data access',
+        life: 3000,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to copy secret key:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy to clipboard',
       life: 3000,
     });
   }
@@ -2131,11 +2242,26 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Show address for local files -->
-        <div v-if="selectedFileItem?.address" class="py-3">
-          <div>Address</div>
+        <!-- Show data address for public files -->
+        <div v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))" class="py-3">
+          <div class="flex items-center gap-2">
+            <span>Data Address</span>
+            <i 
+              class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500" 
+              @click="handleCopyDataAddress(selectedFileItem)"
+              v-tooltip.top="'Copy address'"
+            />
+          </div>
           <div class="text-autonomi-text-primary font-mono text-xs break-all">
-            {{ selectedFileItem.address }}
+            <template v-if="selectedFileItem?.file_access?.Public">
+              {{ selectedFileItem.file_access.Public }}
+            </template>
+            <template v-else-if="selectedFileItem?.access_data?.Public">
+              {{ selectedFileItem.access_data.Public }}
+            </template>
+            <template v-else-if="selectedFileItem?.address">
+              {{ selectedFileItem.address }}
+            </template>
           </div>
         </div>
 
