@@ -1143,8 +1143,8 @@ onUnmounted(() => {
       </div>
 
       <TabView v-model:activeIndex="activeTab">
-        <!-- Files Tab -->
-        <TabPanel header="Files" :value="0">
+        <!-- Vault Tab -->
+        <TabPanel header="Vault" :value="0">
           <!-- Breadcrumbs -->
           <div
               v-if="breadcrumbs?.length > 0"
