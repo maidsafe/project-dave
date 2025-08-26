@@ -485,10 +485,10 @@ const openFolderPickerAndUploadFiles = async () => {
   if (selected === null) return;
 
   const files = [{path: selected, name: await basename(selected)}];
-  await uploadFiles(files);
+  await uploadFiles(files, true);
 };
 
-const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
+const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolder: boolean = false) => {
   try {
     console.log(">>> FILEVIEWER GETTING VAULT KEY SIGNATURE");
     emit("show-notify", {
@@ -516,9 +516,14 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>) => {
     // No timeout for quote phase - it can take a while
 
     // Generate archive name
-    const archiveName = files.length === 1
-        ? files[0].name  // Single file: use filename
-        : `${files.length}_files_${Date.now()}`; // Multiple files: use count and timestamp
+    let archiveName: string;
+    if (isFolder && files.length === 1) {
+      // Folder upload: use folder name
+      archiveName = files[0].name;
+    } else {
+      // Single file or multiple files: no archive name
+      archiveName = "";
+    }
 
     // Start the upload process
     await invoke("upload_files", {

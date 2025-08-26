@@ -90,19 +90,7 @@ async fn upload_files(
         .map_err(|_err| ()) // TODO: Map to serializable error
     } else {
         // Generate archive name if not provided
-        let archive_name = archive_name.unwrap_or_else(|| {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            
-            if files.len() == 1 {
-                files[0].name.clone()
-            } else {
-                format!("{}_files_{}", files.len(), timestamp)
-            }
-        });
+        let archive_name = archive_name.unwrap_or_default();
 
         // Upload multiple files or directories as archive
         ant::files::upload_private_files_to_vault(
@@ -224,7 +212,7 @@ async fn confirm_payment(
 #[tauri::command]
 async fn show_item_in_file_manager(app: AppHandle, path: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    
+
     match app.opener().reveal_item_in_dir(&path) {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("Failed to reveal item: {}", e)),
@@ -233,10 +221,9 @@ async fn show_item_in_file_manager(app: AppHandle, path: String) -> Result<(), S
 
 #[tauri::command]
 async fn get_local_files() -> Result<LocalFileData, CommandError> {
-    ant::local_storage::get_all_local_files()
-        .map_err(|err| CommandError {
-            message: err.to_string(),
-        })
+    ant::local_storage::get_all_local_files().map_err(|err| CommandError {
+        message: err.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -244,19 +231,25 @@ async fn load_local_private_archive(
     local_addr: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<Vec<FileFromVault>, CommandError> {
-    let client = shared_client.get_client().await.map_err(|err| CommandError {
-        message: err.to_string(),
-    })?;
-    
+    let client = shared_client
+        .get_client()
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+
     let archive_datamap = ant::local_storage::get_local_private_archive_access(&local_addr)
         .map_err(|err| CommandError {
             message: err.to_string(),
         })?;
-    
-    let archive = client.archive_get(&archive_datamap).await.map_err(|err| CommandError {
-        message: err.to_string(),
-    })?;
-    
+
+    let archive = client
+        .archive_get(&archive_datamap)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+
     let mut files = Vec::new();
     for (filepath, (data_map, metadata)) in archive.map() {
         files.push(ant::files::FileFromVault::new(
@@ -265,7 +258,7 @@ async fn load_local_private_archive(
             ant::files::PublicOrPrivateFile::Private(data_map.clone()),
         ));
     }
-    
+
     Ok(files)
 }
 
@@ -274,19 +267,25 @@ async fn load_local_public_archive(
     address_hex: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<Vec<FileFromVault>, CommandError> {
-    let client = shared_client.get_client().await.map_err(|err| CommandError {
-        message: err.to_string(),
-    })?;
-    
+    let client = shared_client
+        .get_client()
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+
     let archive_address = ant::local_storage::get_local_public_archive_address(&address_hex)
         .map_err(|err| CommandError {
             message: err.to_string(),
         })?;
-    
-    let archive = client.archive_get_public(&archive_address).await.map_err(|err| CommandError {
-        message: err.to_string(),
-    })?;
-    
+
+    let archive = client
+        .archive_get_public(&archive_address)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+
     let mut files = Vec::new();
     for (filepath, (data_addr, metadata)) in archive.map() {
         files.push(ant::files::FileFromVault::new(
@@ -295,7 +294,7 @@ async fn load_local_public_archive(
             ant::files::PublicOrPrivateFile::Public(*data_addr),
         ));
     }
-    
+
     Ok(files)
 }
 
