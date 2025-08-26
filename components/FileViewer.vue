@@ -1265,7 +1265,7 @@ onUnmounted(() => {
                 class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
                 @click="handleClickBreadcrumb(rootDirectory)"
             >
-              Root
+              Vault
             </div>
             <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"/>
 
