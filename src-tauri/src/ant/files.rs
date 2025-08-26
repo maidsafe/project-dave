@@ -165,18 +165,7 @@ pub async fn collect_files_from_directory(
             } else {
                 // Calculate relative path including the root folder name
                 if let Ok(rel_path) = path.strip_prefix(base_dir) {
-                    // Ensure the root folder name is included in the path
-                    let mut relative_path = PathBuf::new();
-                    if let Some(name) = dir_name.to_str() {
-                        relative_path.push(name);
-                    }
-
-                    // Add the rest of the path
-                    if rel_path != dir_name {
-                        relative_path.push(rel_path);
-                    }
-
-                    files.push((relative_path, path));
+                    files.push((rel_path.to_path_buf(), path));
                 } else {
                     // Fallback if strip_prefix fails
                     files.push((path.clone(), path));
