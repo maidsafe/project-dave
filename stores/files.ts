@@ -75,10 +75,10 @@ export const useFileStore = defineStore("files", () => {
     const files = ref<IFile[]>([]);
     const vaultStructure = ref<IVaultStructure | null>(null);
     const failedArchives = ref<IFailedArchive[]>([]);
-    const loadingArchives = ref<{name: string, is_private: boolean}[]>([]);
+    const loadingArchives = ref<{ name: string, is_private: boolean }[]>([]);
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
-    const pendingFilesSignature = ref(false);
+    const pendingMessageSignature = ref(false);
     const pendingVaultStructure = ref(false);
     const loadedFiles = ref<Map<string, any>>(new Map());
     const currentLoadCode = ref<string | null>(null);
@@ -108,7 +108,7 @@ export const useFileStore = defineStore("files", () => {
             vaultStructure.value.archives.forEach((archive: IArchive, archiveIndex: number) => {
                 // Check if archive has a name (not empty after sanitization)
                 const hasName = archive.name && archive.name.trim() !== '';
-                
+
                 if (!hasName) {
                     // Unnamed archive - add files directly to root
                     archive.files.forEach((file: IFileMetadata) => {
@@ -144,7 +144,7 @@ export const useFileStore = defineStore("files", () => {
                     // Named archive - create archive folder with unique name if needed
                     let archiveFolderName = archive.name;
                     let counter = 1;
-                    
+
                     // Handle duplicate archive names by checking if it's actually a different archive
                     while (rootDirectory.value!.getChild(archiveFolderName)) {
                         const existingChild = rootDirectory.value!.getChild(archiveFolderName);
@@ -252,12 +252,12 @@ export const useFileStore = defineStore("files", () => {
 
     const getVaultStructure = async () => {
         console.log(">>> Getting vault structure with streaming...");
-        
+
         // Generate new temp code for this load operation
         const tempCode = generateTempCode();
         currentLoadCode.value = tempCode;
         console.log(">>> Generated temp code for vault load:", tempCode);
-        
+
         // IMMEDIATELY clear all state to show loading
         vaultStructure.value = null;
         files.value = [];
@@ -269,9 +269,9 @@ export const useFileStore = defineStore("files", () => {
 
         try {
             // Get vault key signature
-            pendingFilesSignature.value = true;
+            pendingMessageSignature.value = true;
             let vaultKeySignature = await walletStore.getVaultKeySignature();
-            pendingFilesSignature.value = false;
+            pendingMessageSignature.value = false;
 
             // Initialize vault structure 
             vaultStructure.value = {
@@ -297,7 +297,7 @@ export const useFileStore = defineStore("files", () => {
 
             throw new Error("Failed to get vault structure");
         } finally {
-            pendingFilesSignature.value = false;
+            pendingMessageSignature.value = false;
             // Note: don't set pendingVaultStructure to false here, it will be set when streaming completes
         }
     };
@@ -305,13 +305,13 @@ export const useFileStore = defineStore("files", () => {
     // Handle vault updates from streaming
     const handleVaultUpdate = (update: any) => {
         console.log(">>> Received vault update:", update.update_type, update);
-        
+
         // Validate temp code - ignore update if it doesn't match current load operation
         if (!update.temp_code || update.temp_code !== currentLoadCode.value) {
             console.log(">>> Ignoring vault update - temp code mismatch:", update.temp_code, "vs", currentLoadCode.value);
             return;
         }
-        
+
         if (!vaultStructure.value) {
             vaultStructure.value = {
                 archives: [],
@@ -324,7 +324,7 @@ export const useFileStore = defineStore("files", () => {
             case "IndividualFiles":
                 // Add individual files immediately
                 vaultStructure.value.files = update.files;
-                
+
                 // Update flattened files array
                 update.files.forEach((file: IFileMetadata) => {
                     files.value.push({
@@ -339,7 +339,7 @@ export const useFileStore = defineStore("files", () => {
 
                 // Build initial directory structure with individual files
                 buildRootDirectory();
-                
+
                 // Hide loading once we have some content
                 if (update.files.length > 0) {
                     pendingVaultStructure.value = false;
@@ -362,10 +362,10 @@ export const useFileStore = defineStore("files", () => {
                     loadingArchives.value = loadingArchives.value.filter(
                         a => a.name !== update.archive!.name
                     );
-                    
+
                     // Add the archive
                     vaultStructure.value.archives.push(update.archive);
-                    
+
                     // Add archive files to flattened array
                     update.archive.files.forEach((file: IFileMetadata) => {
                         files.value.push({
@@ -380,7 +380,7 @@ export const useFileStore = defineStore("files", () => {
 
                     // Rebuild directory structure to include new archive
                     buildRootDirectory();
-                    
+
                     // Hide loading once we have some content
                     if (files.value.length > 0) {
                         pendingVaultStructure.value = false;
@@ -394,14 +394,14 @@ export const useFileStore = defineStore("files", () => {
                     loadingArchives.value = loadingArchives.value.filter(
                         a => a.name !== update.failed_archive!.name && a.address !== update.failed_archive!.address
                     );
-                    
+
                     // Add to failed archives list, avoiding duplicates
                     const exists = failedArchives.value.some(a => a.name === update.failed_archive!.name && a.address === update.failed_archive!.address);
                     if (!exists) {
                         vaultStructure.value.failed_archives.push(update.failed_archive);
                         failedArchives.value.push(update.failed_archive);
                     }
-                    
+
                     // Rebuild directory to show failed archives
                     buildRootDirectory();
                 }
@@ -436,7 +436,7 @@ export const useFileStore = defineStore("files", () => {
 
             // Get vault key signature
             let vaultKeySignature = await walletStore.getVaultKeySignature();
-            
+
             // Load the file data
             const loadedFile = await invoke("get_single_file_data", {
                 vaultKeySignature,
@@ -459,7 +459,7 @@ export const useFileStore = defineStore("files", () => {
             return loadedFile;
         } catch (error: any) {
             console.error("Failed to load file data:", error);
-            
+
             // Mark the file as failed to load
             const fileIndex = files.value.findIndex(f => f.path === file.path);
             if (fileIndex !== -1) {
@@ -470,11 +470,11 @@ export const useFileStore = defineStore("files", () => {
                     load_error: true
                 };
             }
-            
+
             throw error;
         }
     };
-    
+
     // Return
     return {
         files,
@@ -484,7 +484,7 @@ export const useFileStore = defineStore("files", () => {
         rootDirectory,
         currentDirectory,
         currentDirectoryFiles,
-        pendingFilesSignature,
+        pendingMessageSignature,
         pendingVaultStructure,
         loadedFiles,
         // Methods

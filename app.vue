@@ -26,7 +26,7 @@ const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start te
 // State
 const fileStore = useFileStore();
 const walletStore = useWalletStore();
-const {pendingFilesSignature} = storeToRefs(fileStore);
+const {pendingMessageSignature} = storeToRefs(fileStore);
 
 const {openConnectWallet, openDisconnectWallet, wallet} =
     storeToRefs(walletStore);
@@ -53,17 +53,17 @@ const handleShowNotification = (payload: any) => {
 
 const handleHideNotification = () => {
   showNotification.value = false;
-  pendingFilesSignature.value = false;
+  pendingMessageSignature.value = false;
   notifyCancelEnabled.value = false;
 };
 
 watchEffect(() => {
-  if (pendingFilesSignature.value) {
+  if (pendingMessageSignature.value) {
     handleShowNotification({
       notifyType: 'info',
-      title: 'Sign file request',
+      title: 'Sign message request',
       details:
-          'To view your files please sign the file request in your mobile wallet.',
+          'To view your files please sign the message request in your mobile wallet.',
       enabledCancel: true,
     });
   } else {
