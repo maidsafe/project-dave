@@ -68,6 +68,7 @@ export default defineNuxtConfig({
         }
     },
     vite: {
+        plugins: [],
         // Better support for Tauri CLI output
         clearScreen: false,
         // Enable environment variables
@@ -75,8 +76,20 @@ export default defineNuxtConfig({
         // https://v2.tauri.app/reference/environment-variables/
         envPrefix: ["VITE_", "TAURI_"],
         server: {
-            // Tauri requires a consistent port
+            port: 1420,
             strictPort: true,
+            host: process.env.TAURI_DEV_HOST || false,
+            hmr: process.env.TAURI_DEV_HOST
+                ? {
+                    protocol: "ws",
+                    host: process.env.TAURI_DEV_HOST,
+                    port: 1421,
+                }
+                : undefined,
+            watch: {
+                // Tell vite to ignore watching `src-tauri`
+                ignored: ["**/src-tauri/**"],
+            },
         },
     },
     css: ["~/assets/css/main.css"],
