@@ -114,6 +114,7 @@ export const useWalletStore = defineStore("wallet", () => {
     // State
     const pendingConnectWallet = ref(false);
     const pendingDisconnectWallet = ref(false);
+    const pendingMessageSignature = ref(false);
     const openConnectWallet = ref(false);
     const openDisconnectWallet = ref(false);
     const callbackConnectWallet = ref<Function | null>(null);
@@ -290,14 +291,20 @@ export const useWalletStore = defineStore("wallet", () => {
         // Check for development environment variable first
         const config = useRuntimeConfig();
         const devVaultSignature = config.public.devVaultSignature;
+
+        console.log("DEBUG: Runtime config devVaultSignature:", devVaultSignature);
+        console.log("DEBUG: devVaultSignature type:", typeof devVaultSignature);
+        console.log("DEBUG: devVaultSignature length:", devVaultSignature?.length);
+
         if (devVaultSignature) {
             console.log("Using development vault key signature from ENV");
             return devVaultSignature;
         }
-
+        
         if (!cachedVaultKeySignature.value) {
             const hex = toHex(VAULT_SECRET_KEY_SEED);
             const ethSignedMessageHash = toEthSignedMessageHash(hex);
+            pendingMessageSignature.value = true;
             const signature = await sign(keccak256(ethSignedMessageHash));
             cachedVaultKeySignature.value = signature.slice(0, -2); // Remove recovery ID
         }
@@ -325,6 +332,7 @@ export const useWalletStore = defineStore("wallet", () => {
         // State
         pendingConnectWallet,
         pendingDisconnectWallet,
+        pendingMessageSignature,
         openConnectWallet,
         openDisconnectWallet,
         wallet,

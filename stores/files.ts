@@ -78,7 +78,6 @@ export const useFileStore = defineStore("files", () => {
     const loadingArchives = ref<{ name: string, is_private: boolean }[]>([]);
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
-    const pendingMessageSignature = ref(false);
     const pendingVaultStructure = ref(false);
     const loadedFiles = ref<Map<string, any>>(new Map());
     const currentLoadCode = ref<string | null>(null);
@@ -269,9 +268,7 @@ export const useFileStore = defineStore("files", () => {
 
         try {
             // Get vault key signature
-            pendingMessageSignature.value = true;
             let vaultKeySignature = await walletStore.getVaultKeySignature();
-            pendingMessageSignature.value = false;
 
             // Initialize vault structure 
             vaultStructure.value = {
@@ -296,9 +293,6 @@ export const useFileStore = defineStore("files", () => {
             });
 
             throw new Error("Failed to get vault structure");
-        } finally {
-            pendingMessageSignature.value = false;
-            // Note: don't set pendingVaultStructure to false here, it will be set when streaming completes
         }
     };
 
@@ -484,7 +478,6 @@ export const useFileStore = defineStore("files", () => {
         rootDirectory,
         currentDirectory,
         currentDirectoryFiles,
-        pendingMessageSignature,
         pendingVaultStructure,
         loadedFiles,
         // Methods
