@@ -1,9 +1,10 @@
 export interface UploadItem {
   id: string;
+  // Removed backendUploadId - we now use single ID throughout
   name: string;
   totalFiles: number;
   totalSize: number;
-  status: 'pending' | 'processing' | 'encrypting' | 'quoting' | 'payment' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'quoting' | 'uploading' | 'completed' | 'failed';
   progress: number;
   currentFile?: string;
   filesProcessed: number;
@@ -15,6 +16,8 @@ export interface UploadItem {
   completedAt?: Date;
 }
 
+// No longer need invoke since cancellation is frontend-only
+
 export const useUploadsStore = defineStore('uploads', () => {
   const uploads = ref<UploadItem[]>([]);
 
@@ -25,7 +28,7 @@ export const useUploadsStore = defineStore('uploads', () => {
 
   const activeUploads = computed(() => {
     return sortedUploads.value.filter(upload => 
-      ['pending', 'processing', 'encrypting', 'quoting', 'payment', 'uploading'].includes(upload.status)
+      ['quoting', 'uploading'].includes(upload.status)
     );
   });
 
@@ -54,7 +57,7 @@ export const useUploadsStore = defineStore('uploads', () => {
       name,
       totalFiles,
       totalSize: 0, // Will be updated when we get the Started event
-      status: 'pending',
+      status: 'quoting',
       progress: 0,
       filesProcessed: 0,
       bytesProcessed: 0,
@@ -70,6 +73,12 @@ export const useUploadsStore = defineStore('uploads', () => {
     if (index !== -1) {
       const updated = { ...uploads.value[index], ...updates };
       console.log(`>>> Uploads store: updating upload ${uploadId}`, updates, 'new state:', updated);
+      
+      // Add stack trace if status is being set to failed due to cancellation
+      if (updates.status === 'failed' && updates.error?.includes('cancelled')) {
+        console.trace('>>> Upload being cancelled - stack trace:');
+      }
+      
       uploads.value[index] = updated;
     } else {
       console.log(`>>> Uploads store: upload ${uploadId} not found when trying to update`);
@@ -84,23 +93,15 @@ export const useUploadsStore = defineStore('uploads', () => {
   };
 
   const cancelUpload = (uploadId: string) => {
+    // Uploads can only be cancelled before payment/execution phase
+    // No backend call needed since upload hasn't started yet
     updateUpload(uploadId, {
-      status: 'cancelled',
+      status: 'failed',
+      error: 'Upload cancelled',
       completedAt: new Date()
     });
   };
 
-  const retryUpload = (uploadId: string) => {
-    updateUpload(uploadId, {
-      status: 'pending',
-      progress: 0,
-      filesProcessed: 0,
-      bytesProcessed: 0,
-      chunksUploaded: 0,
-      error: undefined,
-      completedAt: undefined
-    });
-  };
 
   const clearCompleted = () => {
     uploads.value = uploads.value.filter(upload => upload.status !== 'completed');
@@ -120,7 +121,6 @@ export const useUploadsStore = defineStore('uploads', () => {
     updateUpload,
     removeUpload,
     cancelUpload,
-    retryUpload,
     clearCompleted,
     clearFailed
   };

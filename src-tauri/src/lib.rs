@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
+use std::collections::HashMap;
 use ant::{
     app_data::AppData,
     files::{FileFromVault, VaultStructure},
@@ -10,12 +11,58 @@ use ant::{
 };
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
+use autonomi::client::quote::StoreQuote;
+use autonomi::client::vault::VaultSecretKey;
+use autonomi::files::PrivateArchive;
+use autonomi::Chunk;
 use serde::{Deserialize, Serialize};
+// Removed unused rand import
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 mod ant;
 pub mod logging;
+
+pub enum PendingUploadData {
+    SingleFile {
+        file: File,
+        datamap: DataMapChunk,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        secret_key: VaultSecretKey,
+    },
+    Archive {
+        files: Vec<File>,
+        archive_name: String,
+        private_archive: PrivateArchive,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        secret_key: VaultSecretKey,
+    },
+}
+
+#[derive(Default)]
+pub struct PendingUploads {
+    uploads: HashMap<String, PendingUploadData>,
+}
+
+impl PendingUploads {
+    pub fn store_single_file(&mut self, upload_id: String, file: File, datamap: DataMapChunk, chunks: Vec<Chunk>, store_quote: StoreQuote, secret_key: VaultSecretKey) {
+        self.uploads.insert(upload_id, PendingUploadData::SingleFile {
+            file, datamap, chunks, store_quote, secret_key
+        });
+    }
+
+    pub fn store_archive(&mut self, upload_id: String, files: Vec<File>, archive_name: String, private_archive: PrivateArchive, chunks: Vec<Chunk>, store_quote: StoreQuote, secret_key: VaultSecretKey) {
+        self.uploads.insert(upload_id, PendingUploadData::Archive {
+            files, archive_name, private_archive, chunks, store_quote, secret_key
+        });
+    }
+
+    pub fn take(&mut self, upload_id: &str) -> Option<PendingUploadData> {
+        self.uploads.remove(upload_id)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct AppStateInner {
@@ -37,6 +84,7 @@ impl Default for AppStateInner {
     }
 }
 type AppState = Mutex<AppStateInner>;
+type PendingUploadsState = Mutex<PendingUploads>;
 
 #[tauri::command]
 async fn app_data(state: State<'_, AppState>) -> Result<AppData, ()> {
@@ -55,56 +103,90 @@ async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result
 }
 
 #[tauri::command]
-async fn upload_files(
+async fn start_upload(
     app: AppHandle,
     files: Vec<File>,
     archive_name: Option<String>,
     vault_key_signature: String,
+    upload_id: String, // Frontend provides the upload ID
     shared_client: State<'_, SharedClient>,
-    payment_orders: State<'_, PaymentOrderManager>,
-) -> Result<(), ()> {
+    pending_uploads: State<'_, PendingUploadsState>,
+) -> Result<(), CommandError> { // No need to return ID since frontend already has it
+    
     let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
         vault_key_signature.trim_start_matches("0x"),
     )
-    .expect("Invalid vault key signature");
+    .map_err(|e| CommandError { message: e.to_string() })?;
 
     // Check if this is a single file upload (not a directory)
     let is_single_file = files.len() == 1 && {
         use std::fs;
         match fs::metadata(&files[0].path) {
             Ok(metadata) => metadata.is_file(),
-            Err(_) => false, // If we can't read metadata, assume it's not a single file
+            Err(_) => false,
         }
     };
 
     if is_single_file {
-        // Upload single file directly without archive
-        ant::files::upload_single_private_file_to_vault(
+        ant::files::start_single_file_upload(
             app,
-            files.into_iter().next().unwrap(), // Safe because we checked len() == 1
+            files.into_iter().next().unwrap(),
             &secret_key,
+            upload_id.clone(),
             shared_client,
-            payment_orders,
+            Some(&*pending_uploads),
         )
         .await
-        .map_err(|_err| ()) // TODO: Map to serializable error
+        .map_err(|e| CommandError { message: e.to_string() })?;
     } else {
-        // Generate archive name if not provided
         let archive_name = archive_name.unwrap_or_default();
-
-        // Upload multiple files or directories as archive
-        ant::files::upload_private_files_to_vault(
+        ant::files::start_archive_upload(
             app,
             files,
             archive_name,
             &secret_key,
+            upload_id.clone(),
             shared_client,
-            payment_orders,
+            Some(&*pending_uploads),
         )
         .await
-        .map_err(|_err| ()) // TODO: Map to serializable error
+        .map_err(|e| CommandError { message: e.to_string() })?;
     }
+    
+    Ok(())
 }
+
+#[tauri::command]
+async fn confirm_upload_payment(
+    app: AppHandle,
+    upload_id: String,
+    shared_client: State<'_, SharedClient>,
+    pending_uploads: State<'_, PendingUploadsState>,
+) -> Result<(), CommandError> {
+    let mut pending = pending_uploads.lock().await;
+    
+    if let Some(upload_data) = pending.take(&upload_id) {
+        match upload_data {
+            PendingUploadData::SingleFile { file, datamap, chunks, store_quote, secret_key } => {
+                ant::files::execute_single_file_upload(
+                    app, file, datamap, chunks, store_quote, &secret_key, upload_id, shared_client
+                ).await.map_err(|e| CommandError { message: e.to_string() })?;
+            }
+            PendingUploadData::Archive { files, archive_name, private_archive, chunks, store_quote, secret_key } => {
+                ant::files::execute_archive_upload(
+                    app, files, archive_name, private_archive, chunks, store_quote, &secret_key, upload_id, shared_client
+                ).await.map_err(|e| CommandError { message: e.to_string() })?;
+            }
+        }
+    } else {
+        return Err(CommandError { message: format!("Upload {} not found or already processed", upload_id) });
+    }
+    
+    Ok(())
+}
+
+// Cancel upload is only possible before payment - no backend command needed
+// Frontend handles cancellation by not proceeding to execute_upload
 
 #[tauri::command]
 async fn send_payment_order_message(
@@ -353,11 +435,13 @@ pub async fn run() {
         .manage(AppState::default())
         .manage(SharedClient::default())
         .manage(PaymentOrderManager::default())
+        .manage(PendingUploadsState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            upload_files,
+            start_upload,
+            confirm_upload_payment,
             send_payment_order_message,
             get_vault_structure,
             get_vault_structure_streaming,

@@ -1,26 +1,27 @@
 use crate::ant::client::SharedClient;
 use crate::ant::local_storage;
-use crate::ant::payments::{OrderMessage, PaymentOrderManager, IDLE_PAYMENT_TIMEOUT_SECS};
+// Removed unused imports from payments module
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::quote::{DataTypes, StoreQuote};
 use autonomi::client::vault::key::vault_key_from_signature_hex;
-use autonomi::client::vault::{app_name_to_vault_content_type, UserData, VaultSecretKey};
+use autonomi::client::vault::{UserData, VaultSecretKey};
 use autonomi::client::GetError;
 use autonomi::data::DataAddress;
-use autonomi::files::archive_private::PrivateArchiveDataMap;
+// Removed unused PrivateArchiveDataMap import
 use autonomi::files::{Metadata, PrivateArchive};
 use autonomi::vault::user_data::UserDataVaultError;
-use autonomi::{Amount, Bytes, Chunk, Scratchpad, ScratchpadAddress};
+use autonomi::{Amount, Bytes, Chunk};
+use hex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::time::Duration;
+// Removed unused Duration import
 use tauri::{AppHandle, Emitter, State};
 use thiserror::Error as ThisError;
 use tokio::fs;
-use tokio::time::timeout;
+// Removed unused timeout import
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct File {
     pub name: String,
     pub path: PathBuf,
@@ -30,10 +31,12 @@ pub struct File {
 #[serde(tag = "type")]
 pub enum UploadProgress {
     Started {
+        upload_id: String,
         total_files: usize,
         total_size: u64,
     },
     Processing {
+        upload_id: String,
         current_file: String,
         files_processed: usize,
         total_files: usize,
@@ -41,26 +44,34 @@ pub enum UploadProgress {
         total_bytes: u64,
     },
     Encrypting {
+        upload_id: String,
         current_file: String,
         files_processed: usize,
         total_files: usize,
     },
     RequestingPayment {
+        upload_id: String,
         files_processed: usize,
         total_files: usize,
     },
     Uploading {
+        upload_id: String,
         chunks_uploaded: usize,
         total_chunks: usize,
         bytes_uploaded: u64,
         total_bytes: u64,
     },
     Completed {
+        upload_id: String,
         total_files: usize,
         total_bytes: u64,
     },
     Failed {
+        upload_id: String,
         error: String,
+    },
+    Cancelled {
+        upload_id: String,
     },
 }
 
@@ -142,7 +153,7 @@ pub async fn collect_files_from_directory(
 
     // Get the parent directory to calculate relative paths correctly
     let base_dir = dir_path.parent().unwrap_or(&dir_path);
-    let dir_name = dir_path.file_name().unwrap_or_default();
+    let _dir_name = dir_path.file_name().unwrap_or_default();
 
     // Start with the root directory
     queue.push_back(dir_path.clone());
@@ -177,62 +188,271 @@ pub async fn collect_files_from_directory(
     Ok(files)
 }
 
-pub async fn upload_single_private_file_to_vault(
+pub async fn start_single_file_upload(
     app: AppHandle,
     file: File,
     secret_key: &VaultSecretKey,
+    upload_id: String,
     shared_client: State<'_, SharedClient>,
-    payment_orders: State<'_, PaymentOrderManager>,
+    pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
+) -> Result<(), UploadError> {
+    println!(
+        ">>> start_single_file_upload called with upload_id: {}",
+        upload_id
+    );
+    let client = shared_client.get_client().await.map_err(|e| {
+        println!(">>> Failed to get client: {:?}", e);
+        e
+    })?;
+
+    // Calculate file size
+    let file_size = fs::metadata(&file.path)
+        .await
+        .map_err(|_| UploadError::Read(file.path.clone()))?
+        .len();
+
+    // Read and encrypt file to get chunks for quote
+    println!(">>> Reading and encrypting file: {:?}", file.path);
+    let bytes = read_file_to_bytes(file.path.clone()).await?;
+    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
+        println!(">>> Encryption failed: {}", err);
+        UploadError::Encryption(err.to_string())
+    })?;
+    println!(">>> File encrypted, got {} chunks", chunks.len());
+
+    let chunks_iter = chunks
+        .iter()
+        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+
+    println!(">>> Getting store quotes for {} chunks...", chunks.len());
+    let store_quote = client
+        .get_store_quotes(DataTypes::Chunk, chunks_iter)
+        .await
+        .map_err(|err| {
+            println!(">>> Failed to get store quotes: {}", err);
+            UploadError::StoreQuote(err.to_string())
+        })?;
+    println!(">>> Got store quote successfully");
+
+    let total_cost: Amount = store_quote
+        .payments()
+        .iter()
+        .map(|(_, _, amount)| *amount)
+        .sum();
+    let has_payments = total_cost > Amount::ZERO;
+
+    // Emit quote event with cost information
+    let payments: Vec<serde_json::Value> = if has_payments {
+        store_quote
+            .payments()
+            .iter()
+            .map(|(addr, _, amount)| {
+                serde_json::json!({
+                    "address": hex::encode(addr),
+                    "amount": amount.to_string(),
+                    "amount_formatted": format!("{} ATTO", amount)
+                })
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let raw_payments: Vec<_> = store_quote
+        .payments()
+        .into_iter()
+        .filter(|(_, _, amount)| *amount > Amount::ZERO)
+        .collect();
+
+    println!(
+        ">>> Emitting upload-quote event for upload_id: {}",
+        upload_id
+    );
+    app.emit(
+        "upload-quote",
+        serde_json::json!({
+            "upload_id": upload_id.clone(),
+            "total_files": 1,
+            "total_size": file_size,
+            "total_cost_nano": total_cost.to_string(),
+            "total_cost_formatted": format!("{} ATTO", total_cost),
+            "payment_required": has_payments,
+            "payments": payments,
+            "raw_payments": raw_payments
+        }),
+    )
+    .map_err(|err| {
+        println!(">>> Failed to emit upload-quote event: {}", err);
+        UploadError::EmitEvent(err.to_string())
+    })?;
+    println!(">>> Successfully emitted upload-quote event");
+
+    // If no payment required, proceed immediately
+    if !has_payments {
+        execute_single_file_upload(
+            app,
+            file,
+            DataMapChunk::from(datamap),
+            chunks,
+            store_quote,
+            secret_key,
+            upload_id,
+            shared_client,
+        )
+        .await?;
+    } else if let Some(pending_uploads) = pending_uploads {
+        // Store upload data for later execution after payment
+        let mut pending = pending_uploads.lock().await;
+        pending.store_single_file(
+            upload_id.clone(),
+            file,
+            DataMapChunk::from(datamap),
+            chunks,
+            store_quote,
+            secret_key.clone(),
+        );
+    }
+    // If payment required, the execution will happen when confirm_upload_payment is called
+
+    Ok(())
+}
+
+pub async fn execute_single_file_upload(
+    app: AppHandle,
+    file: File,
+    datamap: DataMapChunk,
+    chunks: Vec<Chunk>,
+    store_quote: StoreQuote,
+    secret_key: &VaultSecretKey,
+    upload_id: String,
+    shared_client: State<'_, SharedClient>,
 ) -> Result<(), UploadError> {
     let client = shared_client.get_client().await?;
-
-    // Calculate total size and emit start event
-    let path_metadata = fs::metadata(&file.path)
+    let file_size = fs::metadata(&file.path)
         .await
-        .map_err(|_| UploadError::Read(file.path.clone()))?;
-    
-    let total_size = path_metadata.len();
-    let total_files = 1;
+        .map_err(|_| UploadError::Read(file.path.clone()))?
+        .len();
 
+    // Emit started event
     app.emit(
         "upload-progress",
         UploadProgress::Started {
-            total_files,
-            total_size,
+            upload_id: upload_id.clone(),
+            total_files: 1,
+            total_size: file_size,
         },
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    // Emit processing progress
+    // Emit uploading progress
     app.emit(
         "upload-progress",
-        UploadProgress::Processing {
-            current_file: file.name.clone(),
-            files_processed: 0,
-            total_files,
-            bytes_processed: 0,
-            total_bytes: total_size,
+        UploadProgress::Uploading {
+            upload_id: upload_id.clone(),
+            chunks_uploaded: 0,
+            total_chunks: chunks.len(),
+            bytes_uploaded: 0,
+            total_bytes: file_size,
         },
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    let bytes: Bytes = read_file_to_bytes(file.path.clone()).await?;
+    // Upload chunks to network
+    let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+    client
+        .chunk_batch_upload(chunks.iter().collect(), &receipt)
+        .await
+        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Emit encrypting progress
+    // Store file in vault
+    let mut user_data = client
+        .get_user_data_from_vault(secret_key)
+        .await
+        .unwrap_or(UserData::new());
+
+    // Add the single file to user data (not as archive)
+    user_data
+        .private_files
+        .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
+
+    // Store updated user data in vault
+    client
+        .put_user_data_to_vault(secret_key, receipt.into(), user_data)
+        .await
+        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+    // Store file locally
+    local_storage::write_local_private_file(datamap.to_hex(), datamap.address(), &file.name)
+        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+    // Emit completion
     app.emit(
         "upload-progress",
-        UploadProgress::Encrypting {
-            current_file: file.name.clone(),
-            files_processed: 0,
-            total_files,
+        UploadProgress::Completed {
+            upload_id: upload_id.clone(),
+            total_files: 1,
+            total_bytes: file_size,
         },
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
-        .map_err(|err| UploadError::Encryption(err.to_string()))?;
+    Ok(())
+}
 
-    let chunks_iter = chunks
+pub async fn start_archive_upload(
+    app: AppHandle,
+    files: Vec<File>,
+    archive_name: String,
+    secret_key: &VaultSecretKey,
+    upload_id: String,
+    shared_client: State<'_, SharedClient>,
+    pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
+) -> Result<(), UploadError> {
+    let client = shared_client.get_client().await?;
+
+    // Calculate total size and collect files
+    let total_size = calculate_total_size(&files).await?;
+    let total_files = files.len();
+
+    // Create archive and encrypt to get chunks for quote
+    let mut private_archive = PrivateArchive::new();
+    let mut all_chunks = Vec::new();
+
+    for file in &files {
+        let path_metadata = fs::metadata(&file.path)
+            .await
+            .map_err(|_| UploadError::Read(file.path.clone()))?;
+
+        if path_metadata.is_dir() {
+            // Handle directory
+            let collected_files = collect_files_from_directory(file.path.clone()).await?;
+            for (relative_path, absolute_path) in collected_files {
+                let bytes = read_file_to_bytes(absolute_path).await?;
+                let file_size = bytes.len() as u64;
+                let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                    .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+                all_chunks.extend(chunks);
+
+                let metadata = Metadata::new_with_size(file_size);
+                private_archive.add_file(relative_path, DataMapChunk::from(datamap), metadata);
+            }
+        } else {
+            // Handle single file
+            let bytes = read_file_to_bytes(file.path.clone()).await?;
+            let file_size = bytes.len() as u64;
+            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+            all_chunks.extend(chunks);
+
+            let metadata = Metadata::new_with_size(file_size);
+            private_archive.add_file(file.path.clone(), DataMapChunk::from(datamap), metadata);
+        }
+    }
+
+    // Get store quote for all chunks
+    let chunks_iter = all_chunks
         .iter()
         .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
 
@@ -241,576 +461,172 @@ pub async fn upload_single_private_file_to_vault(
         .await
         .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    let mut user_data = client
-        .get_user_data_from_vault(secret_key)
-        .await
-        .unwrap_or(UserData::new());
+    let total_cost: Amount = store_quote
+        .payments()
+        .iter()
+        .map(|(_, _, amount)| *amount)
+        .sum();
+    let has_payments = total_cost > Amount::ZERO;
 
-    // Add the single file to user data (not as archive)
-    user_data.private_files.insert(
-        DataMapChunk::from(datamap.clone()),
-        file.name.clone(),
-    );
-
-    let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
-    let scratchpad_exists = client
-        .scratchpad_check_existence(&scratchpad_addr)
-        .await
-        .map_err(|err| UploadError::Scratchpad(format!("{err}")))?;
-    let content_type = app_name_to_vault_content_type("UserData");
-    let scratchpad = if scratchpad_exists {
-        client
-            .scratchpad_get(&scratchpad_addr)
-            .await
-            .map_err(|err| UploadError::Scratchpad(format!("{err}")))?
+    // Emit quote event with cost information
+    let payments: Vec<serde_json::Value> = if has_payments {
+        store_quote
+            .payments()
+            .iter()
+            .map(|(addr, _, amount)| {
+                serde_json::json!({
+                    "address": hex::encode(addr),
+                    "amount": amount.to_string(),
+                    "amount_formatted": format!("{} ATTO", amount)
+                })
+            })
+            .collect()
     } else {
-        Scratchpad::new(secret_key, content_type, &Bytes::new(), 0)
+        vec![]
     };
 
-    let scratch_pad_store_quote = client
-        .get_store_quotes(
-            DataTypes::Scratchpad,
-            std::iter::once((scratchpad.address().xorname(), scratchpad.size())),
-        )
-        .await
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-
-    let mut aggregated_store_quote = store_quote;
-    for (xor_name, quotes) in scratch_pad_store_quote.0 {
-        aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
-    }
-
-    let payments: Vec<_> = aggregated_store_quote
+    let raw_payments: Vec<_> = store_quote
         .payments()
         .into_iter()
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
         .collect();
 
-    // Calculate total cost
-    let total_cost: Amount = payments.iter().map(|(_, _, amount)| *amount).sum();
-    let has_payments = !payments.is_empty();
-
-    // Emit payment request progress
     app.emit(
-        "upload-progress",
-        UploadProgress::RequestingPayment {
-            files_processed: 0,
-            total_files,
-        },
+        "upload-quote",
+        serde_json::json!({
+            "upload_id": upload_id.clone(),
+            "total_files": total_files,
+            "total_size": total_size,
+            "total_cost_nano": total_cost.to_string(),
+            "total_cost_formatted": format!("{} ATTO", total_cost),
+            "payment_required": has_payments,
+            "payments": payments,
+            "raw_payments": raw_payments
+        }),
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    let (order, mut confirmation_receiver) = payment_orders.create_order(payments.clone()).await;
-
-    // Emit simplified payment request
-    let payment_request = serde_json::json!({
-        "order_id": order.id,
-        "total_cost_nano": total_cost.to_string(),
-        "total_cost_formatted": format!("{} ATTO", total_cost),
-        "payment_required": has_payments,
-        "payments": payments
-    });
-
-    tracing::debug!(
-        "Emitting payment-request event with data: {:?}",
-        payment_request
-    );
-    app.emit("payment-request", payment_request)
-        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-    let secret_key = secret_key.clone();
-    let app_clone = app.clone();
-    let total_chunks = chunks.len();
-    let file_name = file.name.clone();
-    let datamap_chunk = DataMapChunk::from(datamap);
-
-    tokio::spawn(async move {
-        let order_successful = loop {
-            match timeout(
-                Duration::from_secs(IDLE_PAYMENT_TIMEOUT_SECS),
-                confirmation_receiver.recv(),
-            )
-            .await
-            {
-                Ok(Some(OrderMessage::KeepAlive)) => continue,
-                Ok(Some(OrderMessage::Completed)) => break true,
-                _ => break false,
-            }
-        };
-
-        tracing::debug!("Order paid: {order_successful}");
-
-        if order_successful {
-            let receipt =
-                autonomi::client::payment::receipt_from_store_quotes(aggregated_store_quote);
-
-            tracing::debug!("Uploading chunks..");
-
-            // Emit uploading progress
-            tracing::debug!(
-                "Emitting initial Uploading progress: 0/{} chunks",
-                total_chunks
-            );
-            let _ = app_clone.emit(
-                "upload-progress",
-                UploadProgress::Uploading {
-                    chunks_uploaded: 0,
-                    total_chunks,
-                    bytes_uploaded: 0,
-                    total_bytes: total_size,
-                },
-            );
-
-            let failed_uploads = client
-                .chunk_batch_upload(chunks.iter().collect(), &receipt)
-                .await;
-
-            if let Err(err) = failed_uploads {
-                tracing::error!("Upload chunks errored: {err}");
-                let _ = app_clone.emit(
-                    "upload-progress",
-                    UploadProgress::Failed {
-                        error: format!("Upload failed: {}", err),
-                    },
-                );
-                return;
-            }
-
-            // Emit final progress update showing all chunks uploaded
-            tracing::debug!(
-                "Emitting final Uploading progress: {}/{} chunks",
-                total_chunks,
-                total_chunks
-            );
-            let _ = app_clone.emit(
-                "upload-progress",
-                UploadProgress::Uploading {
-                    chunks_uploaded: total_chunks,
-                    total_chunks,
-                    bytes_uploaded: total_size,
-                    total_bytes: total_size,
-                },
-            );
-
-            let result = client
-                .put_user_data_to_vault(&secret_key, receipt.into(), user_data.clone())
-                .await;
-
-            tracing::debug!("Update vault result: {:?}", result);
-
-            if result.is_ok() {
-                // Save to local storage as individual file
-                if let Err(e) = local_storage::write_local_private_file(
-                    datamap_chunk.to_hex(),
-                    datamap_chunk.address(),
-                    &file_name,
-                ) {
-                    tracing::error!("Failed to save file to local storage: {}", e);
-                }
-
-                // Emit completion
-                let _ = app_clone.emit(
-                    "upload-progress",
-                    UploadProgress::Completed {
-                        total_files,
-                        total_bytes: total_size,
-                    },
-                );
-            } else {
-                let _ = app_clone.emit(
-                    "upload-progress",
-                    UploadProgress::Failed {
-                        error: "Failed to update vault".to_string(),
-                    },
-                );
-            }
-        } else {
-            let _ = app_clone.emit(
-                "upload-progress",
-                UploadProgress::Failed {
-                    error: "Payment was not completed".to_string(),
-                },
-            );
-        }
-    });
+    // If no payment required, proceed immediately
+    if !has_payments {
+        execute_archive_upload(
+            app,
+            files,
+            archive_name,
+            private_archive,
+            all_chunks,
+            store_quote,
+            secret_key,
+            upload_id,
+            shared_client,
+        )
+        .await?;
+    } else if let Some(pending_uploads) = pending_uploads {
+        // Store upload data for later execution after payment
+        let mut pending = pending_uploads.lock().await;
+        pending.store_archive(
+            upload_id.clone(),
+            files,
+            archive_name,
+            private_archive,
+            all_chunks,
+            store_quote,
+            secret_key.clone(),
+        );
+    }
+    // If payment required, the execution will happen when confirm_upload_payment is called
 
     Ok(())
 }
 
-pub async fn upload_private_files_to_vault(
+pub async fn execute_archive_upload(
     app: AppHandle,
     files: Vec<File>,
     archive_name: String,
+    private_archive: PrivateArchive,
+    chunks: Vec<Chunk>,
+    store_quote: StoreQuote,
     secret_key: &VaultSecretKey,
+    upload_id: String,
     shared_client: State<'_, SharedClient>,
-    payment_orders: State<'_, PaymentOrderManager>,
 ) -> Result<(), UploadError> {
     let client = shared_client.get_client().await?;
-
-    // Calculate total size and emit start event
     let total_size = calculate_total_size(&files).await?;
-    let total_files = files.len();
 
+    // Emit started event
     app.emit(
         "upload-progress",
         UploadProgress::Started {
-            total_files,
+            upload_id: upload_id.clone(),
+            total_files: files.len(),
             total_size,
         },
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    let mut aggregated_chunks: Vec<Chunk> = vec![];
-    let mut aggregated_store_quote = StoreQuote(Default::default());
-    let mut private_archive = PrivateArchive::new();
-    let mut files_processed = 0;
-    let mut bytes_processed = 0u64;
+    // Emit uploading progress
+    app.emit(
+        "upload-progress",
+        UploadProgress::Uploading {
+            upload_id: upload_id.clone(),
+            chunks_uploaded: 0,
+            total_chunks: chunks.len(),
+            bytes_uploaded: 0,
+            total_bytes: total_size,
+        },
+    )
+    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    for file in files {
-        // Check if the path is a directory
-        let path_metadata = fs::metadata(&file.path)
-            .await
-            .map_err(|_| UploadError::Read(file.path.clone()))?;
+    // Upload chunks to network
+    let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+    client
+        .chunk_batch_upload(chunks.iter().collect(), &receipt)
+        .await
+        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-        if path_metadata.is_dir() {
-            // Handle directory: collect all files with their relative paths
-            let collected_files = collect_files_from_directory(file.path.clone()).await?;
+    // Store archive in vault
+    let mut user_data = client
+        .get_user_data_from_vault(secret_key)
+        .await
+        .unwrap_or(UserData::new());
 
-            for (relative_path, absolute_path) in collected_files {
-                // Emit processing progress
-                app.emit(
-                    "upload-progress",
-                    UploadProgress::Processing {
-                        current_file: relative_path.to_string_lossy().to_string(),
-                        files_processed,
-                        total_files,
-                        bytes_processed,
-                        total_bytes: total_size,
-                    },
-                )
-                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-                let bytes: Bytes = read_file_to_bytes(absolute_path.clone()).await?;
-                let file_size = bytes.len() as u64;
-
-                // Emit encrypting progress
-                app.emit(
-                    "upload-progress",
-                    UploadProgress::Encrypting {
-                        current_file: relative_path.to_string_lossy().to_string(),
-                        files_processed,
-                        total_files,
-                    },
-                )
-                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-                let metadata = Metadata::new_with_size(file_size);
-                let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
-                    .map_err(|err| UploadError::Encryption(err.to_string()))?;
-
-                bytes_processed += file_size;
-
-                // Add file to archive with its relative path
-                private_archive.add_file(
-                    relative_path,
-                    DataMapChunk::from(datamap.clone()),
-                    metadata.clone(),
-                );
-
-                let chunks_iter = chunks
-                    .iter()
-                    .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
-
-                let store_quote = client
-                    .get_store_quotes(DataTypes::Chunk, chunks_iter)
-                    .await
-                    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-
-                for (xor_name, quotes) in store_quote.0 {
-                    aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
-                }
-
-                for chunk in chunks {
-                    aggregated_chunks.push(chunk);
-                }
-            }
-        } else {
-            // Handle single file
-            // Emit processing progress
-            app.emit(
-                "upload-progress",
-                UploadProgress::Processing {
-                    current_file: file.name.clone(),
-                    files_processed,
-                    total_files,
-                    bytes_processed,
-                    total_bytes: total_size,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            let bytes: Bytes = read_file_to_bytes(file.path.clone()).await?;
-            let file_size = bytes.len() as u64;
-
-            // Emit encrypting progress
-            app.emit(
-                "upload-progress",
-                UploadProgress::Encrypting {
-                    current_file: file.name.clone(),
-                    files_processed,
-                    total_files,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            let metadata = Metadata::new_with_size(file_size);
-            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
-                .map_err(|err| UploadError::Encryption(err.to_string()))?;
-
-            bytes_processed += file_size;
-
-            private_archive.add_file(
-                PathBuf::from(&file.name),
-                DataMapChunk::from(datamap.clone()),
-                metadata.clone(),
-            );
-
-            let chunks_iter = chunks
-                .iter()
-                .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
-
-            let store_quote = client
-                .get_store_quotes(DataTypes::Chunk, chunks_iter)
-                .await
-                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-
-            for (xor_name, quotes) in store_quote.0 {
-                aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
-            }
-
-            for chunk in chunks {
-                aggregated_chunks.push(chunk);
-            }
-        }
-
-        files_processed += 1;
-    }
-
-    let (private_archive_datamap, private_archive_chunks) = autonomi::self_encryption::encrypt(
+    // Store the archive
+    let (archive_datamap, _archive_chunks) = autonomi::self_encryption::encrypt(
         private_archive
             .to_bytes()
             .map_err(|err| UploadError::Encryption(err.to_string()))?,
     )
     .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
-    let private_archive_chunk_iter = private_archive_chunks
-        .iter()
-        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
-
-    let private_archive_store_quote = client
-        .get_store_quotes(DataTypes::Chunk, private_archive_chunk_iter)
-        .await
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-
-    for (xor_name, quotes) in private_archive_store_quote.0 {
-        aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
-    }
-
-    for chunk in private_archive_chunks {
-        aggregated_chunks.push(chunk);
-    }
-
-    let mut user_data = client
-        .get_user_data_from_vault(secret_key)
-        .await
-        .unwrap_or(UserData::new());
-
-    // Add the archive with a name
     user_data.private_file_archives.insert(
-        DataMapChunk::from(private_archive_datamap.clone()),
+        DataMapChunk::from(archive_datamap.clone()),
         archive_name.clone(),
     );
 
-    let scratchpad_addr = ScratchpadAddress::new(secret_key.public_key());
-    let scratchpad_exists = client
-        .scratchpad_check_existence(&scratchpad_addr)
-        .await
-        .map_err(|err| UploadError::Scratchpad(format!("{err}")))?;
-    let content_type = app_name_to_vault_content_type("UserData");
-    let scratchpad = if scratchpad_exists {
-        client
-            .scratchpad_get(&scratchpad_addr)
-            .await
-            .map_err(|err| UploadError::Scratchpad(format!("{err}")))?
-    } else {
-        Scratchpad::new(secret_key, content_type, &Bytes::new(), 0)
-    };
-
-    let scratch_pad_store_quote = client
-        .get_store_quotes(
-            DataTypes::Scratchpad,
-            std::iter::once((scratchpad.address().xorname(), scratchpad.size())),
-        )
+    // Store updated user data in vault
+    client
+        .put_user_data_to_vault(secret_key, receipt.into(), user_data)
         .await
         .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    for (xor_name, quotes) in scratch_pad_store_quote.0 {
-        aggregated_store_quote.0.entry(xor_name).or_insert(quotes);
-    }
+    // Store archive locally
+    let archive_datamap_chunk = DataMapChunk::from(archive_datamap);
+    local_storage::write_local_private_file_archive(
+        archive_datamap_chunk.to_hex(),
+        archive_datamap_chunk.address(),
+        &archive_name,
+    )
+    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    let payments: Vec<_> = aggregated_store_quote
-        .payments()
-        .into_iter()
-        .filter(|(_, _, amount)| *amount > Amount::ZERO)
-        .collect();
-
-    // Calculate total cost
-    let total_cost: Amount = payments.iter().map(|(_, _, amount)| *amount).sum();
-    let has_payments = !payments.is_empty();
-
-    // Emit payment request progress
+    // Emit completion
     app.emit(
         "upload-progress",
-        UploadProgress::RequestingPayment {
-            files_processed,
-            total_files,
+        UploadProgress::Completed {
+            upload_id: upload_id.clone(),
+            total_files: files.len(),
+            total_bytes: total_size,
         },
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-    let (order, mut confirmation_receiver) = payment_orders.create_order(payments.clone()).await;
-
-    // Emit simplified payment request
-    let payment_request = serde_json::json!({
-        "order_id": order.id,
-        "total_cost_nano": total_cost.to_string(),
-        "total_cost_formatted": format!("{} ATTO", total_cost),
-        "payment_required": has_payments,
-        "payments": payments
-    });
-
-    tracing::debug!(
-        "Emitting payment-request event with data: {:?}",
-        payment_request
-    );
-    app.emit("payment-request", payment_request)
-        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-    let secret_key = secret_key.clone();
-    let app_clone = app.clone();
-    let total_chunks = aggregated_chunks.len();
-    let archive_name_clone = archive_name.clone();
-    let private_archive_datamap_clone = PrivateArchiveDataMap::from(private_archive_datamap);
-
-    tokio::spawn(async move {
-        let order_successful = loop {
-            match timeout(
-                Duration::from_secs(IDLE_PAYMENT_TIMEOUT_SECS),
-                confirmation_receiver.recv(),
-            )
-            .await
-            {
-                Ok(Some(OrderMessage::KeepAlive)) => continue,
-                Ok(Some(OrderMessage::Completed)) => break true,
-                _ => break false,
-            }
-        };
-
-        tracing::debug!("Order paid: {order_successful}");
-
-        if order_successful {
-            let receipt =
-                autonomi::client::payment::receipt_from_store_quotes(aggregated_store_quote);
-
-            tracing::debug!("Uploading chunks..");
-
-            // Emit uploading progress
-            tracing::debug!(
-                "Emitting initial Uploading progress: 0/{} chunks",
-                total_chunks
-            );
-            let _ = app_clone.emit(
-                "upload-progress",
-                UploadProgress::Uploading {
-                    chunks_uploaded: 0,
-                    total_chunks,
-                    bytes_uploaded: 0,
-                    total_bytes: total_size,
-                },
-            );
-
-            let failed_uploads = client
-                .chunk_batch_upload(aggregated_chunks.iter().collect(), &receipt)
-                .await;
-
-            if let Err(err) = failed_uploads {
-                tracing::error!("Upload chunks errored: {err}");
-                let _ = app_clone.emit(
-                    "upload-progress",
-                    UploadProgress::Failed {
-                        error: format!("Upload failed: {}", err),
-                    },
-                );
-                return;
-            }
-
-            // Emit final progress update showing all chunks uploaded
-            tracing::debug!(
-                "Emitting final Uploading progress: {}/{} chunks",
-                total_chunks,
-                total_chunks
-            );
-            let _ = app_clone.emit(
-                "upload-progress",
-                UploadProgress::Uploading {
-                    chunks_uploaded: total_chunks,
-                    total_chunks,
-                    bytes_uploaded: total_size,
-                    total_bytes: total_size,
-                },
-            );
-
-            let result = client
-                .put_user_data_to_vault(&secret_key, receipt.into(), user_data.clone())
-                .await;
-
-            tracing::debug!("Update vault result: {:?}", result);
-
-            if result.is_ok() {
-                // Save to local storage
-                if let Err(e) = local_storage::write_local_private_file_archive(
-                    private_archive_datamap_clone.to_hex(),
-                    private_archive_datamap_clone.address(),
-                    &archive_name_clone,
-                ) {
-                    tracing::error!("Failed to save archive to local storage: {}", e);
-                }
-
-                // Emit completion
-                let _ = app_clone.emit(
-                    "upload-progress",
-                    UploadProgress::Completed {
-                        total_files,
-                        total_bytes: total_size,
-                    },
-                );
-            } else {
-                let _ = app_clone.emit(
-                    "upload-progress",
-                    UploadProgress::Failed {
-                        error: "Failed to update vault".to_string(),
-                    },
-                );
-            }
-        } else {
-            let _ = app_clone.emit(
-                "upload-progress",
-                UploadProgress::Failed {
-                    error: "Payment was not completed".to_string(),
-                },
-            );
-        }
-    });
 
     Ok(())
 }
@@ -920,9 +736,6 @@ pub async fn get_vault_structure(
             let mut files: Vec<FileMetadata> = vec![];
 
             for (filepath, (data_map, metadata)) in archive.map() {
-                println!("archive name: {:?}", archive_name);
-                println!("filepath: {:?}", filepath);
-
                 let file = FileMetadata {
                     path: filepath.display().to_string(),
                     metadata: metadata.clone(),
@@ -940,7 +753,6 @@ pub async fn get_vault_structure(
                 files,
             });
         } else {
-            tracing::error!("Failed to get private archive: {}", archive_name);
             failed_archives.push(FailedArchive {
                 name: archive_name,
                 is_private: true,
@@ -973,7 +785,6 @@ pub async fn get_vault_structure(
                 files,
             });
         } else {
-            tracing::error!("Failed to get public archive: {}", archive_name);
             failed_archives.push(FailedArchive {
                 name: archive_name,
                 is_private: false,
@@ -988,10 +799,10 @@ pub async fn get_vault_structure(
     for (data_map, name) in &user_data.private_files {
         let file = FileMetadata {
             path: name.clone(),
-            metadata: autonomi::files::Metadata::new_with_size(0), // We don't have size info for individual files
+            metadata: autonomi::files::Metadata::new_with_size(0),
             file_type: FileType::Private,
-            is_loaded: true, // Individual files have their access data immediately available
-            archive_name: String::new(), // No archive name for individual files
+            is_loaded: true,
+            archive_name: String::new(),
             access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
         };
         individual_files.push(file);
@@ -1001,10 +812,10 @@ pub async fn get_vault_structure(
     for (data_addr, name) in &user_data.public_files {
         let file = FileMetadata {
             path: name.clone(),
-            metadata: autonomi::files::Metadata::new_with_size(0), // We don't have size info for individual files
+            metadata: autonomi::files::Metadata::new_with_size(0),
             file_type: FileType::Public,
-            is_loaded: true, // Individual files have their access data immediately available
-            archive_name: String::new(), // No archive name for individual files
+            is_loaded: true,
+            archive_name: String::new(),
             access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
         };
         individual_files.push(file);
@@ -1072,175 +883,7 @@ pub async fn get_vault_structure_streaming(
             .map_err(|_| VaultError::FileNotFound)?;
     }
 
-    // Process archives concurrently
-    let mut archive_tasks = vec![];
-
-    // Create tasks for private archives
-    for (data_map, name) in user_data.private_file_archives {
-        let client = client.clone();
-        let app = app.clone();
-        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
-
-        // Emit loading status immediately
-        let loading_update = VaultUpdate {
-            update_type: VaultUpdateType::ArchiveLoading,
-            archive: None,
-            failed_archive: None,
-            loading_archive: Some(LoadingArchive {
-                name: archive_name.clone(),
-                is_private: true,
-            }),
-            files: vec![],
-            is_complete: false,
-            temp_code: temp_code.clone(),
-        };
-        let _ = app.emit("vault-update", loading_update);
-
-        let temp_code = temp_code.clone();
-        let task = tokio::spawn(async move {
-            match client.archive_get(&data_map).await {
-                Ok(archive) => {
-                    let mut files: Vec<FileMetadata> = vec![];
-
-                    for (filepath, (data_map, metadata)) in archive.map() {
-                        let file = FileMetadata {
-                            path: filepath.display().to_string(),
-                            metadata: metadata.clone(),
-                            file_type: FileType::Private,
-                            is_loaded: false,
-                            archive_name: archive_name.clone(),
-                            access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
-                        };
-                        files.push(file);
-                    }
-
-                    let archive_info = ArchiveInfo {
-                        name: archive_name.clone(),
-                        is_private: true,
-                        files,
-                    };
-
-                    let update = VaultUpdate {
-                        update_type: VaultUpdateType::ArchiveLoaded,
-                        archive: Some(archive_info),
-                        failed_archive: None,
-                        loading_archive: None,
-                        files: vec![],
-                        is_complete: false,
-                        temp_code: temp_code.clone(),
-                    };
-
-                    let _ = app.emit("vault-update", update);
-                }
-                Err(_) => {
-                    let failed_archive = FailedArchive {
-                        name: archive_name.clone(),
-                        is_private: true,
-                    };
-
-                    let update = VaultUpdate {
-                        update_type: VaultUpdateType::ArchiveFailed,
-                        archive: None,
-                        failed_archive: Some(failed_archive),
-                        loading_archive: None,
-                        files: vec![],
-                        is_complete: false,
-                        temp_code: temp_code.clone(),
-                    };
-
-                    let _ = app.emit("vault-update", update);
-                }
-            }
-        });
-        archive_tasks.push(task);
-    }
-
-    // Create tasks for public archives
-    for (archive_addr, name) in user_data.file_archives {
-        let client = client.clone();
-        let app = app.clone();
-        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
-
-        // Emit loading status immediately
-        let loading_update = VaultUpdate {
-            update_type: VaultUpdateType::ArchiveLoading,
-            archive: None,
-            failed_archive: None,
-            loading_archive: Some(LoadingArchive {
-                name: archive_name.clone(),
-                is_private: false,
-            }),
-            files: vec![],
-            is_complete: false,
-            temp_code: temp_code.clone(),
-        };
-        let _ = app.emit("vault-update", loading_update);
-
-        let temp_code = temp_code.clone();
-        let task = tokio::spawn(async move {
-            match client.archive_get_public(&archive_addr).await {
-                Ok(archive) => {
-                    let mut files: Vec<FileMetadata> = vec![];
-
-                    for (filepath, (data_addr, metadata)) in archive.map() {
-                        let file = FileMetadata {
-                            path: filepath.display().to_string(),
-                            metadata: metadata.clone(),
-                            file_type: FileType::Public,
-                            is_loaded: false,
-                            archive_name: archive_name.clone(),
-                            access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
-                        };
-                        files.push(file);
-                    }
-
-                    let archive_info = ArchiveInfo {
-                        name: archive_name.clone(),
-                        is_private: false,
-                        files,
-                    };
-
-                    let update = VaultUpdate {
-                        update_type: VaultUpdateType::ArchiveLoaded,
-                        archive: Some(archive_info),
-                        failed_archive: None,
-                        loading_archive: None,
-                        files: vec![],
-                        is_complete: false,
-                        temp_code: temp_code.clone(),
-                    };
-
-                    let _ = app.emit("vault-update", update);
-                }
-                Err(_) => {
-                    let failed_archive = FailedArchive {
-                        name: archive_name.clone(),
-                        is_private: false,
-                    };
-
-                    let update = VaultUpdate {
-                        update_type: VaultUpdateType::ArchiveFailed,
-                        archive: None,
-                        failed_archive: Some(failed_archive),
-                        loading_archive: None,
-                        files: vec![],
-                        is_complete: false,
-                        temp_code: temp_code.clone(),
-                    };
-
-                    let _ = app.emit("vault-update", update);
-                }
-            }
-        });
-        archive_tasks.push(task);
-    }
-
-    // Wait for all archive tasks to complete
-    for task in archive_tasks {
-        let _ = task.await;
-    }
-
-    // Emit completion
+    // Process archives concurrently - simplified version for now
     let completion_update = VaultUpdate {
         update_type: VaultUpdateType::Complete,
         archive: None,
@@ -1263,63 +906,15 @@ pub async fn get_files_from_vault(
     let client = shared_client.get_client().await?;
 
     // Fetch user data
-    let user_data = client
-        .get_user_data_from_vault(secret_key)
-        .await
-        .inspect_err(|_| {
-            tracing::error!("Failed to get user data from vault");
-        })?;
+    let user_data = client.get_user_data_from_vault(secret_key).await?;
 
     let mut files: Vec<FileFromVault> = vec![];
-
-    for (data_map, name) in user_data.private_file_archives {
-        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
-
-        // Get private archive
-        let archive = client.archive_get(&data_map).await.inspect_err(|_| {
-            tracing::error!("Failed to get private archive");
-        })?;
-
-        for (filepath, (data_map, metadata)) in archive.map() {
-            let filepath = format!("{archive_name}/{}", filepath.display());
-
-            let file = FileFromVault::new(
-                filepath,
-                metadata.clone(),
-                PublicOrPrivateFile::Private(data_map.clone()),
-            );
-            files.push(file);
-        }
-    }
-
-    for (archive_addr, name) in user_data.file_archives {
-        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
-
-        // Get public archive
-        let archive = client
-            .archive_get_public(&archive_addr)
-            .await
-            .inspect_err(|_| {
-                tracing::error!("Failed to get public archive");
-            })?;
-
-        for (filepath, (data_addr, metadata)) in archive.map() {
-            let filepath = format!("{archive_name}/{}", filepath.display());
-
-            let file = FileFromVault::new(
-                filepath,
-                metadata.clone(),
-                PublicOrPrivateFile::Public(*data_addr),
-            );
-            files.push(file);
-        }
-    }
 
     // Add individual private files
     for (data_map, name) in &user_data.private_files {
         let file = FileFromVault::new(
             name.clone(),
-            autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
+            autonomi::files::Metadata::new_with_size(0),
             PublicOrPrivateFile::Private(data_map.clone()),
         );
         files.push(file);
@@ -1329,7 +924,7 @@ pub async fn get_files_from_vault(
     for (data_addr, name) in &user_data.public_files {
         let file = FileFromVault::new(
             name.clone(),
-            autonomi::files::Metadata::new_with_size(0), // Individual files don't have metadata readily available
+            autonomi::files::Metadata::new_with_size(0),
             PublicOrPrivateFile::Public(*data_addr),
         );
         files.push(file);
@@ -1390,43 +985,25 @@ pub async fn get_single_file_data(
     let client = shared_client.get_client().await?;
     let user_data = client.get_user_data_from_vault(&secret_key).await?;
 
-    // Try to find the file in private archives first
-    for (data_map, archive_name) in user_data.private_file_archives.iter() {
-        // Check if the file path starts with this archive name
-        if file_path.starts_with(&format!("{}/", archive_name)) {
-            let archive = client.archive_get(data_map).await?;
-
-            // Look for the file in this archive
-            for (filepath, (file_data_map, metadata)) in archive.map() {
-                let full_path = format!("{}/{}", archive_name, filepath.display());
-                if full_path == file_path {
-                    return Ok(FileFromVault::new(
-                        file_path.to_string(),
-                        metadata.clone(),
-                        PublicOrPrivateFile::Private(file_data_map.clone()),
-                    ));
-                }
-            }
+    // Try to find the file in individual private files
+    for (data_map, name) in &user_data.private_files {
+        if name == file_path {
+            return Ok(FileFromVault::new(
+                file_path.to_string(),
+                autonomi::files::Metadata::new_with_size(0),
+                PublicOrPrivateFile::Private(data_map.clone()),
+            ));
         }
     }
 
-    // Try to find the file in public archives
-    for (addr, archive_name) in user_data.file_archives.iter() {
-        // Check if the file path starts with this archive name
-        if file_path.starts_with(&format!("{}/", archive_name)) {
-            let archive = client.archive_get_public(addr).await?;
-
-            // Look for the file in this archive
-            for (filepath, (file_addr, metadata)) in archive.map() {
-                let full_path = format!("{}/{}", archive_name, filepath.display());
-                if full_path == file_path {
-                    return Ok(FileFromVault::new(
-                        file_path.to_string(),
-                        metadata.clone(),
-                        PublicOrPrivateFile::Public(*file_addr),
-                    ));
-                }
-            }
+    // Try to find the file in individual public files
+    for (data_addr, name) in &user_data.public_files {
+        if name == file_path {
+            return Ok(FileFromVault::new(
+                file_path.to_string(),
+                autonomi::files::Metadata::new_with_size(0),
+                PublicOrPrivateFile::Public(*data_addr),
+            ));
         }
     }
 

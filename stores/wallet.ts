@@ -300,7 +300,7 @@ export const useWalletStore = defineStore("wallet", () => {
             console.log("Using development vault key signature from ENV");
             return devVaultSignature;
         }
-        
+
         if (!cachedVaultKeySignature.value) {
             const hex = toHex(VAULT_SECRET_KEY_SEED);
             const ethSignedMessageHash = toEthSignedMessageHash(hex);

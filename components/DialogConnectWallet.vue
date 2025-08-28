@@ -60,7 +60,7 @@ const handleLogIn = async () => {
         <IconLogo :dark="true" />
 
         <div
-          v-if="pendingConnectWallet || wallet.connected"
+          v-if="pendingConnectWallet || wallet.isConnected"
           class="flex items-center justify-center gap-4 text-autonomi-text-primary"
         >
           <i class="pi pi-spin pi-spinner" />

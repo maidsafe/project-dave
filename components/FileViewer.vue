@@ -64,7 +64,10 @@ const currentUploadStep = ref<string>('');
 const quoteData = ref<any>(null);
 const uploadError = ref<string>('');
 const pendingUploadFiles = ref<any>(null);
-const currentUploadId = ref<string | null>(null);
+// Only tracks the upload ID for the modal dialog - not for all uploads
+const modalUploadId = ref<string | null>(null);
+// Store quote data per upload ID for concurrent uploads
+const uploadQuotes = ref<Map<string, any>>(new Map());
 const localBreadcrumbs = ref<any[]>([]);
 
 // Upload modal functionality
@@ -99,32 +102,159 @@ const updateStepStatus = (stepKey: string, status: string, message?: string, pro
   currentUploadStep.value = stepKey;
 };
 
-const handleCancelUploadModal = () => {
+const handleCancelUploadModal = async () => {
+  // Since uploads can only be cancelled before payment, just update UI state
+  if (modalUploadId.value) {
+    uploadsStore.updateUpload(modalUploadId.value, {
+      status: 'failed',
+      error: 'Upload cancelled',
+      completedAt: new Date()
+    });
+  }
+
+  // Reset modal state
   showUploadModal.value = false;
   pendingUploadFiles.value = null;
   uploadSteps.value = [];
   currentUploadStep.value = '';
   uploadError.value = '';
   quoteData.value = null;
-  currentUploadId.value = null;
+  modalUploadId.value = null;
+};
+
+const initiatePaymentForUpload = (uploadId: string) => {
+  console.log(">>> Initiating payment for upload:", uploadId);
+
+  // Check if there's already a modal open
+  if (showUploadModal.value) {
+    toast.add({
+      severity: "warn",
+      summary: "Payment in Progress",
+      detail: "Please complete the current payment first, then try again.",
+      life: 5000,
+    });
+    return;
+  }
+
+  // Get stored quote data for this upload
+  const storedQuote = uploadQuotes.value.get(uploadId);
+  if (!storedQuote) {
+    toast.add({
+      severity: "error",
+      summary: "Quote Not Found",
+      detail: "Quote data not available for this upload. Please try uploading again.",
+      life: 5000,
+    });
+    return;
+  }
+
+  // Check if payment is actually required
+  if (!storedQuote.paymentRequired || !storedQuote.payments || storedQuote.payments.length === 0) {
+    toast.add({
+      severity: "info",
+      summary: "No Payment Required",
+      detail: "This upload doesn't require payment.",
+      life: 3000,
+    });
+    return;
+  }
+
+  // Set this upload as the modal upload and prepare payment modal
+  modalUploadId.value = uploadId;
+
+  // Set quote data for the modal
+  quoteData.value = storedQuote;
+
+  // Initialize payment modal
+  initializeUploadSteps();
+  updateStepStatus('quoting', 'completed', 'Quote retrieved');
+  updateStepStatus('payment-request', 'pending', 'Ready for payment...');
+
+  // Show the payment modal
+  showUploadModal.value = true;
+
+  console.log(">>> Payment modal opened for upload:", uploadId);
 };
 
 const handleCloseUploadModal = () => {
+  // Check if there are any active processing steps in the modal
   const hasActiveProcessing = uploadSteps.value.some(step => step.status === 'processing');
-  if (!hasActiveProcessing) {
+
+  // Also check if the modal upload is already in progress (beyond initial 'quoting' status)
+  const modalUpload = modalUploadId.value ? uploadsStore.uploads.find(u => u.id === modalUploadId.value) : null;
+  const uploadInProgress = modalUpload && ['uploading'].includes(modalUpload.status);
+
+  console.log(">>> handleCloseUploadModal - hasActiveProcessing:", hasActiveProcessing, "uploadInProgress:", uploadInProgress, "modalUpload status:", modalUpload?.status);
+
+  // Always allow modal to close, but only cancel upload if it's not in progress
+  if (!hasActiveProcessing && !uploadInProgress) {
+    console.log(">>> Modal closing - cancelling upload since it's not in progress");
     handleCancelUploadModal();
+  } else {
+    console.log(">>> Modal closing - keeping upload alive since it's in progress");
+    // Just close the modal without cancelling the upload
+    showUploadModal.value = false;
+    // Clean up modal state but keep upload running
+    pendingUploadFiles.value = null;
+    uploadSteps.value = [];
+    currentUploadStep.value = '';
+    uploadError.value = '';
+    quoteData.value = null;
+    modalUploadId.value = null;
   }
 };
 
 const handlePayUpload = async () => {
-  if (!quoteData.value?.paymentOrderId || !quoteData.value?.rawQuoteData?.payments) {
-    console.error("No payment order ID or payments data available");
+  console.log(">>> handlePayUpload called with quoteData:", quoteData.value);
+  console.log(">>> payments array:", quoteData.value?.payments);
+  console.log(">>> payment_required:", quoteData.value?.payment_required);
+
+  if (!quoteData.value?.payments || quoteData.value.payments.length === 0) {
+    console.error("No payments data available - might be free upload");
+
+    // If it's a free upload (no payments required), proceed directly
+    if (quoteData.value?.paymentRequired === false) {
+      console.log(">>> Free upload detected, proceeding without payment");
+
+      // Update UI to show no payment needed
+      updateStepStatus('payment-request', 'completed', 'No payment required');
+
+      // Free upload - complete instantly
+      if (modalUploadId.value) {
+        console.log(">>> Free upload in payment modal - marking as completed instantly");
+        
+        // Mark upload as completed immediately
+        uploadsStore.updateUpload(modalUploadId.value, {
+          status: 'completed',
+          progress: 100,
+          completedAt: new Date()
+        });
+        
+        // Clean up stored quote data
+        uploadQuotes.value.delete(modalUploadId.value);
+        
+        // Trigger file refresh
+        setTimeout(() => {
+          fileStore.getAllFiles();
+        }, 500);
+      }
+
+      showUploadModal.value = false;
+      return;
+    }
+
+    // If payments are required but not available, it's an error
+    console.error("Payments required but no payment data available");
     return;
   }
 
   try {
-    console.log(">>> Processing payment for order:", quoteData.value.paymentOrderId);
-    console.log(">>> Payment data:", quoteData.value.rawQuoteData.payments);
+    console.log(">>> Processing payment for quote:", quoteData.value);
+    console.log(">>> Wallet store state - checking wallet connection...");
+    console.log(">>> Payments to process:", quoteData.value.payments);
+
+    // The wallet connection check will happen inside payForQuotes method
+    // If wallet is not connected, it should throw an error there
 
     // Update UI to show payment in progress
     updateStepStatus('payment-request', 'processing', 'Requesting wallet authorization...');
@@ -137,25 +267,76 @@ const handlePayUpload = async () => {
     });
 
     // Process payment through wallet
-    const txHashes = await walletStore.payForQuotes(quoteData.value.rawQuoteData.payments);
+    console.log(">>> Calling walletStore.payForQuotes...");
+
+    // Use rawPayments if available, otherwise fall back to payments
+    const quotes = quoteData.value.rawPayments;
+    const txHashes = await walletStore.payForQuotes(quotes);
+    console.log(">>> walletStore.payForQuotes completed successfully:", txHashes);
     console.log(">>> Payment successful, transaction hashes:", txHashes);
 
     // Hide wallet payment notification
     emit("hide-notify");
 
     // Update UI to show wallet payment successful
-    updateStepStatus('payment-request', 'processing', 'Payment confirmed, notifying backend...');
+    updateStepStatus('payment-request', 'completed', 'Payment confirmed');
 
-    // Send payment confirmation to backend
-    await invoke("confirm_payment", {
-      orderId: quoteData.value.paymentOrderId
-    });
+    console.log(">>> FILEVIEWER PAYMENT COMPLETED - notifying backend to proceed");
 
-    // Update UI to show payment completed
-    updateStepStatus('payment-request', 'completed', 'Payment completed');
+    // Confirm payment with backend to trigger upload execution
+    if (modalUploadId.value) {
+      try {
+        await invoke("confirm_upload_payment", {
+          uploadId: modalUploadId.value // Use the same ID throughout!
+        });
+        console.log(">>> Backend notified of payment confirmation");
+      } catch (error) {
+        console.error("Failed to confirm payment with backend:", error);
+        updateStepStatus('payment-request', 'error', 'Failed to start upload');
+        return;
+      }
+    }
+
+    // Update upload status to show it's now uploading
+    if (modalUploadId.value) {
+      console.log(">>> PAYMENT COMPLETE - Setting upload status to 'uploading':", modalUploadId.value);
+      uploadsStore.updateUpload(modalUploadId.value, {
+        status: 'uploading'
+      });
+      console.log(">>> Upload after status update:", uploadsStore.uploads.find(u => u.id === modalUploadId.value));
+      console.log(">>> Active uploads count:", uploadsStore.activeUploads.length);
+      console.log(">>> All active uploads:", uploadsStore.activeUploads.map(u => ({
+        id: u.id,
+        status: u.status,
+        name: u.name
+      })));
+    }
+
+    // The upload will proceed automatically since payment is confirmed
+    // Close modal after successful payment
+    console.log(">>> PAYMENT COMPLETE - Closing modal, switching to uploads tab");
+    console.log(">>> showUploadModal.value before:", showUploadModal.value);
+    showUploadModal.value = false;
+    console.log(">>> showUploadModal.value after:", showUploadModal.value);
+    activeTab.value = 2; // Switch to uploads tab
+    console.log(">>> Current active tab:", activeTab.value);
+    
+    // Clean up modal state
+    pendingUploadFiles.value = null;
+    uploadSteps.value = [];
+    currentUploadStep.value = '';
+    uploadError.value = '';
+    quoteData.value = null;
+    modalUploadId.value = null;
 
   } catch (error) {
     console.error("Payment failed:", error);
+    console.error("Error details:", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+      cause: error instanceof Error ? error.cause : undefined
+    });
     updateStepStatus('payment-request', 'error', 'Payment failed');
 
     // Hide wallet payment notification on error
@@ -257,19 +438,28 @@ const menuUploads = computed(() => {
   const upload = selectedUploadItem.value;
   const items = [];
 
-  if (upload?.status === 'failed') {
-    items.push({
-      label: 'Retry',
-      icon: 'pi pi-refresh',
-      command: () => {
-        if (selectedUploadItem.value) {
-          uploadsStore.retryUpload(selectedUploadItem.value.id);
-        }
-      },
-    });
+
+  // Add "Pay Now" option for uploads in quoting status that need payment
+  if (upload?.status === 'quoting') {
+    // Check if this upload has quote data that requires payment
+    const storedQuote = uploadQuotes.value.get(upload.id);
+    const needsPayment = storedQuote?.paymentRequired && storedQuote?.payments && storedQuote.payments.length > 0;
+
+    if (needsPayment) {
+      items.push({
+        label: 'Pay Now',
+        icon: 'pi pi-credit-card',
+        command: () => {
+          if (selectedUploadItem.value) {
+            // Trigger payment modal for this upload
+            initiatePaymentForUpload(selectedUploadItem.value.id);
+          }
+        },
+      });
+    }
   }
 
-  if (['pending', 'processing', 'encrypting', 'quoting', 'payment', 'uploading'].includes(upload?.status)) {
+  if (['quoting', 'uploading'].includes(upload?.status)) {
     items.push({
       label: 'Cancel',
       icon: 'pi pi-ban',
@@ -387,19 +577,16 @@ const menuUploadOptions = computed(() => [
     label: 'Upload Files',
     icon: 'pi pi-file',
     command: openPickerAndUploadFiles,
-    disabled: isUploading.value,
   },
   {
     label: 'Upload Folder',
     icon: 'pi pi-folder',
     command: openFolderPickerAndUploadFiles,
-    disabled: isUploading.value,
   },
 ]);
 
 // Upload functions
 const emit = defineEmits(["show-notify", "hide-notify"]);
-const isUploading = computed(() => uploadStore.uploadProgress.isUploading);
 
 const filteredFiles = computed(() => {
   try {
@@ -493,19 +680,31 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolde
     let vaultKeySignature = await walletStore.getVaultKeySignature();
 
     // Create upload entry in the store (but keep it pending until payment)
-    const uploadId = uploadsStore.createUpload(files);
-    currentUploadId.value = uploadId;
+    const frontendUploadId = uploadsStore.createUpload(files);
+    console.log(">>> Created upload with ID:", frontendUploadId);
+    console.log(">>> Upload in store:", uploadsStore.uploads.find(u => u.id === frontendUploadId));
+    console.log(">>> Active uploads after creation:", uploadsStore.activeUploads.length);
 
-    // Initialize and show modal, then start the process
-    initializeUploadSteps();
-    pendingUploadFiles.value = {files, vaultKeySignature};
-    showUploadModal.value = true;
+    // Check if another upload modal is already open
+    if (showUploadModal.value && modalUploadId.value) {
+      console.log(">>> Another upload modal is already open. Upload created but will proceed without modal UI.");
+      // The upload will proceed in the background and get processed when it receives the quote event
+      // This allows multiple uploads to be started even if one modal is open
+    } else {
+      // Set this upload as the modal upload and show the modal
+      modalUploadId.value = frontendUploadId;
 
-    // Start the upload process immediately - this will trigger events that we'll handle
-    // The modal will show progress through all steps including payment
-    console.log(">>> FILEVIEWER STARTING UPLOAD PROCESS");
+      // Initialize and show modal, then start the quoting process
+      initializeUploadSteps();
+      pendingUploadFiles.value = {files, vaultKeySignature, isFolder};
+      showUploadModal.value = true;
+    }
 
-    // No timeout for quote phase - it can take a while
+    // Start by getting the quote only - no actual upload yet
+    console.log(">>> FILEVIEWER STARTING UPLOAD WITH NEW SYSTEM");
+
+    // Update step to show quoting in progress
+    updateStepStatus('quoting', 'processing', 'Getting storage cost estimate...');
 
     // Generate archive name
     let archiveName: string;
@@ -517,12 +716,17 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolde
       archiveName = "";
     }
 
-    // Start the upload process
-    await invoke("upload_files", {
+    // Start upload with frontend-generated ID - much simpler!
+    await invoke("start_upload", {
       files,
       archiveName,
       vaultKeySignature,
+      uploadId: frontendUploadId, // Pass our ID to backend
     });
+
+    console.log(">>> Upload started with ID:", frontendUploadId);
+
+    // The upload-quote event will be emitted by the backend and handled by the event listener
 
 
   } catch (error: any) {
@@ -535,8 +739,9 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolde
       updateStepStatus(currentUploadStep.value || 'processing', 'error', error.message);
     }
 
-    if (currentUploadId.value) {
-      uploadsStore.updateUpload(currentUploadId.value, {
+    // Update upload status to failed
+    if (modalUploadId.value) {
+      uploadsStore.updateUpload(modalUploadId.value, {
         status: 'failed',
         error: error.message,
         completedAt: new Date()
@@ -545,6 +750,26 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolde
     toast.add({
       severity: "error",
       summary: "Error starting upload",
+      detail: error.message,
+      life: 3000,
+    });
+  }
+};
+
+const cancelUpload = async (uploadId: string) => {
+  try {
+    await invoke("cancel_upload", {uploadId});
+    toast.add({
+      severity: "info",
+      summary: "Upload cancelled",
+      detail: "The upload has been cancelled",
+      life: 3000,
+    });
+  } catch (error: any) {
+    console.error("Error cancelling upload:", error);
+    toast.add({
+      severity: "error",
+      summary: "Error cancelling upload",
       detail: error.message,
       life: 3000,
     });
@@ -758,10 +983,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
         summary: 'Download Complete',
         detail: `File saved as: ${finalFileName}`,
         life: 8000,
-        group: 'download-success',
-        data: {
-          filePath: uniquePath
-        }
+        group: 'download-success'
       });
     } catch (error: any) {
       console.error('Download error:', error);
@@ -851,49 +1073,126 @@ const setupEventListeners = async () => {
     localFilesStore.handleLocalUpdate(event.payload);
   });
 
-  // Listen for payment request events (simplified)
-  await listen("payment-request", (event: any) => {
-    console.log(">>> Received payment-request event:", event.payload);
-    if (showUploadModal.value && event.payload) {
-      const paymentData = event.payload;
+  // Removed legacy payment-request event listener - we only use upload-quote now
 
-      // Calculate price per MB
-      let pricePerMB = '0 ATTO';
-      if (quoteData.value?.totalFiles && paymentData.total_cost_nano) {
-        const totalSizeBytes = quoteData.value.totalSize ? parseFloat(quoteData.value.totalSize.split(' ')[0]) * (quoteData.value.totalSize.includes('MB') ? 1024 * 1024 : quoteData.value.totalSize.includes('KB') ? 1024 : quoteData.value.totalSize.includes('GB') ? 1024 * 1024 * 1024 : 1) : 0;
-        if (totalSizeBytes > 0) {
-          const totalCostNano = parseInt(paymentData.total_cost_nano);
-          const costPerMB = Math.round((totalCostNano / totalSizeBytes) * 1024 * 1024);
-          pricePerMB = `${costPerMB} ATTO`;
-        }
-      }
+  // Set up upload quote event listener
+  await listen("upload-quote", async (event: any) => {
+    const payload = event.payload;
+    console.log(">>> Upload quote received for ID:", payload.upload_id);
 
-      // Update quote data with payment information
+    // Find the upload by ID - much simpler since frontend and backend use same ID!
+    const upload = uploadsStore.uploads.find(u => u.id === payload.upload_id);
+    const isModalUpload = upload && modalUploadId.value === upload.id;
+
+    if (!upload) {
+      console.warn(">>> Upload not found for quote:", payload.upload_id);
+      return;
+    }
+
+    // Store quote data for this specific upload
+    const uploadQuoteData = {
+      totalFiles: payload.total_files,
+      totalSize: formatBytes(payload.total_size || 0),
+      totalCostFormatted: payload.total_cost_formatted, // Map to expected field name
+      totalCostNano: payload.total_cost_nano,
+      paymentRequired: payload.payment_required,
+      payments: payload.payments, // Include payments array for display
+      rawPayments: payload.raw_payments, // Raw payment data for wallet transaction
+    };
+
+    // Store quote data per upload ID
+    uploadQuotes.value.set(payload.upload_id, uploadQuoteData);
+    console.log(">>> Stored quote data for upload:", payload.upload_id, uploadQuoteData);
+
+    // Handle modal uploads (with UI)
+    if (isModalUpload && showUploadModal.value) {
+      // Set modal quote data from the stored quote
       quoteData.value = {
-        ...quoteData.value,
-        totalCostNano: paymentData.total_cost_nano || "0",
-        totalCostFormatted: paymentData.total_cost_formatted || "0 ATTO",
-        pricePerMB,
-        paymentRequired: paymentData.payment_required || false,
-        paymentOrderId: paymentData.order_id,
-        rawQuoteData: {
-          payments: paymentData.payments || []
-        }
+        ...uploadQuoteData,
+        files: pendingUploadFiles.value?.files,
+        archiveName: pendingUploadFiles.value?.files?.[0]?.name || "",
+        vaultKeySignature: pendingUploadFiles.value?.vaultKeySignature,
+        isFolder: pendingUploadFiles.value?.isFolder
       };
 
-      // DON'T update uploads store to active until payment is completed
-      if (currentUploadId.value) {
-        uploadsStore.updateUpload(currentUploadId.value, {
-          status: 'payment'
-        });
+      // Update UI to show quote received and set payment step
+      updateStepStatus('quoting', 'completed', 'Quote received');
+
+      // Set payment step based on whether payment is required
+      if (payload.payment_required && payload.payments && payload.payments.length > 0) {
+        updateStepStatus('payment-request', 'pending', 'Ready for payment...');
+
+        // Keep upload status as 'quoting' - payment modal will handle the transition
+        // Status will change to 'uploading' after payment confirmation
+      } else {
+        // Free upload - no payment needed
+        updateStepStatus('payment-request', 'completed', 'No payment required');
+
+        // Free uploads complete instantly
+        if (upload) {
+          console.log(">>> Free upload detected - marking as completed instantly");
+          
+          // Mark upload as completed immediately
+          uploadsStore.updateUpload(upload.id, {
+            status: 'completed',
+            progress: 100,
+            completedAt: new Date()
+          });
+          
+          // Clean up stored quote data
+          uploadQuotes.value.delete(upload.id);
+          
+          // Update UI to show completion
+          updateStepStatus('quoting', 'completed', 'Quote received');
+          updateStepStatus('payment-request', 'completed', 'No payment required');
+          
+          // Close modal after brief delay to show completion
+          setTimeout(() => {
+            showUploadModal.value = false;
+            // Switch to uploads tab to show completed upload
+            activeTab.value = 2;
+            
+            // Trigger file refresh to show the new file
+            fileStore.getAllFiles();
+          }, 1500);
+        }
       }
 
-      // Mark quoting as complete and show payment request
-      updateStepStatus('quoting', 'completed', 'Quote received');
-      updateStepStatus('payment-request', 'processing', 'Ready for payment');
-      currentUploadStep.value = 'payment-request';
+      console.log(">>> Quote data set:", quoteData.value);
+    } else if (upload) {
+      // Handle non-modal uploads (background uploads)
+      console.log(">>> Processing quote for non-modal upload:", upload.id);
 
-      console.log(">>> Payment request processed, total cost:", paymentData.total_cost_formatted);
+      // Set payment step based on whether payment is required
+      if (payload.payment_required && payload.payments && payload.payments.length > 0) {
+        console.log(">>> Non-modal upload requires payment - upload will wait for manual payment");
+        // For now, non-modal uploads that require payment will wait
+        // User will need to pay for them manually later
+        // TODO: In the future, we could implement auto-payment or batch payment
+      } else {
+        // Free upload - complete instantly
+        console.log(">>> Non-modal free upload detected - marking as completed instantly");
+        
+        // Mark upload as completed immediately
+        uploadsStore.updateUpload(upload.id, {
+          status: 'completed',
+          progress: 100,
+          completedAt: new Date()
+        });
+        
+        // Clean up stored quote data
+        uploadQuotes.value.delete(upload.id);
+        
+        // Switch to uploads tab to show the completed upload
+        activeTab.value = 2;
+        
+        // Trigger file refresh to show the new file
+        setTimeout(() => {
+          fileStore.getAllFiles();
+        }, 500);
+        
+        console.log(">>> Non-modal free upload completed instantly");
+      }
     }
   });
 
@@ -902,16 +1201,46 @@ const setupEventListeners = async () => {
     const payload = event.payload;
     console.log(">>> Upload progress event:", payload.type, payload);
 
+    // Get the upload ID from the payload and find the corresponding upload
+    console.log(">>> Upload progress - looking for upload_id:", payload.upload_id);
+    console.log(">>> Current uploads in store:", uploadsStore.uploads.map(u => ({id: u.id, status: u.status})));
+    const upload = payload.upload_id ? uploadsStore.uploads.find(u => u.id === payload.upload_id) : null;
+    const isModalUpload = upload && modalUploadId.value === upload.id;
+    console.log(">>> Found upload:", upload?.id, "isModalUpload:", isModalUpload);
+
+    // Helper function to update the correct upload
+    const updateUploadById = (updates: any) => {
+      if (upload) {
+        console.log(">>> updateUploadById - updating upload:", upload.id, "with:", updates);
+        uploadsStore.updateUpload(upload.id, updates);
+        console.log(">>> updateUploadById - upload after update:", uploadsStore.uploads.find(u => u.id === upload.id));
+      } else if (payload.upload_id) {
+        // Fallback: try to find by modalUploadId or create a placeholder
+        console.warn(">>> updateUploadById - Upload not found for ID:", payload.upload_id);
+        console.warn(">>> Available uploads:", uploadsStore.uploads.map(u => ({id: u.id, status: u.status})));
+        console.warn(">>> modalUploadId:", modalUploadId.value);
+
+        // If this is for the modal upload ID, try to update it directly
+        if (modalUploadId.value === payload.upload_id) {
+          console.log(">>> Using modalUploadId as fallback");
+          uploadsStore.updateUpload(modalUploadId.value, updates);
+        }
+      }
+    };
+
     switch (payload.type) {
       case "Started":
-        uploadStore.startUpload(payload.total_files || 0, payload.total_size || 0);
-        if (currentUploadId.value) {
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'encrypting',
-            totalSize: payload.total_size || 0
-          });
+        // Only update the global upload store for the modal upload
+        if (isModalUpload) {
+          uploadStore.startUpload(payload.total_files || 0, payload.total_size || 0);
         }
-        if (showUploadModal.value) {
+
+        updateUploadById({
+          // Don't change status - should already be 'uploading' after payment
+          totalSize: payload.total_size || 0
+        });
+
+        if (showUploadModal.value && isModalUpload) {
           // Set quote data with real file info immediately
           quoteData.value = {
             totalFiles: payload.total_files,
@@ -923,37 +1252,43 @@ const setupEventListeners = async () => {
         break;
 
       case "Processing":
-        uploadStore.updateProcessing(
-            payload.current_file || "",
-            payload.files_processed || 0,
-            payload.bytes_processed || 0
-        );
-        if (currentUploadId.value) {
-          const progress = payload.total_bytes > 0 ? Math.round((payload.bytes_processed / payload.total_bytes) * 100) : 0;
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'encrypting',
-            currentFile: payload.current_file,
-            filesProcessed: payload.files_processed || 0,
-            bytesProcessed: payload.bytes_processed || 0,
-            progress
-          });
+        // Only update global upload store for modal upload
+        if (isModalUpload) {
+          uploadStore.updateProcessing(
+              payload.current_file || "",
+              payload.files_processed || 0,
+              payload.bytes_processed || 0
+          );
         }
-        if (showUploadModal.value) {
-          const progress = payload.total_bytes > 0 ? Math.round((payload.bytes_processed / payload.total_bytes) * 100) : 0;
-          updateStepStatus('quoting', 'processing', `Processing: ${payload.current_file}`, progress);
+
+        // Update the specific upload
+        const processProgress = payload.total_bytes > 0 ? Math.round((payload.bytes_processed / payload.total_bytes) * 100) : 0;
+        updateUploadById({
+          // Don't change status - should stay as 'uploading'
+          currentFile: payload.current_file,
+          filesProcessed: payload.files_processed || 0,
+          bytesProcessed: payload.bytes_processed || 0,
+          progress: processProgress
+        });
+
+        if (showUploadModal.value && isModalUpload) {
+          updateStepStatus('quoting', 'processing', `Processing: ${payload.current_file}`, processProgress);
         }
         break;
 
       case "Encrypting":
-        uploadStore.updateEncrypting(payload.current_file || "");
-        if (currentUploadId.value) {
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'encrypting',
-            currentFile: payload.current_file,
-            filesProcessed: payload.files_processed || 0
-          });
+        // Only update global upload store for modal upload
+        if (isModalUpload) {
+          uploadStore.updateEncrypting(payload.current_file || "");
         }
-        if (showUploadModal.value) {
+
+        // Update the specific upload
+        updateUploadById({
+          // Don't change status - should stay as 'uploading'
+          currentFile: payload.current_file,
+          filesProcessed: payload.files_processed || 0
+        });
+        if (showUploadModal.value && isModalUpload) {
           // Check if this is the last file
           const filesProcessed = payload.files_processed || 0;
           const totalFiles = payload.total_files || 0;
@@ -969,77 +1304,87 @@ const setupEventListeners = async () => {
         break;
 
       case "RequestingPayment":
-        uploadStore.updateRequestingPayment();
-        if (currentUploadId.value) {
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'quoting'
-          });
+        // Only update global upload store for modal upload
+        if (isModalUpload) {
+          uploadStore.updateRequestingPayment();
         }
-        if (showUploadModal.value) {
+
+        // Update the specific upload
+        updateUploadById({
+          status: 'quoting'
+        });
+
+        if (showUploadModal.value && isModalUpload) {
           updateStepStatus('quoting', 'processing', 'Getting storage quote...');
           // Note: Payment request will be shown when we get the payment-request event
         }
         break;
 
       case "Uploading":
-        uploadStore.updateUploading(payload.chunks_uploaded || 0, payload.total_chunks || 0);
-        if (currentUploadId.value) {
-          const progress = payload.total_chunks > 0 ? Math.round((payload.chunks_uploaded / payload.total_chunks) * 100) : 0;
-          console.log(`>>> Updating upload ${currentUploadId.value} with chunks: ${payload.chunks_uploaded}/${payload.total_chunks}, progress: ${progress}%`);
-          // NOW the upload becomes active after payment completion
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'uploading',
-            chunksUploaded: payload.chunks_uploaded || 0,
-            totalChunks: payload.total_chunks || 0,
-            progress
-          });
-        } else {
-          console.log(">>> No currentUploadId when handling Uploading event");
+        console.log(">>> Uploading event - modalUploadId:", modalUploadId.value, "upload from payload:", upload?.id);
+
+        // Only update the global upload store for the modal upload
+        if (isModalUpload) {
+          uploadStore.updateUploading(payload.chunks_uploaded || 0, payload.total_chunks || 0);
         }
-        if (showUploadModal.value) {
+
+        // Use the helper function to update the correct upload
+        const progress = payload.total_chunks > 0 ? Math.round((payload.chunks_uploaded / payload.total_chunks) * 100) : 0;
+        updateUploadById({
+          status: 'uploading',
+          chunksUploaded: payload.chunks_uploaded || 0,
+          totalChunks: payload.total_chunks || 0,
+          progress
+        });
+
+        console.log(`>>> Updated upload with chunks: ${payload.chunks_uploaded}/${payload.total_chunks}, progress: ${progress}%`);
+
+        // Only handle modal cleanup for the upload that's in the modal
+        if (showUploadModal.value && isModalUpload) {
           // If we reach uploading, the payment was approved
           updateStepStatus('quoting', 'completed', 'Quote received');
           updateStepStatus('payment-request', 'completed', 'Payment authorized');
 
-          // Close modal and show progress table (but keep upload ID active)
+          // Close modal and show progress table
           showUploadModal.value = false;
           // Switch to uploads tab to show the active upload
           activeTab.value = 2;
-          // Don't call handleCancelUploadModal() here - we need currentUploadId for subsequent events
+          // Clean up modal state but don't clear modalUploadId yet - needed for completion
           pendingUploadFiles.value = null;
           uploadSteps.value = [];
           currentUploadStep.value = '';
           uploadError.value = '';
           quoteData.value = null;
+          // DON'T clear modalUploadId here - it will be cleared in Completed/Failed events
         }
         break;
 
       case "Completed":
         console.log(">>> Upload completed event received", payload);
-        uploadStore.completeUpload();
-        if (currentUploadId.value) {
-          console.log(`>>> Marking upload ${currentUploadId.value} as completed`);
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'completed',
-            progress: 100,
-            completedAt: new Date()
-          });
-          // Clear the current upload ID now that upload is truly complete
-          currentUploadId.value = null;
-        } else {
-          console.log(">>> No currentUploadId when handling Completed event - checking for active uploads");
-          // If no currentUploadId but we have active uploads, mark the most recent one as completed
-          const activeUploads = uploadsStore.activeUploads;
-          if (activeUploads.length > 0) {
-            const mostRecentUpload = activeUploads[0]; // They're sorted by creation time
-            console.log(`>>> Marking most recent active upload ${mostRecentUpload.id} as completed`);
-            uploadsStore.updateUpload(mostRecentUpload.id, {
-              status: 'completed',
-              progress: 100,
-              completedAt: new Date()
-            });
-          }
+
+        // Only update the global upload store for the modal upload
+        if (isModalUpload) {
+          uploadStore.completeUpload();
         }
+
+        // Update the specific upload
+        updateUploadById({
+          status: 'completed',
+          progress: 100,
+          completedAt: new Date()
+        });
+
+        // Clear modalUploadId if this was the modal upload
+        if (isModalUpload && modalUploadId.value === upload?.id) {
+          modalUploadId.value = null;
+        }
+
+        // Clean up stored quote data for completed upload
+        if (upload?.id) {
+          uploadQuotes.value.delete(upload.id);
+          console.log(">>> Cleaned up quote data for completed upload:", upload.id);
+        }
+
         // Auto-refresh files after upload completion
         setTimeout(() => {
           fileStore.getAllFiles();
@@ -1052,22 +1397,58 @@ const setupEventListeners = async () => {
         break;
 
       case "Failed":
-        uploadStore.failUpload(payload.error || "Unknown error");
-        if (currentUploadId.value) {
-          uploadsStore.updateUpload(currentUploadId.value, {
-            status: 'failed',
-            error: payload.error || "Unknown error",
-            completedAt: new Date()
-          });
-          // Clear the current upload ID since upload failed
-          currentUploadId.value = null;
+        // Only update the global upload store for the modal upload
+        if (isModalUpload) {
+          uploadStore.failUpload(payload.error || "Unknown error");
         }
-        if (showUploadModal.value) {
+
+        // Update the specific upload
+        updateUploadById({
+          status: 'failed',
+          error: payload.error || "Unknown error",
+          completedAt: new Date()
+        });
+
+        // Clear modalUploadId if this was the modal upload
+        if (isModalUpload && modalUploadId.value === upload?.id) {
+          modalUploadId.value = null;
+        }
+
+        // Clean up stored quote data for failed upload
+        if (upload?.id) {
+          uploadQuotes.value.delete(upload.id);
+          console.log(">>> Cleaned up quote data for failed upload:", upload.id);
+        }
+
+        if (showUploadModal.value && isModalUpload) {
           uploadError.value = payload.error || "Unknown error";
         }
         setTimeout(() => {
           uploadStore.resetUpload();
         }, 5000);
+        break;
+
+      case "Cancelled":
+        uploadStore.failUpload("Upload cancelled");
+        updateUploadById({
+          status: 'failed',
+          error: "Upload cancelled",
+          completedAt: new Date()
+        });
+
+        if (isModalUpload) {
+          modalUploadId.value = null;
+          if (showUploadModal.value) {
+            showUploadModal.value = false;
+            handleCancelUploadModal();
+          }
+        }
+
+        setTimeout(() => {
+          if (isModalUpload) {
+            uploadStore.resetUpload();
+          }
+        }, 1000);
         break;
     }
   });
@@ -1101,6 +1482,17 @@ watch(activeTab, (newTab) => {
   if (newTab === 1 && !localRootDirectory.value) {
     loadLocalFiles();
   }
+});
+
+// Debug watcher for uploads store
+watch(() => uploadsStore.uploads, (newUploads) => {
+  console.log(">>> Uploads store changed - count:", newUploads.length);
+  console.log(">>> Active uploads count:", uploadsStore.activeUploads.length);
+  console.log(">>> Active uploads:", uploadsStore.activeUploads.map(u => ({id: u.id, status: u.status, name: u.name})));
+}, {deep: true});
+
+watch(() => uploadsStore.activeUploads.length, (newCount, oldCount) => {
+  console.log(">>> Active uploads count changed from", oldCount, "to", newCount);
 });
 
 // Get current local directory files for display (similar to vault files)
@@ -1232,7 +1624,6 @@ onUnmounted(() => {
           <div
               class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
               @click="$event => { refUploadDropdown.toggle($event); }"
-              :class="{ 'opacity-50 cursor-not-allowed': isUploading }"
               v-tooltip.bottom="'Upload'"
           >
             <i class="pi pi-plus"/>
@@ -1719,7 +2110,7 @@ onUnmounted(() => {
         </TabPanel>
 
         <!-- Uploads Tab -->
-        <TabPanel :header="`Uploads (${uploadsStore.activeUploads.length})`" :value="2">
+        <TabPanel :header="`Uploads (${uploadsStore.uploads.length})`" :value="2">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Uploads -->
@@ -1767,10 +2158,7 @@ onUnmounted(() => {
                       <div
                           class="h-1.5 rounded-full transition-all duration-300"
                           :class="{
-                          'bg-blue-500': upload.status === 'pending' || upload.status === 'processing',
-                          'bg-purple-500': upload.status === 'encrypting',
-                          'bg-orange-500': upload.status === 'quoting',
-                          'bg-yellow-500': upload.status === 'payment',
+                          'bg-yellow-500': upload.status === 'quoting',
                           'bg-green-500': upload.status === 'uploading'
                         }"
                           :style="`width: ${upload.progress}%`"

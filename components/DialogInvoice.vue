@@ -249,19 +249,19 @@ watchEffect(() => {
             <div class="flex justify-between text-sm">
               <span class="text-gray-600 dark:text-gray-400">Files:</span>
               <span class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
-                {{ quoteData.totalFiles }}
+                {{ quoteData?.totalFiles }}
               </span>
             </div>
             <div class="flex justify-between text-sm">
               <span class="text-gray-600 dark:text-gray-400">Total Size:</span>
               <span class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
-                {{ quoteData.totalSize }}
+                {{ quoteData?.totalSize }}
               </span>
             </div>
-            <div v-if="quoteData.pricePerMB" class="flex justify-between text-sm">
+            <div v-if="quoteData?.pricePerMB" class="flex justify-between text-sm">
               <span class="text-gray-600 dark:text-gray-400">Price per MB:</span>
               <span class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
-                {{ quoteData.pricePerMB }}
+                {{ quoteData?.pricePerMB }}
               </span>
             </div>
           </div>
