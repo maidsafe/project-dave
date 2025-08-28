@@ -236,7 +236,7 @@ const menuFiles = computed(() => {
         refFilesMenu.value.hide();
       },
     });
-    
+
     // Show data address for public files
     if (file?.file_access?.Public || file?.access_data?.Public || file?.type === 'public_file' || file?.type === 'public_archive') {
       items.push({
@@ -490,15 +490,7 @@ const openFolderPickerAndUploadFiles = async () => {
 
 const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolder: boolean = false) => {
   try {
-    console.log(">>> FILEVIEWER GETTING VAULT KEY SIGNATURE");
-    emit("show-notify", {
-      notifyType: "info",
-      title: "Sign upload required",
-      details: "Please sign the upload request in your mobile wallet.",
-    });
-
     let vaultKeySignature = await walletStore.getVaultKeySignature();
-    emit("hide-notify");
 
     // Create upload entry in the store (but keep it pending until payment)
     const uploadId = uploadsStore.createUpload(files);
@@ -562,7 +554,7 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolde
 const handleCopyDataAddress = async (file: any) => {
   try {
     let dataAddress = '';
-    
+
     // Extract data address based on file structure
     if (file?.file_access?.Public) {
       // For vault files, Public contains the data address
@@ -574,7 +566,7 @@ const handleCopyDataAddress = async (file: any) => {
       // For local files, use the address directly
       dataAddress = file.address;
     }
-    
+
     if (dataAddress) {
       await navigator.clipboard.writeText(dataAddress);
       toast.add({
@@ -605,14 +597,14 @@ const handleCopyDataAddress = async (file: any) => {
 const handleCopySecretKey = async (file: any) => {
   try {
     let secretKey = '';
-    
+
     // Extract secret key based on file structure
     if (file?.file_access?.Private) {
       // For vault files, Private contains the secret key/datamap
       // Convert to hex string if it's an array
       if (Array.isArray(file.file_access.Private)) {
-        secretKey = '0x' + file.file_access.Private.map((byte: number) => 
-          byte.toString(16).padStart(2, '0')
+        secretKey = '0x' + file.file_access.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
         ).join('');
       } else {
         secretKey = file.file_access.Private;
@@ -620,8 +612,8 @@ const handleCopySecretKey = async (file: any) => {
     } else if (file?.access_data?.Private) {
       // Alternative structure
       if (Array.isArray(file.access_data.Private)) {
-        secretKey = '0x' + file.access_data.Private.map((byte: number) => 
-          byte.toString(16).padStart(2, '0')
+        secretKey = '0x' + file.access_data.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
         ).join('');
       } else {
         secretKey = file.access_data.Private;
@@ -630,7 +622,7 @@ const handleCopySecretKey = async (file: any) => {
       // For local private files, use the address
       secretKey = file.address;
     }
-    
+
     if (secretKey) {
       await navigator.clipboard.writeText(secretKey);
       toast.add({
@@ -868,7 +860,7 @@ const setupEventListeners = async () => {
       // Calculate price per MB
       let pricePerMB = '0 ATTO';
       if (quoteData.value?.totalFiles && paymentData.total_cost_nano) {
-        const totalSizeBytes = quoteData.value.totalSize ? parseFloat(quoteData.value.totalSize.split(' ')[0]) * (quoteData.value.totalSize.includes('MB') ? 1024*1024 : quoteData.value.totalSize.includes('KB') ? 1024 : quoteData.value.totalSize.includes('GB') ? 1024*1024*1024 : 1) : 0;
+        const totalSizeBytes = quoteData.value.totalSize ? parseFloat(quoteData.value.totalSize.split(' ')[0]) * (quoteData.value.totalSize.includes('MB') ? 1024 * 1024 : quoteData.value.totalSize.includes('KB') ? 1024 : quoteData.value.totalSize.includes('GB') ? 1024 * 1024 * 1024 : 1) : 0;
         if (totalSizeBytes > 0) {
           const totalCostNano = parseInt(paymentData.total_cost_nano);
           const costPerMB = Math.round((totalCostNano / totalSizeBytes) * 1024 * 1024);
@@ -966,7 +958,7 @@ const setupEventListeners = async () => {
           const filesProcessed = payload.files_processed || 0;
           const totalFiles = payload.total_files || 0;
           const isLastFile = filesProcessed >= totalFiles && totalFiles > 0;
-          
+
           if (isLastFile) {
             // After last file, backend still needs to prepare the archive
             updateStepStatus('quoting', 'processing', `Finalizing preparation...`);
@@ -1528,7 +1520,7 @@ onUnmounted(() => {
               />
             </template>
           </div>
-          
+
           <!-- Files Table (List View) -->
           <div
               v-if="viewTypeVault === 'list'"
@@ -2254,13 +2246,15 @@ onUnmounted(() => {
         </div>
 
         <!-- Show data address for public files -->
-        <div v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))" class="py-3">
+        <div
+            v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
+            class="py-3">
           <div class="flex items-center gap-2">
             <span>Data Address</span>
-            <i 
-              class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500" 
-              @click="handleCopyDataAddress(selectedFileItem)"
-              v-tooltip.top="'Copy address'"
+            <i
+                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                @click="handleCopyDataAddress(selectedFileItem)"
+                v-tooltip.top="'Copy address'"
             />
           </div>
           <div class="text-autonomi-text-primary font-mono text-xs break-all">
