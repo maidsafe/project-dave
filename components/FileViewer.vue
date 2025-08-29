@@ -614,29 +614,33 @@ const combinedFiles = computed(() => {
   // Only show failed and loading archives in the root directory
   const isRootDirectory = currentDirectory.value === rootDirectory.value;
 
-  const failedArchiveFiles = isRootDirectory ? failedArchives.value.map(archive => ({
-    name: archive.name,
-    is_failed_archive: true,
-    is_private: archive.is_private,
-    is_loaded: false,
-    is_loading: false,
-    load_error: true,
-    path: `failed-archive://${archive.address}`,
-    address: archive.address,
-    metadata: {}
-  })) : [];
+  const failedArchiveFiles = isRootDirectory ? failedArchives.value
+    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+    .map(archive => ({
+      name: archive.name,
+      is_failed_archive: true,
+      is_private: archive.is_private,
+      is_loaded: false,
+      is_loading: false,
+      load_error: true,
+      path: `failed-archive://${archive.address}`,
+      address: archive.address,
+      metadata: {}
+    })) : [];
 
-  const loadingArchiveFiles = isRootDirectory ? loadingArchives.value.map(archive => ({
-    name: archive.name,
-    is_loading_archive: true,
-    is_private: archive.is_private,
-    is_loaded: false,
-    is_loading: true,
-    load_error: false,
-    path: `loading-archive://${archive.address}`,
-    address: archive.address,
-    metadata: {}
-  })) : [];
+  const loadingArchiveFiles = isRootDirectory ? loadingArchives.value
+    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+    .map(archive => ({
+      name: archive.name,
+      is_loading_archive: true,
+      is_private: archive.is_private,
+      is_loaded: false,
+      is_loading: true,
+      load_error: false,
+      path: `loading-archive://${archive.address}`,
+      address: archive.address,
+      metadata: {}
+    })) : [];
 
   return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
     // Sort by name, putting directories first, then files
@@ -1517,12 +1521,26 @@ watch(() => uploadsStore.activeUploads.length, (newCount, oldCount) => {
   console.log(">>> Active uploads count changed from", oldCount, "to", newCount);
 });
 
-// Get current local directory files for display (similar to vault files)
+// Get current local directory files for display with search filtering (similar to vault files)
 const localDirectoryFiles = computed(() => {
-  if (!localCurrentDirectory.value) {
+  try {
+    if (!localCurrentDirectory.value) {
+      return [];
+    }
+    
+    const files = localCurrentDirectoryFiles.value || [];
+    
+    if (query.value) {
+      return files.filter((file: any) => 
+        file.name.toLowerCase().includes(query.value.toLowerCase()) &&
+        file.name !== 'parents'
+      );
+    }
+    
+    return files.filter((file: any) => file.name !== 'parents');
+  } catch (error) {
     return [];
   }
-  return localCurrentDirectoryFiles.value || [];
 });
 
 // Combine local files with loading and failed archive states (similar to vault files)
@@ -1532,29 +1550,33 @@ const combinedLocalFiles = computed(() => {
   // Only show failed and loading archives in the root directory
   const isRootDirectory = localCurrentDirectory.value === localRootDirectory.value;
 
-  const failedArchiveFiles = isRootDirectory ? localFailedArchives.value.map(archive => ({
-    name: archive.name,
-    is_failed_archive: true,
-    is_private: archive.is_private,
-    is_loaded: false,
-    is_loading: false,
-    load_error: true,
-    path: `failed-archive://${archive.address}`,
-    address: archive.address,
-    metadata: {}
-  })) : [];
+  const failedArchiveFiles = isRootDirectory ? localFailedArchives.value
+    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+    .map(archive => ({
+      name: archive.name,
+      is_failed_archive: true,
+      is_private: archive.is_private,
+      is_loaded: false,
+      is_loading: false,
+      load_error: true,
+      path: `failed-archive://${archive.address}`,
+      address: archive.address,
+      metadata: {}
+    })) : [];
 
-  const loadingArchiveFiles = isRootDirectory ? localLoadingArchives.value.map(archive => ({
-    name: archive.name,
-    is_loading_archive: true,
-    is_private: archive.is_private,
-    is_loaded: false,
-    is_loading: true,
-    load_error: false,
-    path: `loading-archive://${archive.address}`,
-    address: archive.address,
-    metadata: {}
-  })) : [];
+  const loadingArchiveFiles = isRootDirectory ? localLoadingArchives.value
+    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+    .map(archive => ({
+      name: archive.name,
+      is_loading_archive: true,
+      is_private: archive.is_private,
+      is_loaded: false,
+      is_loading: true,
+      load_error: false,
+      path: `loading-archive://${archive.address}`,
+      address: archive.address,
+      metadata: {}
+    })) : [];
 
   return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
     // Sort by name, putting directories first, then files
