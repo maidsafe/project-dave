@@ -345,16 +345,20 @@ export const useFileStore = defineStore("files", () => {
                     // Add to loading archives list, avoiding duplicates
                     const exists = loadingArchives.value.some(a => a.name === update.loading_archive!.name && a.address === update.loading_archive!.address);
                     if (!exists) {
-                        loadingArchives.value.push(update.loading_archive);
+                        loadingArchives.value.push({
+                            name: update.loading_archive.name,
+                            address: update.loading_archive.address,
+                            is_private: update.loading_archive.is_private
+                        });
                     }
                 }
                 break;
 
             case "ArchiveLoaded":
                 if (update.archive) {
-                    // Remove from loading list
+                    // Remove from loading list by address (like local files)
                     loadingArchives.value = loadingArchives.value.filter(
-                        a => a.name !== update.archive!.name
+                        a => a.address !== update.archive!.address
                     );
 
                     // Add the archive

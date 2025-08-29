@@ -621,7 +621,8 @@ const combinedFiles = computed(() => {
     is_loaded: false,
     is_loading: false,
     load_error: true,
-    path: `failed-archive://${archive.name}`,
+    path: `failed-archive://${archive.address}`,
+    address: archive.address,
     metadata: {}
   })) : [];
 
@@ -632,7 +633,8 @@ const combinedFiles = computed(() => {
     is_loaded: false,
     is_loading: true,
     load_error: false,
-    path: `loading-archive://${archive.name}`,
+    path: `loading-archive://${archive.address}`,
+    address: archive.address,
     metadata: {}
   })) : [];
 

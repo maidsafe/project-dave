@@ -738,6 +738,7 @@ impl FileFromVault {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FailedArchive {
     pub name: String,
+    pub address: String,
     pub is_private: bool,
 }
 
@@ -762,6 +763,7 @@ pub struct VaultUpdate {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LoadingArchive {
     pub name: String,
+    pub address: String,
     pub is_private: bool,
 }
 
@@ -777,6 +779,7 @@ pub enum VaultUpdateType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ArchiveInfo {
     pub name: String,
+    pub address: String,
     pub is_private: bool,
     pub files: Vec<FileMetadata>,
 }
@@ -817,7 +820,7 @@ pub async fn get_vault_structure(
 
     // Process private archives
     for (data_map, name) in user_data.private_file_archives {
-        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
+        let archive_name = name.clone();
 
         if let Ok(archive) = client.archive_get(&data_map).await {
             let mut files: Vec<FileMetadata> = vec![];
@@ -835,13 +838,15 @@ pub async fn get_vault_structure(
             }
 
             archives.push(ArchiveInfo {
-                name: archive_name,
+                name: archive_name.clone(),
+                address: data_map.to_hex(),
                 is_private: true,
                 files,
             });
         } else {
             failed_archives.push(FailedArchive {
-                name: archive_name,
+                name: archive_name.clone(),
+                address: data_map.to_hex(),
                 is_private: true,
             });
         }
@@ -849,7 +854,7 @@ pub async fn get_vault_structure(
 
     // Process public archives
     for (archive_addr, name) in user_data.file_archives {
-        let archive_name = name.replace(",", "-").replace("/", "-").replace(" ", "");
+        let archive_name = name.clone();
 
         if let Ok(archive) = client.archive_get_public(&archive_addr).await {
             let mut files: Vec<FileMetadata> = vec![];
@@ -867,13 +872,15 @@ pub async fn get_vault_structure(
             }
 
             archives.push(ArchiveInfo {
-                name: archive_name,
+                name: archive_name.clone(),
+                address: archive_addr.to_hex(),
                 is_private: false,
                 files,
             });
         } else {
             failed_archives.push(FailedArchive {
-                name: archive_name,
+                name: archive_name.clone(),
+                address: archive_addr.to_hex(),
                 is_private: false,
             });
         }
@@ -987,6 +994,7 @@ pub async fn get_vault_structure_streaming(
             failed_archive: None,
             loading_archive: Some(LoadingArchive {
                 name: archive_name.clone(),
+                address: data_map.to_hex(),
                 is_private: true,
             }),
             files: vec![],
@@ -1014,6 +1022,7 @@ pub async fn get_vault_structure_streaming(
 
                     let archive_loaded = ArchiveInfo {
                         name: archive_name.clone(),
+                        address: data_map.to_hex(),
                         is_private: true,
                         files,
                     };
@@ -1033,6 +1042,7 @@ pub async fn get_vault_structure_streaming(
                 Err(_) => {
                     let failed_archive = FailedArchive {
                         name: archive_name.clone(),
+                        address: data_map.to_hex(),
                         is_private: true,
                     };
 
@@ -1068,6 +1078,7 @@ pub async fn get_vault_structure_streaming(
             failed_archive: None,
             loading_archive: Some(LoadingArchive {
                 name: archive_name.clone(),
+                address: archive_addr.to_hex(),
                 is_private: false,
             }),
             files: vec![],
@@ -1095,6 +1106,7 @@ pub async fn get_vault_structure_streaming(
 
                     let archive_loaded = ArchiveInfo {
                         name: archive_name.clone(),
+                        address: archive_addr.to_hex(),
                         is_private: false,
                         files,
                     };
@@ -1114,6 +1126,7 @@ pub async fn get_vault_structure_streaming(
                 Err(_) => {
                     let failed_archive = FailedArchive {
                         name: archive_name.clone(),
+                        address: archive_addr.to_hex(),
                         is_private: false,
                     };
 
