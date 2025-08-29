@@ -2239,11 +2239,6 @@ onMounted(async () => {
 
                     <div class="flex items-center gap-2">
                       <i
-                          class="pi pi-refresh cursor-pointer text-gray-400 hover:text-blue-500 transition-colors"
-                          @click.stop="uploadsStore.retryUpload(upload.id)"
-                          v-tooltip.top="'Retry upload'"
-                      />
-                      <i
                           class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                           @click.stop="
                           selectedUploadItem = upload;
