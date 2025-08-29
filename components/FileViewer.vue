@@ -1485,7 +1485,22 @@ const loadLocalFiles = async () => {
 // Removed auto-complete stuck uploads logic - backend should handle upload completion properly
 
 // Watch for tab changes to load local files when needed
-watch(activeTab, (newTab) => {
+watch(activeTab, (newTab, oldTab) => {
+  // Clear breadcrumbs when switching tabs to ensure proper isolation
+  if (oldTab === 0) {
+    // Reset vault navigation when leaving vault tab
+    breadcrumbs.value = [];
+    if (rootDirectory.value) {
+      fileStore.changeDirectory(rootDirectory.value);
+    }
+  } else if (oldTab === 1) {
+    // Reset local files navigation when leaving local files tab
+    localBreadcrumbs.value = [];
+    if (localRootDirectory.value) {
+      localFilesStore.changeDirectory(localRootDirectory.value);
+    }
+  }
+
   if (newTab === 1 && !localRootDirectory.value) {
     loadLocalFiles();
   }
@@ -1606,7 +1621,7 @@ onMounted(async () => {
 
         <div class="flex items-center gap-3">
           <div
-              v-if="(currentDirectory?.parent) || (activeTab === 1 && localCurrentDirectory?.parent)"
+              v-if="(activeTab === 0 && currentDirectory?.parent) || (activeTab === 1 && localCurrentDirectory?.parent)"
               class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
               @click="activeTab === 1 ? handleLocalGoBack(localCurrentDirectory.parent) : handleGoBack(currentDirectory.parent)"
           >
