@@ -2088,7 +2088,7 @@ onMounted(async () => {
         </TabPanel>
 
         <!-- Uploads Tab -->
-        <TabPanel :header="`Uploads (${uploadsStore.uploads.length})`" :value="2">
+        <TabPanel :header="uploadsStore.activeUploads.length > 0 ? `Uploads (${uploadsStore.activeUploads.length})` : 'Uploads'" :value="2">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Uploads -->
@@ -2258,7 +2258,7 @@ onMounted(async () => {
         </TabPanel>
 
         <!-- Downloads Tab -->
-        <TabPanel :header="`Downloads (${downloadsStore.activeDownloads.length})`" :value="3">
+        <TabPanel :header="downloadsStore.activeDownloads.length > 0 ? `Downloads (${downloadsStore.activeDownloads.length})` : 'Downloads'" :value="3">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Downloads -->
