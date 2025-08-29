@@ -305,19 +305,9 @@ const handlePayUpload = async () => {
       }
     }
 
-    // Update upload status to show it's now uploading
+    // Don't manually update upload status - wait for backend Started/Uploading events
     if (modalUploadId.value) {
-      console.log(">>> PAYMENT COMPLETE - Setting upload status to 'uploading':", modalUploadId.value);
-      uploadsStore.updateUpload(modalUploadId.value, {
-        status: 'uploading'
-      });
-      console.log(">>> Upload after status update:", uploadsStore.uploads.find(u => u.id === modalUploadId.value));
-      console.log(">>> Active uploads count:", uploadsStore.activeUploads.length);
-      console.log(">>> All active uploads:", uploadsStore.activeUploads.map(u => ({
-        id: u.id,
-        status: u.status,
-        name: u.name
-      })));
+      console.log(">>> PAYMENT COMPLETE - Waiting for backend to start upload:", modalUploadId.value);
     }
 
     // The upload will proceed automatically since payment is confirmed
@@ -1128,33 +1118,15 @@ const setupEventListeners = async () => {
 
       // Check if this is a duplicate upload (cost = 0) first, regardless of payment_required flag
       if (payload.total_cost_nano === '0' || payload.total_cost_nano === 0) {
-        console.log(">>> Duplicate upload detected (cost = 0) - marking as completed instantly");
+        console.log(">>> Duplicate upload detected (cost = 0) - waiting for backend completion event");
         updateStepStatus('payment-request', 'completed', 'No payment required');
         
-        // Mark upload as completed immediately with "already uploaded" message
-        uploadsStore.updateUpload(upload.id, {
-          status: 'completed',
-          progress: 100,
-          completionMessage: 'Already uploaded',
-          completedAt: new Date()
-        });
-        
-        // Clean up stored quote data
-        uploadQuotes.value.delete(upload.id);
+        // Don't update upload status - wait for backend Completed event
+        // The backend will emit a Completed event for duplicate uploads
         
         // Update UI to show completion
         updateStepStatus('quoting', 'completed', 'Quote received');
         updateStepStatus('payment-request', 'completed', 'Already uploaded');
-        
-        // Close modal after brief delay to show completion
-        setTimeout(() => {
-          showUploadModal.value = false;
-          // Switch to uploads tab to show completed upload
-          activeTab.value = 2;
-          
-          // Trigger file refresh to show the new file
-          fileStore.getAllFiles();
-        }, 1500);
       }
       // Set payment step based on whether payment is required
       else if (payload.payment_required && payload.payments && payload.payments.length > 0) {
@@ -1166,34 +1138,14 @@ const setupEventListeners = async () => {
         // Free upload - no payment needed
         updateStepStatus('payment-request', 'completed', 'No payment required');
 
-        // Free uploads complete instantly
+        // Don't update upload status - wait for backend events
+        // The backend will handle the upload and emit appropriate events
         if (upload) {
-          console.log(">>> Free upload detected - marking as completed instantly");
+          console.log(">>> Free upload detected - waiting for backend to process");
           
-          // Mark upload as completed immediately
-          uploadsStore.updateUpload(upload.id, {
-            status: 'completed',
-            progress: 100,
-            completionMessage: 'Upload completed',
-            completedAt: new Date()
-          });
-          
-          // Clean up stored quote data
-          uploadQuotes.value.delete(upload.id);
-          
-          // Update UI to show completion
+          // Update UI to show no payment required
           updateStepStatus('quoting', 'completed', 'Quote received');
           updateStepStatus('payment-request', 'completed', 'No payment required');
-          
-          // Close modal after brief delay to show completion
-          setTimeout(() => {
-            showUploadModal.value = false;
-            // Switch to uploads tab to show completed upload
-            activeTab.value = 2;
-            
-            // Trigger file refresh to show the new file
-            fileStore.getAllFiles();
-          }, 1500);
         }
       }
 
@@ -1204,28 +1156,15 @@ const setupEventListeners = async () => {
 
       // Check if this is a duplicate upload (cost = 0) first, regardless of payment_required flag
       if (payload.total_cost_nano === '0' || payload.total_cost_nano === 0) {
-        console.log(">>> Non-modal duplicate upload detected (cost = 0) - marking as completed instantly");
+        console.log(">>> Non-modal duplicate upload detected (cost = 0) - waiting for backend completion event");
         
-        // Mark upload as completed immediately with "already uploaded" message
-        uploadsStore.updateUpload(upload.id, {
-          status: 'completed',
-          progress: 100,
-          completionMessage: 'Already uploaded',
-          completedAt: new Date()
-        });
+        // Don't update upload status - wait for backend Completed event
+        // The backend will emit a Completed event for duplicate uploads
         
-        // Clean up stored quote data
-        uploadQuotes.value.delete(upload.id);
-        
-        // Switch to uploads tab to show the completed upload
+        // Switch to uploads tab to show the upload
         activeTab.value = 2;
         
-        // Trigger file refresh to show the new file
-        setTimeout(() => {
-          fileStore.getAllFiles();
-        }, 500);
-        
-        console.log(">>> Non-modal duplicate upload completed instantly");
+        console.log(">>> Non-modal duplicate upload - waiting for backend");
       }
       // Set payment step based on whether payment is required
       else if (payload.payment_required && payload.payments && payload.payments.length > 0) {
@@ -1234,29 +1173,16 @@ const setupEventListeners = async () => {
         // User will need to pay for them manually later
         // TODO: In the future, we could implement auto-payment or batch payment
       } else {
-        // Free upload - complete instantly
-        console.log(">>> Non-modal free upload detected - marking as completed instantly");
+        // Free upload - wait for backend events
+        console.log(">>> Non-modal free upload detected - waiting for backend to process");
         
-        // Mark upload as completed immediately
-        uploadsStore.updateUpload(upload.id, {
-          status: 'completed',
-          progress: 100,
-          completionMessage: 'Upload completed',
-          completedAt: new Date()
-        });
+        // Don't update upload status - wait for backend events
+        // The backend will handle the upload and emit appropriate events
         
-        // Clean up stored quote data
-        uploadQuotes.value.delete(upload.id);
-        
-        // Switch to uploads tab to show the completed upload
+        // Switch to uploads tab to show the upload
         activeTab.value = 2;
         
-        // Trigger file refresh to show the new file
-        setTimeout(() => {
-          fileStore.getAllFiles();
-        }, 500);
-        
-        console.log(">>> Non-modal free upload completed instantly");
+        console.log(">>> Non-modal free upload - waiting for backend");
       }
     }
   });
@@ -1404,8 +1330,8 @@ const setupEventListeners = async () => {
 
         console.log(`>>> Updated upload with chunks: ${payload.chunks_uploaded}/${payload.total_chunks}, progress: ${progress}%`);
 
-        // Only handle modal cleanup for the upload that's in the modal
-        if (showUploadModal.value && isModalUpload) {
+        // Only handle modal cleanup for the specific upload that the modal is open for
+        if (showUploadModal.value && modalUploadId.value === upload?.id) {
           // If we reach uploading, the payment was approved
           updateStepStatus('quoting', 'completed', 'Quote received');
           updateStepStatus('payment-request', 'completed', 'Payment authorized');
@@ -1438,6 +1364,15 @@ const setupEventListeners = async () => {
           progress: 100,
           completedAt: new Date()
         });
+
+        // Close modal only if this completed upload is the one the modal is open for
+        if (showUploadModal.value && modalUploadId.value === upload?.id) {
+          setTimeout(() => {
+            showUploadModal.value = false;
+            // Switch to uploads tab to show completed upload
+            activeTab.value = 2;
+          }, 1500);
+        }
 
         // Clear modalUploadId if this was the modal upload
         if (isModalUpload && modalUploadId.value === upload?.id) {
@@ -1539,8 +1474,7 @@ const loadLocalFiles = async () => {
   }
 };
 
-// Auto-detect stuck uploads (runs every 30 seconds)
-let stuckUploadCheckInterval: ReturnType<typeof setInterval> | null = null;
+// Removed auto-complete stuck uploads logic - backend should handle upload completion properly
 
 // Watch for tab changes to load local files when needed
 watch(activeTab, (newTab) => {
@@ -1640,31 +1574,10 @@ onMounted(async () => {
     console.log('>>> Error getting files: ', err);
   }
 
-  // Start checking for stuck uploads every 30 seconds
-  stuckUploadCheckInterval = setInterval(() => {
-    const now = new Date();
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000); // 10 minutes ago
-
-    uploadsStore.activeUploads.forEach(upload => {
-      const createdAt = new Date(upload.createdAt);
-      // If an upload has been active for more than 10 minutes without completion, mark it as completed
-      if (createdAt < tenMinutesAgo && upload.status === 'uploading' && upload.progress >= 90) {
-        console.log(`>>> Auto-completing stuck upload ${upload.id} (created ${createdAt}, status: ${upload.status}, progress: ${upload.progress}%)`);
-        uploadsStore.updateUpload(upload.id, {
-          status: 'completed',
-          progress: 100,
-          completedAt: new Date()
-        });
-      }
-    });
-  }, 30000); // Check every 30 seconds
+  // Removed stuck upload auto-completion - let backend handle upload lifecycle properly
 });
 
-onUnmounted(() => {
-  if (stuckUploadCheckInterval) {
-    clearInterval(stuckUploadCheckInterval);
-  }
-});
+// Removed onUnmounted cleanup for stuck upload interval
 </script>
 
 <template>

@@ -374,45 +374,71 @@ pub async fn execute_single_file_upload(
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    // Upload chunks to network
-    let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-    client
-        .chunk_batch_upload(chunks.iter().collect(), &receipt)
-        .await
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+    // Spawn the actual upload work in background and return immediately
+    let secret_key = secret_key.clone();
+    tokio::spawn(async move {
+        let result = async {
+            // Upload chunks to network
+            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+            client
+                .chunk_batch_upload(chunks.iter().collect(), &receipt)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Store file in vault
-    let mut user_data = client
-        .get_user_data_from_vault(secret_key)
-        .await
-        .unwrap_or(UserData::new());
+            // Store file in vault
+            let mut user_data = client
+                .get_user_data_from_vault(&secret_key)
+                .await
+                .unwrap_or(UserData::new());
 
-    // Add the single file to user data (not as archive)
-    user_data
-        .private_files
-        .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
+            // Add the single file to user data (not as archive)
+            user_data
+                .private_files
+                .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
 
-    // Store updated user data in vault
-    client
-        .put_user_data_to_vault(secret_key, receipt.into(), user_data)
-        .await
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+            // Store updated user data in vault
+            client
+                .put_user_data_to_vault(&secret_key, receipt.into(), user_data)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Store file locally
-    local_storage::write_local_private_file(datamap.to_hex(), datamap.address(), &file.name)
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+            // Store file locally
+            local_storage::write_local_private_file(datamap.to_hex(), datamap.address(), &file.name)
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Emit completion
-    app.emit(
-        "upload-progress",
-        UploadProgress::Completed {
-            upload_id: upload_id.clone(),
-            total_files: 1,
-            total_bytes: file_size,
-        },
-    )
-    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            Ok::<(), UploadError>(())
+        }.await;
 
+        match result {
+            Ok(()) => {
+                // Emit completion
+                if let Err(err) = app.emit(
+                    "upload-progress",
+                    UploadProgress::Completed {
+                        upload_id: upload_id.clone(),
+                        total_files: 1,
+                        total_bytes: file_size,
+                    },
+                ) {
+                    eprintln!("Failed to emit completion event: {}", err);
+                }
+            }
+            Err(err) => {
+                // Emit failure
+                if let Err(emit_err) = app.emit(
+                    "upload-progress",
+                    UploadProgress::Failed {
+                        upload_id: upload_id.clone(),
+                        error: err.to_string(),
+                    },
+                ) {
+                    eprintln!("Failed to emit failure event: {}", emit_err);
+                }
+            }
+        }
+    });
+
+    // Return immediately - the upload continues in background
     Ok(())
 }
 
@@ -610,58 +636,85 @@ pub async fn execute_archive_upload(
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    // Upload chunks to network
-    let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-    client
-        .chunk_batch_upload(chunks.iter().collect(), &receipt)
-        .await
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+    // Spawn the actual upload work in background and return immediately
+    let secret_key = secret_key.clone();
+    let files_len = files.len();
+    tokio::spawn(async move {
+        let result = async {
+            // Upload chunks to network
+            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+            client
+                .chunk_batch_upload(chunks.iter().collect(), &receipt)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Store archive in vault
-    let mut user_data = client
-        .get_user_data_from_vault(secret_key)
-        .await
-        .unwrap_or(UserData::new());
+            // Store archive in vault
+            let mut user_data = client
+                .get_user_data_from_vault(&secret_key)
+                .await
+                .unwrap_or(UserData::new());
 
-    // Store the archive
-    let (archive_datamap, _archive_chunks) = autonomi::self_encryption::encrypt(
-        private_archive
-            .to_bytes()
-            .map_err(|err| UploadError::Encryption(err.to_string()))?,
-    )
-    .map_err(|err| UploadError::Encryption(err.to_string()))?;
+            // Store the archive
+            let (archive_datamap, _archive_chunks) = autonomi::self_encryption::encrypt(
+                private_archive
+                    .to_bytes()
+                    .map_err(|err| UploadError::Encryption(err.to_string()))?,
+            )
+            .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
-    user_data.private_file_archives.insert(
-        DataMapChunk::from(archive_datamap.clone()),
-        archive_name.clone(),
-    );
+            user_data.private_file_archives.insert(
+                DataMapChunk::from(archive_datamap.clone()),
+                archive_name.clone(),
+            );
 
-    // Store updated user data in vault
-    client
-        .put_user_data_to_vault(secret_key, receipt.into(), user_data)
-        .await
-        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+            // Store updated user data in vault
+            client
+                .put_user_data_to_vault(&secret_key, receipt.into(), user_data)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Store archive locally
-    let archive_datamap_chunk = DataMapChunk::from(archive_datamap);
-    local_storage::write_local_private_file_archive(
-        archive_datamap_chunk.to_hex(),
-        archive_datamap_chunk.address(),
-        &archive_name,
-    )
-    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+            // Store archive locally
+            let archive_datamap_chunk = DataMapChunk::from(archive_datamap);
+            local_storage::write_local_private_file_archive(
+                archive_datamap_chunk.to_hex(),
+                archive_datamap_chunk.address(),
+                &archive_name,
+            )
+            .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-    // Emit completion
-    app.emit(
-        "upload-progress",
-        UploadProgress::Completed {
-            upload_id: upload_id.clone(),
-            total_files: files.len(),
-            total_bytes: total_size,
-        },
-    )
-    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            Ok::<(), UploadError>(())
+        }.await;
 
+        match result {
+            Ok(()) => {
+                // Emit completion
+                if let Err(err) = app.emit(
+                    "upload-progress",
+                    UploadProgress::Completed {
+                        upload_id: upload_id.clone(),
+                        total_files: files_len,
+                        total_bytes: total_size,
+                    },
+                ) {
+                    eprintln!("Failed to emit completion event: {}", err);
+                }
+            }
+            Err(err) => {
+                // Emit failure
+                if let Err(emit_err) = app.emit(
+                    "upload-progress",
+                    UploadProgress::Failed {
+                        upload_id: upload_id.clone(),
+                        error: err.to_string(),
+                    },
+                ) {
+                    eprintln!("Failed to emit failure event: {}", emit_err);
+                }
+            }
+        }
+    });
+
+    // Return immediately - the upload continues in background
     Ok(())
 }
 
