@@ -638,7 +638,13 @@ const combinedFiles = computed(() => {
     metadata: {}
   })) : [];
 
-  return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles];
+  return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
+    // Sort by name, putting directories first, then files
+    if (a.is_directory !== b.is_directory) {
+      return a.is_directory ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
 });
 
 // Computed for loading progress
@@ -1535,7 +1541,13 @@ const combinedLocalFiles = computed(() => {
     metadata: {}
   })) : [];
 
-  return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles];
+  return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
+    // Sort by name, putting directories first, then files
+    if (a.is_directory !== b.is_directory) {
+      return a.is_directory ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
 });
 
 // Handle local directory/file navigation (similar to vault files)
