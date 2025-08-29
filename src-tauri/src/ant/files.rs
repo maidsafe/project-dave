@@ -287,19 +287,36 @@ pub async fn start_single_file_upload(
     })?;
     println!(">>> Successfully emitted upload-quote event");
 
-    // If no payment required, proceed immediately
+    // If no payment required, check if this is a duplicate (free) upload
     if !has_payments {
-        execute_single_file_upload(
-            app,
-            file,
-            DataMapChunk::from(datamap),
-            chunks,
-            store_quote,
-            secret_key,
-            upload_id,
-            shared_client,
-        )
-        .await?;
+        // If cost is 0, this is a duplicate file - skip upload and mark as completed
+        if total_cost == Amount::ZERO {
+            println!(">>> Duplicate file detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
+            // Emit completion immediately for duplicate files
+            app.emit(
+                "upload-progress",
+                UploadProgress::Completed {
+                    upload_id: upload_id.clone(),
+                    total_files: 1,
+                    total_bytes: file_size,
+                },
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            println!(">>> Emitted completion event for duplicate file upload_id: {}", upload_id);
+        } else {
+            // Non-duplicate free upload - proceed normally
+            execute_single_file_upload(
+                app,
+                file,
+                DataMapChunk::from(datamap),
+                chunks,
+                store_quote,
+                secret_key,
+                upload_id,
+                shared_client,
+            )
+            .await?;
+        }
     } else if let Some(pending_uploads) = pending_uploads {
         // Store upload data for later execution after payment
         let mut pending = pending_uploads.lock().await;
@@ -506,20 +523,37 @@ pub async fn start_archive_upload(
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    // If no payment required, proceed immediately
+    // If no payment required, check if this is a duplicate (free) upload
     if !has_payments {
-        execute_archive_upload(
-            app,
-            files,
-            archive_name,
-            private_archive,
-            all_chunks,
-            store_quote,
-            secret_key,
-            upload_id,
-            shared_client,
-        )
-        .await?;
+        // If cost is 0, this is a duplicate file/archive - skip upload and mark as completed
+        if total_cost == Amount::ZERO {
+            println!(">>> Duplicate archive detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
+            // Emit completion immediately for duplicate files
+            app.emit(
+                "upload-progress",
+                UploadProgress::Completed {
+                    upload_id: upload_id.clone(),
+                    total_files: total_files,
+                    total_bytes: total_size,
+                },
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            println!(">>> Emitted completion event for duplicate archive upload_id: {}", upload_id);
+        } else {
+            // Non-duplicate free upload - proceed normally
+            execute_archive_upload(
+                app,
+                files,
+                archive_name,
+                private_archive,
+                all_chunks,
+                store_quote,
+                secret_key,
+                upload_id,
+                shared_client,
+            )
+            .await?;
+        }
     } else if let Some(pending_uploads) = pending_uploads {
         // Store upload data for later execution after payment
         let mut pending = pending_uploads.lock().await;

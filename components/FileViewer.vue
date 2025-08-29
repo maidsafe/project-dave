@@ -223,10 +223,18 @@ const handlePayUpload = async () => {
       if (modalUploadId.value) {
         console.log(">>> Free upload in payment modal - marking as completed instantly");
         
+        // Determine completion message based on cost
+        let completionMessage = 'Upload completed';
+        if (quoteData.value?.totalCostNano === '0' || quoteData.value?.totalCostNano === 0) {
+          completionMessage = 'Already uploaded';
+          console.log(">>> Duplicate upload detected in payment modal (cost = 0) - using 'already uploaded' message");
+        }
+        
         // Mark upload as completed immediately
         uploadsStore.updateUpload(modalUploadId.value, {
           status: 'completed',
           progress: 100,
+          completionMessage,
           completedAt: new Date()
         });
         
@@ -1118,8 +1126,38 @@ const setupEventListeners = async () => {
       // Update UI to show quote received and set payment step
       updateStepStatus('quoting', 'completed', 'Quote received');
 
+      // Check if this is a duplicate upload (cost = 0) first, regardless of payment_required flag
+      if (payload.total_cost_nano === '0' || payload.total_cost_nano === 0) {
+        console.log(">>> Duplicate upload detected (cost = 0) - marking as completed instantly");
+        updateStepStatus('payment-request', 'completed', 'No payment required');
+        
+        // Mark upload as completed immediately with "already uploaded" message
+        uploadsStore.updateUpload(upload.id, {
+          status: 'completed',
+          progress: 100,
+          completionMessage: 'Already uploaded',
+          completedAt: new Date()
+        });
+        
+        // Clean up stored quote data
+        uploadQuotes.value.delete(upload.id);
+        
+        // Update UI to show completion
+        updateStepStatus('quoting', 'completed', 'Quote received');
+        updateStepStatus('payment-request', 'completed', 'Already uploaded');
+        
+        // Close modal after brief delay to show completion
+        setTimeout(() => {
+          showUploadModal.value = false;
+          // Switch to uploads tab to show completed upload
+          activeTab.value = 2;
+          
+          // Trigger file refresh to show the new file
+          fileStore.getAllFiles();
+        }, 1500);
+      }
       // Set payment step based on whether payment is required
-      if (payload.payment_required && payload.payments && payload.payments.length > 0) {
+      else if (payload.payment_required && payload.payments && payload.payments.length > 0) {
         updateStepStatus('payment-request', 'pending', 'Ready for payment...');
 
         // Keep upload status as 'quoting' - payment modal will handle the transition
@@ -1136,6 +1174,7 @@ const setupEventListeners = async () => {
           uploadsStore.updateUpload(upload.id, {
             status: 'completed',
             progress: 100,
+            completionMessage: 'Upload completed',
             completedAt: new Date()
           });
           
@@ -1163,8 +1202,33 @@ const setupEventListeners = async () => {
       // Handle non-modal uploads (background uploads)
       console.log(">>> Processing quote for non-modal upload:", upload.id);
 
+      // Check if this is a duplicate upload (cost = 0) first, regardless of payment_required flag
+      if (payload.total_cost_nano === '0' || payload.total_cost_nano === 0) {
+        console.log(">>> Non-modal duplicate upload detected (cost = 0) - marking as completed instantly");
+        
+        // Mark upload as completed immediately with "already uploaded" message
+        uploadsStore.updateUpload(upload.id, {
+          status: 'completed',
+          progress: 100,
+          completionMessage: 'Already uploaded',
+          completedAt: new Date()
+        });
+        
+        // Clean up stored quote data
+        uploadQuotes.value.delete(upload.id);
+        
+        // Switch to uploads tab to show the completed upload
+        activeTab.value = 2;
+        
+        // Trigger file refresh to show the new file
+        setTimeout(() => {
+          fileStore.getAllFiles();
+        }, 500);
+        
+        console.log(">>> Non-modal duplicate upload completed instantly");
+      }
       // Set payment step based on whether payment is required
-      if (payload.payment_required && payload.payments && payload.payments.length > 0) {
+      else if (payload.payment_required && payload.payments && payload.payments.length > 0) {
         console.log(">>> Non-modal upload requires payment - upload will wait for manual payment");
         // For now, non-modal uploads that require payment will wait
         // User will need to pay for them manually later
@@ -1177,6 +1241,7 @@ const setupEventListeners = async () => {
         uploadsStore.updateUpload(upload.id, {
           status: 'completed',
           progress: 100,
+          completionMessage: 'Upload completed',
           completedAt: new Date()
         });
         
@@ -2199,9 +2264,14 @@ onUnmounted(() => {
                       {{ upload.name }}
                     </span>
 
-                      <!-- Duration -->
+                      <!-- Duration or completion message -->
                       <span class="text-sm text-gray-500 dark:text-gray-400">
-                      took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
+                      <template v-if="upload.completionMessage">
+                        {{ upload.completionMessage }}
+                      </template>
+                      <template v-else>
+                        took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
+                      </template>
                     </span>
                     </div>
 

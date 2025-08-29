@@ -12,6 +12,7 @@ export interface UploadItem {
   chunksUploaded?: number;
   totalChunks?: number;
   error?: string;
+  completionMessage?: string;
   createdAt: Date;
   completedAt?: Date;
 }
