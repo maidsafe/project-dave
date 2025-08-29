@@ -970,7 +970,177 @@ pub async fn get_vault_structure_streaming(
             .map_err(|_| VaultError::FileNotFound)?;
     }
 
-    // Process archives concurrently - simplified version for now
+    // Process archives concurrently
+    let mut archive_tasks = vec![];
+
+    // Create tasks for private archives
+    for (data_map, name) in &user_data.private_file_archives {
+        let client = client.clone();
+        let app = app.clone();
+        let archive_name = name.clone();
+        let data_map = data_map.clone();
+        
+        // Emit loading status immediately
+        let loading_update = VaultUpdate {
+            update_type: VaultUpdateType::ArchiveLoading,
+            archive: None,
+            failed_archive: None,
+            loading_archive: Some(LoadingArchive {
+                name: archive_name.clone(),
+                is_private: true,
+            }),
+            files: vec![],
+            is_complete: false,
+            temp_code: temp_code.clone(),
+        };
+        let _ = app.emit("vault-update", loading_update);
+        
+        let temp_code = temp_code.clone();
+        let task = tokio::spawn(async move {
+            match client.archive_get(&data_map).await {
+                Ok(archive) => {
+                    let mut files: Vec<FileMetadata> = vec![];
+                    
+                    for (filepath, (data_map, metadata)) in archive.map() {
+                        files.push(FileMetadata {
+                            path: filepath.display().to_string(),
+                            metadata: metadata.clone(),
+                            file_type: FileType::Private,
+                            is_loaded: true,
+                            archive_name: archive_name.clone(),
+                            access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
+                        });
+                    }
+
+                    let archive_loaded = ArchiveInfo {
+                        name: archive_name.clone(),
+                        is_private: true,
+                        files,
+                    };
+
+                    let update = VaultUpdate {
+                        update_type: VaultUpdateType::ArchiveLoaded,
+                        archive: Some(archive_loaded),
+                        failed_archive: None,
+                        loading_archive: None,
+                        files: vec![],
+                        is_complete: false,
+                        temp_code: temp_code.clone(),
+                    };
+
+                    let _ = app.emit("vault-update", update);
+                }
+                Err(_) => {
+                    let failed_archive = FailedArchive {
+                        name: archive_name.clone(),
+                        is_private: true,
+                    };
+
+                    let update = VaultUpdate {
+                        update_type: VaultUpdateType::ArchiveFailed,
+                        archive: None,
+                        failed_archive: Some(failed_archive),
+                        loading_archive: None,
+                        files: vec![],
+                        is_complete: false,
+                        temp_code: temp_code.clone(),
+                    };
+
+                    let _ = app.emit("vault-update", update);
+                }
+            }
+        });
+        
+        archive_tasks.push(task);
+    }
+
+    // Create tasks for public archives
+    for (archive_addr, name) in &user_data.file_archives {
+        let client = client.clone();
+        let app = app.clone();
+        let archive_name = name.clone();
+        let archive_addr = *archive_addr;
+        
+        // Emit loading status immediately
+        let loading_update = VaultUpdate {
+            update_type: VaultUpdateType::ArchiveLoading,
+            archive: None,
+            failed_archive: None,
+            loading_archive: Some(LoadingArchive {
+                name: archive_name.clone(),
+                is_private: false,
+            }),
+            files: vec![],
+            is_complete: false,
+            temp_code: temp_code.clone(),
+        };
+        let _ = app.emit("vault-update", loading_update);
+        
+        let temp_code = temp_code.clone();
+        let task = tokio::spawn(async move {
+            match client.archive_get_public(&archive_addr).await {
+                Ok(archive) => {
+                    let mut files: Vec<FileMetadata> = vec![];
+                    
+                    for (filepath, (data_addr, metadata)) in archive.map() {
+                        files.push(FileMetadata {
+                            path: filepath.display().to_string(),
+                            metadata: metadata.clone(),
+                            file_type: FileType::Public,
+                            is_loaded: true,
+                            archive_name: archive_name.clone(),
+                            access_data: Some(PublicOrPrivateFile::Public(data_addr.clone())),
+                        });
+                    }
+
+                    let archive_loaded = ArchiveInfo {
+                        name: archive_name.clone(),
+                        is_private: false,
+                        files,
+                    };
+
+                    let update = VaultUpdate {
+                        update_type: VaultUpdateType::ArchiveLoaded,
+                        archive: Some(archive_loaded),
+                        failed_archive: None,
+                        loading_archive: None,
+                        files: vec![],
+                        is_complete: false,
+                        temp_code: temp_code.clone(),
+                    };
+
+                    let _ = app.emit("vault-update", update);
+                }
+                Err(_) => {
+                    let failed_archive = FailedArchive {
+                        name: archive_name.clone(),
+                        is_private: false,
+                    };
+
+                    let update = VaultUpdate {
+                        update_type: VaultUpdateType::ArchiveFailed,
+                        archive: None,
+                        failed_archive: Some(failed_archive),
+                        loading_archive: None,
+                        files: vec![],
+                        is_complete: false,
+                        temp_code: temp_code.clone(),
+                    };
+
+                    let _ = app.emit("vault-update", update);
+                }
+            }
+        });
+        
+        archive_tasks.push(task);
+    }
+
+    // Wait for all archive tasks to complete
+    for task in archive_tasks {
+        let _ = task.await;
+    }
+
+    // Finally, emit completion
     let completion_update = VaultUpdate {
         update_type: VaultUpdateType::Complete,
         archive: None,
