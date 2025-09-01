@@ -126,7 +126,9 @@ export const useFileStore = defineStore("files", () => {
                                     is_loading: false,
                                     load_error: false,
                                     name: part,
-                                    archive_name: archive.name || `archive_${archiveIndex}`
+                                    archive_name: archive.name || `archive_${archiveIndex}`,
+                                    archive_address: archive.address,
+                                    archive_is_private: archive.is_private
                                 });
                             } else {
                                 // This is a subdirectory - create regular folder (not archive folder)
@@ -176,7 +178,9 @@ export const useFileStore = defineStore("files", () => {
                                     is_loading: false,
                                     load_error: false,
                                     name: part,
-                                    archive_name: archive.name
+                                    archive_name: archive.name,
+                                    archive_address: archive.address,
+                                    archive_is_private: archive.is_private
                                 });
                             } else {
                                 // This is a subdirectory within the archive

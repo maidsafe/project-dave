@@ -2,6 +2,7 @@
 import {useFileStore} from '~/stores/files';
 import {useLocalFilesStore} from '~/stores/localFiles';
 import {useToast} from 'primevue/usetoast';
+import {useConfirm} from 'primevue/useconfirm';
 import {useUserStore} from '~/stores/user';
 import {useUploadStore} from '~/stores/upload';
 import {useUploadsStore} from '~/stores/uploads';
@@ -15,6 +16,7 @@ import {basename} from '@tauri-apps/api/path';
 // Remove direct plugin import - we'll use the backend command instead
 
 const toast = useToast();
+const confirm = useConfirm();
 const fileStore = useFileStore();
 const localFilesStore = useLocalFilesStore();
 const uploadStore = useUploadStore();
@@ -69,6 +71,10 @@ const modalUploadId = ref<string | null>(null);
 // Store quote data per upload ID for concurrent uploads
 const uploadQuotes = ref<Map<string, any>>(new Map());
 const localBreadcrumbs = ref<any[]>([]);
+
+// Vault removal loading state
+const pendingVaultRemoval = ref(false);
+const vaultRemovalItem = ref<{ name: string, isArchive: boolean } | null>(null);
 
 // Upload modal functionality
 const initializeUploadSteps = () => {
@@ -222,14 +228,14 @@ const handlePayUpload = async () => {
       // Free upload - complete instantly
       if (modalUploadId.value) {
         console.log(">>> Free upload in payment modal - marking as completed instantly");
-        
+
         // Determine completion message based on cost
         let completionMessage = 'Upload completed';
         if (quoteData.value?.totalCostNano === '0' || quoteData.value?.totalCostNano === 0) {
           completionMessage = 'Already uploaded';
           console.log(">>> Duplicate upload detected in payment modal (cost = 0) - using 'already uploaded' message");
         }
-        
+
         // Mark upload as completed immediately
         uploadsStore.updateUpload(modalUploadId.value, {
           status: 'completed',
@@ -237,10 +243,10 @@ const handlePayUpload = async () => {
           completionMessage,
           completedAt: new Date()
         });
-        
+
         // Clean up stored quote data
         uploadQuotes.value.delete(modalUploadId.value);
-        
+
         // Trigger file refresh
         setTimeout(() => {
           fileStore.getAllFiles();
@@ -318,7 +324,7 @@ const handlePayUpload = async () => {
     console.log(">>> showUploadModal.value after:", showUploadModal.value);
     activeTab.value = 2; // Switch to uploads tab
     console.log(">>> Current active tab:", activeTab.value);
-    
+
     // Clean up modal state
     pendingUploadFiles.value = null;
     uploadSteps.value = [];
@@ -384,7 +390,7 @@ const menuFiles = computed(() => {
       icon: 'pi pi-spinner pi-spin',
       disabled: true,
     });
-  } else if (file?.load_error) {
+  } else if (file?.load_error && !file?.is_failed_archive) {
     items.push({
       label: 'Retry Download',
       icon: 'pi pi-refresh',
@@ -393,8 +399,8 @@ const menuFiles = computed(() => {
         refFilesMenu.value.hide();
       },
     });
-  } else if (file?.path) {
-    // Only show download for files (not folders)
+  } else if (file?.path && !file?.is_failed_archive) {
+    // Only show download for files (not folders or failed archives)
     items.push({
       label: 'Download',
       icon: 'pi pi-download',
@@ -405,8 +411,8 @@ const menuFiles = computed(() => {
     });
   }
 
-  if (file?.path) {
-    // Only show info for files (not folders)
+  if (file?.path && !file?.is_failed_archive) {
+    // Only show info for files (not folders or failed archives)
     items.push({
       label: 'Info',
       icon: 'pi pi-info-circle',
@@ -423,6 +429,59 @@ const menuFiles = computed(() => {
         icon: 'pi pi-clipboard',
         command: () => {
           handleCopyDataAddress(file);
+          refFilesMenu.value.hide();
+        },
+      });
+    }
+  }
+
+  // Add remove option for vault files only (not local files, loading archives)
+
+  if (activeTab.value === 0 && !file?.is_loading_archive) {
+    // Determine if this is an archive file (file is inside an archive)
+    const isArchiveFile = file?.archive_name && file?.archive_name !== '';
+
+    if (file?.is_failed_archive) {
+      // Failed archive - remove from vault
+      items.push({
+        label: 'Remove Archive from Vault',
+        icon: 'pi pi-trash',
+        class: 'text-red-600',
+        command: () => {
+          handleRemoveFromVault(file, false);
+          refFilesMenu.value.hide();
+        },
+      });
+    } else if (isArchiveFile) {
+      // File within an archive - remove the whole archive
+      items.push({
+        label: 'Remove Archive from Vault',
+        icon: 'pi pi-trash',
+        class: 'text-red-600',
+        command: () => {
+          handleRemoveFromVault(file, true);
+          refFilesMenu.value.hide();
+        },
+      });
+    } else if (file?.isArchive) {
+      // Archive folder itself - remove the archive
+      items.push({
+        label: 'Remove Archive from Vault',
+        icon: 'pi pi-trash',
+        class: 'text-red-600',
+        command: () => {
+          handleRemoveFromVault(file, false);
+          refFilesMenu.value.hide();
+        },
+      });
+    } else if (file?.path) {
+      // Individual file - remove just the file
+      items.push({
+        label: 'Remove from Vault',
+        icon: 'pi pi-trash',
+        class: 'text-red-600',
+        command: () => {
+          handleRemoveFromVault(file, false);
           refFilesMenu.value.hide();
         },
       });
@@ -615,39 +674,39 @@ const combinedFiles = computed(() => {
   const isRootDirectory = currentDirectory.value === rootDirectory.value;
 
   const failedArchiveFiles = isRootDirectory ? failedArchives.value
-    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-    .map(archive => ({
-      name: archive.name,
-      is_failed_archive: true,
-      is_private: archive.is_private,
-      is_loaded: false,
-      is_loading: false,
-      load_error: true,
-      path: `failed-archive://${archive.address}`,
-      address: archive.address,
-      metadata: {}
-    })) : [];
+      .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+      .map(archive => ({
+        name: archive.name,
+        is_failed_archive: true,
+        is_private: archive.is_private,
+        is_loaded: false,
+        is_loading: false,
+        load_error: true,
+        path: `failed-archive://${archive.address}`,
+        address: archive.address,
+        metadata: {}
+      })) : [];
 
   const loadingArchiveFiles = isRootDirectory ? loadingArchives.value
-    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-    .map(archive => ({
-      name: archive.name,
-      is_loading_archive: true,
-      is_private: archive.is_private,
-      is_loaded: false,
-      is_loading: true,
-      load_error: false,
-      path: `loading-archive://${archive.address}`,
-      address: archive.address,
-      metadata: {}
-    })) : [];
+      .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+      .map(archive => ({
+        name: archive.name,
+        is_loading_archive: true,
+        is_private: archive.is_private,
+        is_loaded: false,
+        is_loading: true,
+        load_error: false,
+        path: `loading-archive://${archive.address}`,
+        address: archive.address,
+        metadata: {}
+      })) : [];
 
   return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
     // Sort by name, putting directories first, then files
     if (a.is_directory !== b.is_directory) {
       return a.is_directory ? -1 : 1;
     }
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    return a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'});
   });
 });
 
@@ -883,6 +942,91 @@ const handleCopySecretKey = async (file: any) => {
       life: 3000,
     });
   }
+};
+
+const handleRemoveFromVault = async (file: any, isArchiveFile: boolean) => {
+  // Determine what we're removing
+  const fileName = file.name;
+  const isArchive = file.isArchive || isArchiveFile || file.is_failed_archive;
+
+  // Get archive address if removing an archive or a file within an archive
+  let archiveAddress = null;
+  if (file.is_failed_archive && file.address) {
+    // This is a failed archive - use its address directly
+    archiveAddress = file.address;
+  } else if (file.isArchive && file.archive?.address) {
+    // This is an archive folder itself - get address from the archive object
+    archiveAddress = file.archive.address;
+  } else if (isArchiveFile && file.archive_address) {
+    // This is a file within an archive
+    archiveAddress = file.archive_address;
+  }
+
+  // Show confirmation dialog using PrimeVue's confirm service
+  const message = isArchive
+      ? `Are you sure you want to remove the archive "${fileName}" from your vault? This will remove ALL files within this archive. This action cannot be undone.`
+      : `Are you sure you want to remove "${fileName}" from your vault? This action cannot be undone.`;
+
+  // Use PrimeVue's confirm service for better reliability
+  confirm.require({
+    message: message,
+    header: 'Confirm Removal',
+    icon: 'pi pi-exclamation-triangle',
+    rejectProps: {
+      label: 'Cancel',
+      severity: 'secondary',
+      outlined: true
+    },
+    acceptProps: {
+      label: 'Remove',
+      severity: 'danger'
+    },
+    accept: async () => {
+      try {
+        // Set loading state with item information
+        vaultRemovalItem.value = {name: fileName, isArchive};
+        pendingVaultRemoval.value = true;
+
+        // Get vault key signature
+        const walletStore = useWalletStore();
+        const vaultKeySignature = await walletStore.getVaultKeySignature();
+
+
+        // Call the remove function
+        await invoke('remove_from_vault', {
+          vaultKeySignature,
+          filePath: file.path || fileName,
+          archiveAddress
+        });
+
+        toast.add({
+          severity: 'success',
+          summary: 'Removed from Vault',
+          detail: `${isArchive ? 'Archive' : 'File'} "${fileName}" has been removed from your vault.`,
+          life: 3000,
+        });
+
+        // Refresh the vault files
+        fileStore.getAllFiles();
+
+      } catch (innerError: any) {
+        console.error('Failed to remove from vault:', innerError);
+        toast.add({
+          severity: 'error',
+          summary: 'Removal Failed',
+          detail: innerError?.message || 'Failed to remove from vault.',
+          life: 3000,
+        });
+      } finally {
+        // Always clear loading state
+        pendingVaultRemoval.value = false;
+        vaultRemovalItem.value = null;
+      }
+    },
+    reject: () => {
+      // No action needed, user cancelled
+    }
+  });
 };
 
 const handleGoBack = (target: any) => {
@@ -1132,10 +1276,10 @@ const setupEventListeners = async () => {
       if (payload.total_cost_nano === '0' || payload.total_cost_nano === 0) {
         console.log(">>> Duplicate upload detected (cost = 0) - waiting for backend completion event");
         updateStepStatus('payment-request', 'completed', 'No payment required');
-        
+
         // Don't update upload status - wait for backend Completed event
         // The backend will emit a Completed event for duplicate uploads
-        
+
         // Update UI to show completion
         updateStepStatus('quoting', 'completed', 'Quote received');
         updateStepStatus('payment-request', 'completed', 'Already uploaded');
@@ -1154,7 +1298,7 @@ const setupEventListeners = async () => {
         // The backend will handle the upload and emit appropriate events
         if (upload) {
           console.log(">>> Free upload detected - waiting for backend to process");
-          
+
           // Update UI to show no payment required
           updateStepStatus('quoting', 'completed', 'Quote received');
           updateStepStatus('payment-request', 'completed', 'No payment required');
@@ -1169,13 +1313,13 @@ const setupEventListeners = async () => {
       // Check if this is a duplicate upload (cost = 0) first, regardless of payment_required flag
       if (payload.total_cost_nano === '0' || payload.total_cost_nano === 0) {
         console.log(">>> Non-modal duplicate upload detected (cost = 0) - waiting for backend completion event");
-        
+
         // Don't update upload status - wait for backend Completed event
         // The backend will emit a Completed event for duplicate uploads
-        
+
         // Switch to uploads tab to show the upload
         activeTab.value = 2;
-        
+
         console.log(">>> Non-modal duplicate upload - waiting for backend");
       }
       // Set payment step based on whether payment is required
@@ -1187,13 +1331,13 @@ const setupEventListeners = async () => {
       } else {
         // Free upload - wait for backend events
         console.log(">>> Non-modal free upload detected - waiting for backend to process");
-        
+
         // Don't update upload status - wait for backend events
         // The backend will handle the upload and emit appropriate events
-        
+
         // Switch to uploads tab to show the upload
         activeTab.value = 2;
-        
+
         console.log(">>> Non-modal free upload - waiting for backend");
       }
     }
@@ -1521,22 +1665,38 @@ watch(() => uploadsStore.activeUploads.length, (newCount, oldCount) => {
   console.log(">>> Active uploads count changed from", oldCount, "to", newCount);
 });
 
+// Watch for vault removal state to show/hide loading notification
+watch(pendingVaultRemoval, (isRemoving) => {
+  if (isRemoving && vaultRemovalItem.value) {
+    const item = vaultRemovalItem.value;
+    const itemType = item.isArchive ? 'archive' : 'file';
+    emit('show-notify', {
+      notifyType: 'info',
+      title: 'Removing from vault',
+      details: `Removing ${itemType} "${item.name}" from vault..`,
+      enabledCancel: false,
+    });
+  } else {
+    emit('hide-notify');
+  }
+});
+
 // Get current local directory files for display with search filtering (similar to vault files)
 const localDirectoryFiles = computed(() => {
   try {
     if (!localCurrentDirectory.value) {
       return [];
     }
-    
+
     const files = localCurrentDirectoryFiles.value || [];
-    
+
     if (query.value) {
-      return files.filter((file: any) => 
-        file.name.toLowerCase().includes(query.value.toLowerCase()) &&
-        file.name !== 'parents'
+      return files.filter((file: any) =>
+          file.name.toLowerCase().includes(query.value.toLowerCase()) &&
+          file.name !== 'parents'
       );
     }
-    
+
     return files.filter((file: any) => file.name !== 'parents');
   } catch (error) {
     return [];
@@ -1551,39 +1711,39 @@ const combinedLocalFiles = computed(() => {
   const isRootDirectory = localCurrentDirectory.value === localRootDirectory.value;
 
   const failedArchiveFiles = isRootDirectory ? localFailedArchives.value
-    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-    .map(archive => ({
-      name: archive.name,
-      is_failed_archive: true,
-      is_private: archive.is_private,
-      is_loaded: false,
-      is_loading: false,
-      load_error: true,
-      path: `failed-archive://${archive.address}`,
-      address: archive.address,
-      metadata: {}
-    })) : [];
+      .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+      .map(archive => ({
+        name: archive.name,
+        is_failed_archive: true,
+        is_private: archive.is_private,
+        is_loaded: false,
+        is_loading: false,
+        load_error: true,
+        path: `failed-archive://${archive.address}`,
+        address: archive.address,
+        metadata: {}
+      })) : [];
 
   const loadingArchiveFiles = isRootDirectory ? localLoadingArchives.value
-    .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-    .map(archive => ({
-      name: archive.name,
-      is_loading_archive: true,
-      is_private: archive.is_private,
-      is_loaded: false,
-      is_loading: true,
-      load_error: false,
-      path: `loading-archive://${archive.address}`,
-      address: archive.address,
-      metadata: {}
-    })) : [];
+      .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
+      .map(archive => ({
+        name: archive.name,
+        is_loading_archive: true,
+        is_private: archive.is_private,
+        is_loaded: false,
+        is_loading: true,
+        load_error: false,
+        path: `loading-archive://${archive.address}`,
+        address: archive.address,
+        metadata: {}
+      })) : [];
 
   return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
     // Sort by name, putting directories first, then files
     if (a.is_directory !== b.is_directory) {
       return a.is_directory ? -1 : 1;
     }
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    return a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'});
   });
 });
 
@@ -1809,7 +1969,7 @@ onMounted(async () => {
                   </div>
 
                   <!-- Menu -->
-                  <template v-if="file.path && !file.is_failed_archive && !file.is_loading_archive">
+                  <template v-if="(file.path || file.isArchive || file.is_failed_archive) && !file.is_loading_archive">
                     <div class="col-span-1">
                       <i
                           class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
@@ -1863,7 +2023,7 @@ onMounted(async () => {
                     }"
                     @click="!file.is_loading_archive ? handleChangeDirectory(file) : null"
                 >
-                  <template v-if="file.path && !file.is_loading_archive">
+                  <template v-if="(file.path || file.isArchive || file.is_failed_archive) && !file.is_loading_archive">
                     <!-- Menu -->
                     <div class="self-end mb-2">
                       <i
@@ -2040,7 +2200,7 @@ onMounted(async () => {
                   </div>
 
                   <!-- Menu -->
-                  <template v-if="file.path && !file.is_failed_archive && !file.is_loading_archive">
+                  <template v-if="(file.path || file.isArchive || file.is_failed_archive) && !file.is_loading_archive">
                     <div class="col-span-1">
                       <i
                           class="pi pi-ellipsis-v cursor-pointer hover:text-autonomi-gray-600  dark:hover:text-white"
@@ -2094,7 +2254,7 @@ onMounted(async () => {
                     }"
                     @click="!file.is_loading_archive ? handleLocalChangeDirectory(file) : null"
                 >
-                  <template v-if="file.path && !file.is_loading_archive">
+                  <template v-if="(file.path || file.isArchive || file.is_failed_archive) && !file.is_loading_archive">
                     <!-- Menu -->
                     <div class="self-end mb-2">
                       <i
@@ -2139,7 +2299,9 @@ onMounted(async () => {
         </TabPanel>
 
         <!-- Uploads Tab -->
-        <TabPanel :header="uploadsStore.activeUploads.length > 0 ? `Uploads (${uploadsStore.activeUploads.length})` : 'Uploads'" :value="2">
+        <TabPanel
+            :header="uploadsStore.activeUploads.length > 0 ? `Uploads (${uploadsStore.activeUploads.length})` : 'Uploads'"
+            :value="2">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Uploads -->
@@ -2309,7 +2471,9 @@ onMounted(async () => {
         </TabPanel>
 
         <!-- Downloads Tab -->
-        <TabPanel :header="downloadsStore.activeDownloads.length > 0 ? `Downloads (${downloadsStore.activeDownloads.length})` : 'Downloads'" :value="3">
+        <TabPanel
+            :header="downloadsStore.activeDownloads.length > 0 ? `Downloads (${downloadsStore.activeDownloads.length})` : 'Downloads'"
+            :value="3">
           <div class="mx-[6rem] overflow-y-auto overscroll-none" style="height: calc(100vh - 280px);">
             <div class="space-y-4">
               <!-- Active Downloads -->
@@ -2519,8 +2683,8 @@ onMounted(async () => {
               }"
                 @click="!item.disabled && item.command && item.command()"
             >
-              <i :class="item.icon"/>
-              <div>
+              <i :class="[item.icon, item.class]"/>
+              <div :class="item.class">
                 {{ item.label }}
               </div>
             </li>
@@ -2723,3 +2887,20 @@ onMounted(async () => {
     </Drawer>
   </div>
 </template>
+
+<style>
+/* Make confirm dialog narrower */
+:deep(.p-dialog.p-confirm-dialog) {
+  max-width: 450px !important;
+  width: 90% !important;
+}
+
+:deep(.p-confirm-dialog .p-dialog-content) {
+  width: 100% !important;
+}
+
+:deep(.p-confirm-dialog .p-confirm-dialog-message) {
+  margin: 1.5rem 0;
+  word-wrap: break-word;
+}
+</style>

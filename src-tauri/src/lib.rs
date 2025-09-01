@@ -246,6 +246,25 @@ async fn get_files_from_vault(
 }
 
 #[tauri::command]
+async fn remove_from_vault(
+    vault_key_signature: String,
+    file_path: String,
+    archive_address: Option<String>,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), CommandError> {
+    let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    )
+    .expect("Invalid vault key signature");
+
+    ant::files::remove_from_vault(&secret_key, &file_path, archive_address, shared_client)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
 async fn download_private_file(
     data_map: DataMapChunk,
     to_dest: PathBuf,
@@ -446,6 +465,7 @@ pub async fn run() {
             get_vault_structure,
             get_vault_structure_streaming,
             get_files_from_vault,
+            remove_from_vault,
             download_private_file,
             download_public_file,
             get_single_file_data,

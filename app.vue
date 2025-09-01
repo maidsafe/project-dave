@@ -170,6 +170,9 @@ onMounted(async () => {
             </template>
           </Toast>
           <Toast position="bottom-right"/>
+          <ConfirmDialog :pt="{
+            root: { style: 'max-width: 450px !important;' }
+          }" />
         </div>
 
         <DialogConnectWallet

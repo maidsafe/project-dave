@@ -1279,3 +1279,89 @@ pub async fn get_single_file_data(
 
     Err(VaultError::FileNotFound)
 }
+
+pub async fn remove_from_vault(
+    secret_key: &VaultSecretKey,
+    file_path: &str,
+    archive_address: Option<String>,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), VaultError> {
+    let client = shared_client.get_client().await?;
+    
+    // Get current user data from vault
+    let mut user_data = client.get_user_data_from_vault(secret_key).await?;
+    
+    
+    // If archive_address is provided, remove the entire archive
+    if let Some(ref address) = archive_address {
+        // Try to remove from private archives first
+        let mut found = false;
+        
+        // Remove from private_file_archives by address
+        user_data.private_file_archives.retain(|data_map, _name| {
+            if data_map.to_hex() == *address {
+                found = true;
+                false // Remove this archive
+            } else {
+                true // Keep this archive
+            }
+        });
+        
+        // If not found in private archives, try public archives
+        if !found {
+            user_data.file_archives.retain(|data_addr, _name| {
+                if data_addr.to_hex() == *address {
+                    found = true;
+                    false // Remove this archive
+                } else {
+                    true // Keep this archive
+                }
+            });
+        }
+        
+        if !found {
+            return Err(VaultError::FileNotFound);
+        }
+    } else {
+        // Remove individual file by path
+        let mut found = false;
+        
+        // Try to remove from private files first
+        user_data.private_files.retain(|_data_map, name| {
+            if name == file_path {
+                found = true;
+                false // Remove this file
+            } else {
+                true // Keep this file
+            }
+        });
+        
+        // If not found in private files, try public files
+        if !found {
+            user_data.public_files.retain(|_data_addr, name| {
+                if name == file_path {
+                    found = true;
+                    false // Remove this file
+                } else {
+                    true // Keep this file
+                }
+            });
+        }
+        
+        if !found {
+            return Err(VaultError::FileNotFound);
+        }
+    }
+    
+    // Save the updated user data back to vault (vault updates are free)
+    // Create an empty receipt for free vault operations
+    let empty_store_quote = client.get_store_quotes(DataTypes::Chunk, std::iter::empty()).await
+        .map_err(|_err| VaultError::FileNotFound)?;
+    let receipt = autonomi::client::payment::receipt_from_store_quotes(empty_store_quote);
+    
+    client
+        .put_user_data_to_vault(secret_key, receipt.into(), user_data)
+        .await
+        .map_err(|_err| VaultError::FileNotFound)?;
+    Ok(())
+}

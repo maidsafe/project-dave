@@ -6,6 +6,7 @@ export interface IFolder {
 
 export interface IArchive {
   name: string;
+  address: string;
   is_private: boolean;
   files: IFileMetadata[];
 }
@@ -18,6 +19,7 @@ export interface IVaultStructure {
 
 export interface IFailedArchive {
   name: string;
+  address: string;
   is_private: boolean;
 }
 
