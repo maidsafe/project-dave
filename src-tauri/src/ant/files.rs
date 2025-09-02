@@ -1365,3 +1365,204 @@ pub async fn remove_from_vault(
         .map_err(|_err| VaultError::FileNotFound)?;
     Ok(())
 }
+
+pub async fn add_local_archive_to_vault(
+    secret_key: &VaultSecretKey,
+    archive_address: &str,
+    archive_name: &str,
+    is_private: bool,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), VaultError> {
+    let client = shared_client.get_client().await?;
+    
+    // Debug logging
+    eprintln!("=== ADD LOCAL ARCHIVE TO VAULT DEBUG ===");
+    eprintln!("archive_address: {}", archive_address);
+    eprintln!("archive_name: {}", archive_name);
+    eprintln!("is_private: {}", is_private);
+    
+    // Get current user data from vault
+    let mut user_data = match client.get_user_data_from_vault(secret_key).await {
+        Ok(data) => {
+            eprintln!("Successfully retrieved user data from vault");
+            data
+        },
+        Err(e) => {
+            eprintln!("Failed to get user data from vault: {:?}", e);
+            // Check if this is a case where the vault doesn't exist yet
+            match &e {
+                UserDataVaultError::GetError(_) => {
+                    eprintln!("Vault might not exist yet, creating new user data");
+                    // Create new user data if vault doesn't exist
+                    UserData::new()
+                },
+                UserDataVaultError::Vault(_) => {
+                    eprintln!("Vault error, might not exist yet, creating new user data");
+                    // Create new user data if vault doesn't exist
+                    UserData::new()
+                },
+                _ => {
+                    eprintln!("Other vault error, returning error");
+                    return Err(VaultError::UserDataGet(e));
+                }
+            }
+        }
+    };
+    
+    if is_private {
+        // Resolve local address to actual network DataMapChunk
+        eprintln!("Resolving local private archive address: {}", archive_address);
+        let data_map = match local_storage::get_local_private_archive_access(archive_address) {
+            Ok(dm) => {
+                eprintln!("Successfully resolved local address to DataMapChunk");
+                dm
+            },
+            Err(e) => {
+                eprintln!("Failed to resolve local private archive address '{}': {:?}", archive_address, e);
+                return Err(VaultError::FileNotFound);
+            }
+        };
+            
+        // Add to private archives using the resolved network address
+        user_data.private_file_archives.insert(data_map, archive_name.to_string());
+        eprintln!("Added to private archives: {} -> {}", archive_address, archive_name);
+    } else {
+        // Resolve local address to actual network DataAddress
+        eprintln!("Resolving local public archive address: {}", archive_address);
+        let data_addr = match local_storage::get_local_public_archive_address(archive_address) {
+            Ok(addr) => {
+                eprintln!("Successfully resolved local address to DataAddress");
+                addr
+            },
+            Err(e) => {
+                eprintln!("Failed to resolve local public archive address '{}': {:?}", archive_address, e);
+                return Err(VaultError::FileNotFound);
+            }
+        };
+            
+        // Add to public archives using the resolved network address
+        user_data.file_archives.insert(data_addr, archive_name.to_string());
+        eprintln!("Added to public archives: {} -> {}", archive_address, archive_name);
+    }
+    
+    // Save the updated user data back to vault (vault updates are free)
+    // Create an empty receipt for free vault operations
+    let empty_store_quote = match client.get_store_quotes(DataTypes::Chunk, std::iter::empty()).await {
+        Ok(quote) => quote,
+        Err(e) => {
+            eprintln!("Failed to get store quotes: {:?}", e);
+            return Err(VaultError::FileNotFound);
+        }
+    };
+    let receipt = autonomi::client::payment::receipt_from_store_quotes(empty_store_quote);
+    
+    match client.put_user_data_to_vault(secret_key, receipt.into(), user_data).await {
+        Ok(_) => {
+            eprintln!("Successfully updated vault with new archive");
+            Ok(())
+        },
+        Err(e) => {
+            eprintln!("Failed to put user data to vault: {:?}", e);
+            Err(VaultError::FileNotFound)
+        }
+    }
+}
+
+pub async fn add_local_file_to_vault(
+    secret_key: &VaultSecretKey,
+    file_address: &str,
+    file_name: &str,
+    is_private: bool,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), VaultError> {
+    let client = shared_client.get_client().await?;
+    
+    // Debug logging
+    eprintln!("=== ADD LOCAL FILE TO VAULT DEBUG ===");
+    eprintln!("file_address: {}", file_address);
+    eprintln!("file_name: {}", file_name);
+    eprintln!("is_private: {}", is_private);
+    
+    // Get current user data from vault
+    let mut user_data = match client.get_user_data_from_vault(secret_key).await {
+        Ok(data) => {
+            eprintln!("Successfully retrieved user data from vault");
+            data
+        },
+        Err(e) => {
+            eprintln!("Failed to get user data from vault: {:?}", e);
+            // Check if this is a case where the vault doesn't exist yet
+            match &e {
+                UserDataVaultError::GetError(_) => {
+                    eprintln!("Vault might not exist yet, creating new user data");
+                    UserData::new()
+                },
+                UserDataVaultError::Vault(_) => {
+                    eprintln!("Vault error, might not exist yet, creating new user data");
+                    UserData::new()
+                },
+                _ => {
+                    eprintln!("Other vault error, returning error");
+                    return Err(VaultError::UserDataGet(e));
+                }
+            }
+        }
+    };
+    
+    // Use the network address directly (passed from frontend)
+    if is_private {
+        eprintln!("Parsing private file hex network address: {}", file_address);
+        let data_map = match DataMapChunk::from_hex(file_address) {
+            Ok(dm) => {
+                eprintln!("Successfully parsed private file address to DataMapChunk");
+                dm
+            },
+            Err(e) => {
+                eprintln!("Failed to parse private file address '{}': {:?}", file_address, e);
+                return Err(VaultError::FileNotFound);
+            }
+        };
+        
+        // Add to private files using the network address
+        user_data.private_files.insert(data_map, file_name.to_string());
+        eprintln!("Added private file to vault: {}", file_name);
+    } else {
+        eprintln!("Parsing public file hex network address: {}", file_address);
+        let data_addr = match DataAddress::from_hex(file_address) {
+            Ok(addr) => {
+                eprintln!("Successfully parsed public file address to DataAddress");
+                addr
+            },
+            Err(e) => {
+                eprintln!("Failed to parse public file address '{}': {:?}", file_address, e);
+                return Err(VaultError::FileNotFound);
+            }
+        };
+        
+        // Add to public files using the network address
+        user_data.public_files.insert(data_addr, file_name.to_string());
+        eprintln!("Added public file to vault: {}", file_name);
+    }
+    
+    // Save the updated user data back to vault (vault updates are free)
+    // Create an empty receipt for free vault operations
+    let empty_store_quote = match client.get_store_quotes(DataTypes::Chunk, std::iter::empty()).await {
+        Ok(quote) => quote,
+        Err(e) => {
+            eprintln!("Failed to get store quotes: {:?}", e);
+            return Err(VaultError::FileNotFound);
+        }
+    };
+    let receipt = autonomi::client::payment::receipt_from_store_quotes(empty_store_quote);
+    
+    match client.put_user_data_to_vault(secret_key, receipt.into(), user_data).await {
+        Ok(_) => {
+            eprintln!("Successfully updated vault with new file");
+            Ok(())
+        },
+        Err(e) => {
+            eprintln!("Failed to put user data to vault: {:?}", e);
+            Err(VaultError::FileNotFound)
+        }
+    }
+}

@@ -79,7 +79,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
     const localFiles = ref<IFile[]>([]);
     const localStructure = ref<ILocalFileStructure | null>(null);
     const failedArchives = ref<IFailedArchive[]>([]);
-    const loadingArchives = ref<{name: string, address: string, is_private: boolean}[]>([]);
+    const loadingArchives = ref<{ name: string, address: string, is_private: boolean }[]>([]);
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
     const pendingLocalStructure = ref(false);
@@ -115,7 +115,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
                 // Check if archive has a name (not empty after sanitization)
                 const hasName = archive.name && archive.name.trim() !== '';
-                
+
                 if (!hasName) {
                     // Unnamed archive - add files directly to root
                     archive.files.forEach((file: any) => {
@@ -152,7 +152,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                     // Named archive - create archive folder with unique name if needed
                     let archiveFolderName = archive.name;
                     let counter = 1;
-                    
+
                     // Handle duplicate archive names by checking if it's actually a different archive
                     while (rootDirectory.value!.getChild(archiveFolderName)) {
                         const existingChild = rootDirectory.value!.getChild(archiveFolderName);
@@ -212,15 +212,15 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                         // This is the file
                         current.addFile({
                             path: file.name,
-                            metadata: { size: 0, uploaded: 0 },
-                            file_access: null,
-                            access_data: null,
+                            metadata: {size: 0, uploaded: 0},
+                            file_access: file.is_private ? {Private: file.address} : {Public: file.address},
+                            access_data: file.is_private ? {Private: file.address} : {Public: file.address},
                             is_loaded: true,
                             is_loading: false,
                             load_error: false,
                             name: part,
                             archive_name: "",
-                            type: file.type || 'unknown'
+                            type: file.is_private ? 'private_file' : 'public_file'
                         });
                     } else {
                         // This is a subdirectory
@@ -260,12 +260,12 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
     const getLocalStructure = async () => {
         console.log(">>> Getting local file structure with streaming...");
-        
+
         // Generate new temp code for this load operation
         const tempCode = generateTempCode();
         currentLoadCode.value = tempCode;
         console.log(">>> Generated temp code for local load:", tempCode);
-        
+
         // Clear all state to show loading
         localStructure.value = null;
         localFiles.value = [];
@@ -284,7 +284,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
             };
 
             // Start streaming local structure updates with temp code
-            await invoke("get_local_structure_streaming", { tempCode });
+            await invoke("get_local_structure_streaming", {tempCode});
 
         } catch (error: any) {
             console.log(">>> ERROR: Failed to get local structure:", error);
@@ -324,33 +324,33 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                     addressHex: archive.address
                 });
             }
-            
+
             // Remove from loading list
             loadingArchives.value = loadingArchives.value.filter(a => a.address !== archive.address);
-            
+
             // Add files to archive and add to loaded archives
             archive.files = archiveContents;
             loadedArchives.value.set(archive.address, archive);
-            
+
             if (localStructure.value) {
                 localStructure.value.archives.push(archive);
             }
 
             console.log(`>>> Successfully loaded local archive: ${archive.name}`);
-            
+
         } catch (error: any) {
             console.error(`>>> Failed to load local archive: ${archive.name}`, error);
-            
+
             // Remove from loading list
             loadingArchives.value = loadingArchives.value.filter(a => a.address !== archive.address);
-            
+
             // Add to failed archives
             const failedArchive = {
                 name: archive.name,
                 address: archive.address,
                 is_private: archive.is_private
             };
-            
+
             if (!failedArchives.value.find(a => a.address === archive.address)) {
                 failedArchives.value.push(failedArchive);
                 if (localStructure.value) {
@@ -363,13 +363,13 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
     // Handle local updates from streaming
     const handleLocalUpdate = (update: any) => {
         console.log(">>> Received local update:", update.update_type, update);
-        
+
         // Validate temp code - ignore update if it doesn't match current load operation
         if (!update.temp_code || update.temp_code !== currentLoadCode.value) {
             console.log(">>> Ignoring local update - temp code mismatch:", update.temp_code, "vs", currentLoadCode.value);
             return;
         }
-        
+
         if (!localStructure.value) {
             localStructure.value = {
                 archives: [],
@@ -382,14 +382,14 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
             case "IndividualFiles":
                 // Add individual files immediately
                 localStructure.value.files = update.files;
-                
+
                 // Clear and rebuild flattened files array to avoid duplicates
                 localFiles.value = [];
                 update.files.forEach((file: any) => {
                     localFiles.value.push({
                         path: file.name,
-                        metadata: { size: 0, uploaded: 0 },
-                        file_access: null,
+                        metadata: {size: 0, uploaded: 0, created: 0, modified: 0},
+                        file_access: file.is_private ? {Private: file.address} : {Public: file.address},
                         is_loaded: true,
                         is_loading: false,
                         load_error: false,
@@ -400,7 +400,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
                 // Build initial directory structure with individual files
                 buildRootDirectory();
-                
+
                 // Hide loading once we have some content
                 if (update.files.length > 0) {
                     pendingLocalStructure.value = false;
@@ -410,7 +410,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
             case "ArchiveLoading":
                 if (update.loading_archive) {
                     // Add to loading archives list, avoiding duplicates
-                    const exists = loadingArchives.value.some(a => 
+                    const exists = loadingArchives.value.some(a =>
                         a.name === update.loading_archive!.name && a.address === update.loading_archive!.address);
                     if (!exists) {
                         loadingArchives.value.push({
@@ -428,25 +428,25 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                     loadingArchives.value = loadingArchives.value.filter(
                         a => a.address !== update.archive!.address
                     );
-                    
+
                     // Add the archive with files, avoiding duplicates
                     const archiveWithFiles = {
                         ...update.archive,
                         files: update.archive.files
                     };
-                    
+
                     // Check if archive already exists by address
                     const existingArchive = localStructure.value.archives.find(a => a.address === archiveWithFiles.address);
                     if (!existingArchive) {
                         localStructure.value.archives.push(archiveWithFiles);
                     }
-                    
+
                     // Add archive to loaded archives map
                     loadedArchives.value.set(update.archive.address, archiveWithFiles);
 
                     // Rebuild directory structure to include new archive
                     buildRootDirectory();
-                    
+
                     // Hide loading once we have some content
                     if (localFiles.value.length > 0 || localStructure.value.archives.length > 0) {
                         pendingLocalStructure.value = false;
@@ -460,9 +460,9 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                     loadingArchives.value = loadingArchives.value.filter(
                         a => a.address !== update.failed_archive!.address
                     );
-                    
+
                     // Add to failed archives list, avoiding duplicates
-                    const exists = failedArchives.value.some(a => 
+                    const exists = failedArchives.value.some(a =>
                         a.name === update.failed_archive!.name && a.address === update.failed_archive!.address);
                     if (!exists) {
                         localStructure.value.failed_archives.push(update.failed_archive);
@@ -472,7 +472,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                             is_private: update.failed_archive.is_private
                         });
                     }
-                    
+
                     // Rebuild directory to show failed archives
                     buildRootDirectory();
                 }

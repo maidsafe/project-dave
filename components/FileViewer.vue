@@ -17,6 +17,9 @@ import {basename} from '@tauri-apps/api/path';
 
 const toast = useToast();
 const confirm = useConfirm();
+
+// Define emits for notification system
+const emit = defineEmits(['show-notify', 'hide-notify']);
 const fileStore = useFileStore();
 const localFilesStore = useLocalFilesStore();
 const uploadStore = useUploadStore();
@@ -488,6 +491,33 @@ const menuFiles = computed(() => {
     }
   }
 
+  // Add upload to vault option for local files only
+  if (activeTab.value === 1 && !file?.is_loading_archive) {
+    if (file?.isArchive || file?.is_failed_archive) {
+      // Local archive or failed archive - upload archive to vault
+      items.push({
+        label: 'Add Archive to Vault',
+        icon: 'pi pi-cloud-upload',
+        class: 'text-blue-600',
+        command: () => {
+          handleAddToVault(file);
+          refFilesMenu.value.hide();
+        },
+      });
+    } else if (file?.path || file?.name) {
+      // Local file - upload file to vault
+      items.push({
+        label: 'Add to Vault',
+        icon: 'pi pi-cloud-upload',
+        class: 'text-blue-600',
+        command: () => {
+          handleAddToVault(file);
+          refFilesMenu.value.hide();
+        },
+      });
+    }
+  }
+
   return items;
 });
 
@@ -643,7 +673,6 @@ const menuUploadOptions = computed(() => [
 ]);
 
 // Upload functions
-const emit = defineEmits(["show-notify", "hide-notify"]);
 
 const filteredFiles = computed(() => {
   try {
@@ -1027,6 +1056,218 @@ const handleRemoveFromVault = async (file: any, isArchiveFile: boolean) => {
       // No action needed, user cancelled
     }
   });
+};
+
+const handleAddToVault = async (file: any) => {
+  try {
+    // Determine what we're adding
+    const fileName = file.name;
+    const isArchive = file.isArchive || file.is_failed_archive;
+
+    // Show confirmation dialog
+    const message = isArchive
+        ? `Add the archive "${fileName}" to your vault?`
+        : `Add the file "${fileName}" to your vault?`;
+
+    confirm.require({
+      message: message,
+      header: 'Add to Vault',
+      icon: 'pi pi-cloud-upload',
+      acceptProps: {
+        label: isArchive ? 'Add to Vault' : 'OK',
+        severity: 'success'
+      },
+      rejectProps: {
+        label: 'Cancel',
+        severity: 'secondary',
+        outlined: true
+      },
+      accept: async () => {
+        if (!isArchive) {
+          // For individual files, add them to the vault
+          try {
+            const walletStore = useWalletStore();
+            const vaultKeySignature = await walletStore.getVaultKeySignature();
+
+            // Get file address and privacy - extract address from file_access structure
+            let fileAddress = '';
+            const isPrivate = file.type === 'private_file';
+            
+            // Extract the network address from the file structure
+            if (file?.file_access?.Public) {
+              // For public files, use the public data address
+              fileAddress = file.file_access.Public;
+            } else if (file?.file_access?.Private) {
+              // For private files, convert the private data map to hex
+              if (typeof file.file_access.Private === 'string') {
+                fileAddress = file.file_access.Private;
+              } else if (Array.isArray(file.file_access.Private)) {
+                fileAddress = '0x' + file.file_access.Private.map((byte: number) =>
+                    byte.toString(16).padStart(2, '0')
+                ).join('');
+              }
+            } else if (file?.access_data?.Public) {
+              // Alternative structure for public files
+              fileAddress = file.access_data.Public;
+            } else if (file?.access_data?.Private) {
+              // Alternative structure for private files
+              if (typeof file.access_data.Private === 'string') {
+                fileAddress = file.access_data.Private;
+              } else if (Array.isArray(file.access_data.Private)) {
+                fileAddress = '0x' + file.access_data.Private.map((byte: number) =>
+                    byte.toString(16).padStart(2, '0')
+                ).join('');
+              }
+            } else if (file?.address) {
+              // Fallback to direct address field
+              fileAddress = file.address;
+            }
+
+            console.log('>>> Adding file to vault:', file);
+
+            console.log('Adding individual file to vault:', {
+              fileName,
+              fileAddress,
+              isPrivate,
+              fileType: file.type
+            });
+
+            if (!fileAddress) {
+              throw new Error('File address not found');
+            }
+
+            // Show notification that we're adding the file
+            emit('show-notify', {
+              notifyType: 'info',
+              title: 'Adding file to vault',
+              details: `Adding "${fileName}" to your vault...`,
+              enabledCancel: false
+            });
+
+            await invoke('add_local_file_to_vault', {
+              vaultKeySignature,
+              fileAddress,
+              fileName,
+              isPrivate
+            });
+
+            // Hide the notification
+            emit('hide-notify');
+
+            toast.add({
+              severity: 'success',
+              summary: 'Added to Vault',
+              detail: `File "${fileName}" has been added to your vault.`,
+              life: 3000,
+            });
+
+            // Refresh vault files
+            fileStore.getAllFiles();
+
+          } catch (error: any) {
+            console.error('Failed to add file to vault:', error);
+            
+            // Hide the notification on error
+            emit('hide-notify');
+            
+            toast.add({
+              severity: 'error',
+              summary: 'Failed to Add',
+              detail: error?.message || 'Failed to add file to vault.',
+              life: 3000,
+            });
+          }
+          return;
+        }
+
+        try {
+          // For archives, call backend to add to vault
+          const walletStore = useWalletStore();
+          const vaultKeySignature = await walletStore.getVaultKeySignature();
+
+          // Get archive address and privacy from archive object or from failed/loading archive
+          let archiveAddress;
+          let isPrivate;
+
+          if (file.archive) {
+            // Regular archive folder
+            archiveAddress = file.archive.address;
+            isPrivate = file.archive.is_private;
+          } else if (file.is_failed_archive || file.is_loading_archive) {
+            // Failed or loading archive - address is directly on the file object
+            archiveAddress = file.address;
+            isPrivate = file.is_private;
+          }
+
+          // Debug logging
+          console.log('File object:', file);
+          console.log('Archive data:', file.archive);
+          console.log('Archive address:', archiveAddress);
+          console.log('Is private:', isPrivate);
+
+          if (!archiveAddress) {
+            throw new Error('Archive address not found');
+          }
+
+          console.log('Calling add_local_archive_to_vault with:', {
+            vaultKeySignature,
+            archiveAddress,
+            archiveName: fileName,
+            isPrivate
+          });
+
+          // Show notification that we're adding the archive
+          emit('show-notify', {
+            notifyType: 'info',
+            title: 'Adding archive to vault',
+            details: `Adding archive "${fileName}" to your vault...`,
+            enabledCancel: false
+          });
+
+          await invoke('add_local_archive_to_vault', {
+            vaultKeySignature,
+            archiveAddress,
+            archiveName: fileName,
+            isPrivate
+          });
+
+          // Hide the notification
+          emit('hide-notify');
+
+          toast.add({
+            severity: 'success',
+            summary: 'Added to Vault',
+            detail: `Archive "${fileName}" has been added to your vault.`,
+            life: 3000,
+          });
+
+          // Refresh vault files
+          fileStore.getAllFiles();
+
+        } catch (error: any) {
+          console.error('Failed to add to vault:', error);
+          
+          // Hide the notification on error
+          emit('hide-notify');
+          
+          toast.add({
+            severity: 'error',
+            summary: 'Failed to Add',
+            detail: error?.message || 'Failed to add archive to vault.',
+            life: 3000,
+          });
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('Error in handleAddToVault:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to process request.',
+      life: 3000,
+    });
+  }
 };
 
 const handleGoBack = (target: any) => {

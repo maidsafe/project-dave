@@ -265,6 +265,84 @@ async fn remove_from_vault(
 }
 
 #[tauri::command]
+async fn add_local_archive_to_vault(
+    vault_key_signature: String,
+    archive_address: String,
+    archive_name: String,
+    is_private: bool,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), CommandError> {
+    eprintln!("=== add_local_archive_to_vault COMMAND ===");
+    eprintln!("vault_key_signature: {}", vault_key_signature);
+    eprintln!("archive_address: {}", archive_address);
+    eprintln!("archive_name: {}", archive_name);
+    eprintln!("is_private: {}", is_private);
+    
+    let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    ) {
+        Ok(key) => {
+            eprintln!("Successfully parsed vault key");
+            key
+        },
+        Err(e) => {
+            eprintln!("Failed to parse vault key: {:?}", e);
+            return Err(CommandError {
+                message: format!("Invalid vault key signature: {:?}", e),
+            });
+        }
+    };
+
+    ant::files::add_local_archive_to_vault(&secret_key, &archive_address, &archive_name, is_private, shared_client)
+        .await
+        .map_err(|err| {
+            eprintln!("add_local_archive_to_vault failed with error: {:?}", err);
+            CommandError {
+                message: err.to_string(),
+            }
+        })
+}
+
+#[tauri::command]
+async fn add_local_file_to_vault(
+    vault_key_signature: String,
+    file_address: String,
+    file_name: String,
+    is_private: bool,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), CommandError> {
+    eprintln!("=== add_local_file_to_vault COMMAND ===");
+    eprintln!("vault_key_signature: {}", vault_key_signature);
+    eprintln!("file_address: {}", file_address);
+    eprintln!("file_name: {}", file_name);
+    eprintln!("is_private: {}", is_private);
+    
+    let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    ) {
+        Ok(key) => {
+            eprintln!("Successfully parsed vault key");
+            key
+        },
+        Err(e) => {
+            eprintln!("Failed to parse vault key: {:?}", e);
+            return Err(CommandError {
+                message: format!("Invalid vault key signature: {:?}", e),
+            });
+        }
+    };
+
+    ant::files::add_local_file_to_vault(&secret_key, &file_address, &file_name, is_private, shared_client)
+        .await
+        .map_err(|err| {
+            eprintln!("add_local_file_to_vault failed with error: {:?}", err);
+            CommandError {
+                message: err.to_string(),
+            }
+        })
+}
+
+#[tauri::command]
 async fn download_private_file(
     data_map: DataMapChunk,
     to_dest: PathBuf,
@@ -475,6 +553,8 @@ pub async fn run() {
             get_local_structure_streaming,
             load_local_private_archive,
             load_local_public_archive,
+            add_local_archive_to_vault,
+            add_local_file_to_vault,
             app_data,
             app_data_store,
             show_item_in_file_manager,

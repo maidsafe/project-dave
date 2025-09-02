@@ -1,5 +1,7 @@
 //! Local storage for file archives and addresses, similar to ant-cli
 
+use crate::ant::client::SharedClient;
+use crate::ant::files::PublicOrPrivateFile;
 use autonomi::client::files::archive_private::PrivateArchiveDataMap;
 use autonomi::client::files::archive_public::ArchiveAddress;
 use autonomi::data::DataAddress;
@@ -7,10 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use thiserror::Error as ThisError;
-use crate::ant::client::SharedClient;
-use crate::ant::files::PublicOrPrivateFile;
 use tauri::{AppHandle, Emitter, State};
+use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
 pub enum LocalStorageError {
@@ -46,12 +46,11 @@ struct PublicFile {
 
 /// Get the local user data directory path - same as ant-cli
 fn get_user_data_dir() -> Result<PathBuf, LocalStorageError> {
-    let mut home_dirs = dirs_next::data_dir()
-        .ok_or(LocalStorageError::NoDataDir)?;
+    let mut home_dirs = dirs_next::data_dir().ok_or(LocalStorageError::NoDataDir)?;
     home_dirs.push("autonomi");
     home_dirs.push("client");
     home_dirs.push("user_data");
-    
+
     fs::create_dir_all(&home_dirs).map_err(LocalStorageError::WriteError)?;
     Ok(home_dirs)
 }
@@ -135,12 +134,14 @@ pub fn get_local_public_file_archives() -> Result<HashMap<ArchiveAddress, String
     fs::create_dir_all(&file_archives_path).map_err(LocalStorageError::WriteError)?;
 
     let mut file_archives = HashMap::new();
-    
+
     for entry in walkdir::WalkDir::new(file_archives_path)
         .min_depth(1)
         .max_depth(1)
     {
-        let entry = entry.map_err(|e| LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let entry = entry.map_err(|e| {
+            LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e))
+        })?;
         let file_name = entry.file_name().to_string_lossy();
         if let Ok(file_archive_address) = DataAddress::from_hex(&file_name) {
             if let Ok(file_archive_name) = fs::read_to_string(entry.path()) {
@@ -160,12 +161,14 @@ pub fn get_local_private_file_archives(
     fs::create_dir_all(&private_file_archives_path).map_err(LocalStorageError::WriteError)?;
 
     let mut private_file_archives = HashMap::new();
-    
+
     for entry in walkdir::WalkDir::new(private_file_archives_path)
         .min_depth(1)
         .max_depth(1)
     {
-        let entry = entry.map_err(|e| LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let entry = entry.map_err(|e| {
+            LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e))
+        })?;
         if let Ok(file_content) = fs::read_to_string(entry.path()) {
             if let Ok(private_file_archive) =
                 serde_json::from_str::<PrivateFileArchive>(&file_content)
@@ -197,7 +200,9 @@ pub fn get_local_public_files() -> Result<HashMap<DataAddress, String>, LocalSto
         .min_depth(1)
         .max_depth(1)
     {
-        let entry = entry.map_err(|e| LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let entry = entry.map_err(|e| {
+            LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e))
+        })?;
         if let Ok(content) = fs::read_to_string(entry.path()) {
             if let Ok(public_file) = serde_json::from_str::<PublicFile>(&content) {
                 if let Ok(data_address) = DataAddress::from_hex(&public_file.data_address) {
@@ -225,12 +230,12 @@ pub fn get_local_private_files() -> Result<HashMap<PrivateArchiveDataMap, String
         .min_depth(1)
         .max_depth(1)
     {
-        let entry = entry.map_err(|e| LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let entry = entry.map_err(|e| {
+            LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e))
+        })?;
         if let Ok(content) = fs::read_to_string(entry.path()) {
             if let Ok(private_file) = serde_json::from_str::<PrivateFile>(&content) {
-                if let Ok(datamap) =
-                    PrivateArchiveDataMap::from_hex(&private_file.secret_access)
-                {
+                if let Ok(datamap) = PrivateArchiveDataMap::from_hex(&private_file.secret_access) {
                     files.insert(datamap, private_file.name);
                 }
             }
@@ -318,23 +323,45 @@ pub struct LocalFileInArchive {
 }
 
 /// Get archive access data for loading its contents
-pub fn get_local_private_archive_access(local_addr: &str) -> Result<PrivateArchiveDataMap, LocalStorageError> {
+pub fn get_local_private_archive_access(
+    local_addr: &str,
+) -> Result<PrivateArchiveDataMap, LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let private_file_archives_path = user_data_path.join("private_file_archives");
     let file_path = private_file_archives_path.join(local_addr);
-    
+
     let file_content = fs::read_to_string(file_path).map_err(LocalStorageError::ReadError)?;
-    let private_file_archive: PrivateFileArchive = serde_json::from_str(&file_content)
-        .map_err(LocalStorageError::ParseError)?;
-    let private_file_archive_access = PrivateArchiveDataMap::from_hex(&private_file_archive.secret_access)
-        .map_err(|e| LocalStorageError::HexError(e.to_string()))?;
-        
+    let private_file_archive: PrivateFileArchive =
+        serde_json::from_str(&file_content).map_err(LocalStorageError::ParseError)?;
+    let private_file_archive_access =
+        PrivateArchiveDataMap::from_hex(&private_file_archive.secret_access)
+            .map_err(|e| LocalStorageError::HexError(e.to_string()))?;
+
     Ok(private_file_archive_access)
 }
 
 /// Get public archive address for loading its contents  
-pub fn get_local_public_archive_address(address_hex: &str) -> Result<ArchiveAddress, LocalStorageError> {
+pub fn get_local_public_archive_address(
+    address_hex: &str,
+) -> Result<ArchiveAddress, LocalStorageError> {
     DataAddress::from_hex(address_hex).map_err(|e| LocalStorageError::HexError(e.to_string()))
+}
+
+/// Get private file access data for adding to vault
+pub fn get_local_private_file_access(
+    local_addr: &str,
+) -> Result<PrivateArchiveDataMap, LocalStorageError> {
+    let user_data_path = get_user_data_dir()?;
+    let private_files_path = user_data_path.join("private_files");
+    let file_path = private_files_path.join(local_addr);
+
+    let file_content = fs::read_to_string(file_path).map_err(LocalStorageError::ReadError)?;
+    let private_file: PrivateFile =
+        serde_json::from_str(&file_content).map_err(LocalStorageError::ParseError)?;
+    let private_file_access = PrivateArchiveDataMap::from_hex(&private_file.secret_access)
+        .map_err(|e| LocalStorageError::HexError(e.to_string()))?;
+
+    Ok(private_file_access)
 }
 
 /// Get all local file data in a structured format
@@ -385,8 +412,12 @@ pub async fn get_local_structure_streaming(
     temp_code: String,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), LocalStorageError> {
-    let client = shared_client.get_client().await
-        .map_err(|e| LocalStorageError::ReadError(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+    let client = shared_client.get_client().await.map_err(|e| {
+        LocalStorageError::ReadError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    })?;
 
     // Get local file data first
     let local_data = get_all_local_files()?;
@@ -423,9 +454,12 @@ pub async fn get_local_structure_streaming(
             is_complete: false,
             temp_code: temp_code.clone(),
         };
-        app.emit("local-update", update).map_err(|e| LocalStorageError::WriteError(
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-        ))?;
+        app.emit("local-update", update).map_err(|e| {
+            LocalStorageError::WriteError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
+        })?;
     }
 
     // Process archives concurrently
@@ -437,7 +471,7 @@ pub async fn get_local_structure_streaming(
         let app = app.clone();
         let archive_name = archive.name.clone();
         let archive_address = archive.address.clone();
-        
+
         // Emit loading status immediately
         let loading_update = LocalUpdate {
             update_type: LocalUpdateType::ArchiveLoading,
@@ -453,64 +487,62 @@ pub async fn get_local_structure_streaming(
             temp_code: temp_code.clone(),
         };
         let _ = app.emit("local-update", loading_update);
-        
+
         let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match get_local_private_archive_access(&archive_address) {
-                Ok(archive_datamap) => {
-                    match client.archive_get(&archive_datamap).await {
-                        Ok(archive) => {
-                            let mut files: Vec<LocalFileInArchive> = vec![];
-                            
-                            for (filepath, (data_map, metadata)) in archive.map() {
-                                files.push(LocalFileInArchive {
-                                    path: filepath.display().to_string(),
-                                    metadata: metadata.clone(),
-                                    file_access: PublicOrPrivateFile::Private(data_map.clone()),
-                                    is_private: true,
-                                });
-                            }
+                Ok(archive_datamap) => match client.archive_get(&archive_datamap).await {
+                    Ok(archive) => {
+                        let mut files: Vec<LocalFileInArchive> = vec![];
 
-                            let archive_loaded = LocalArchiveLoaded {
-                                name: archive_name.clone(),
-                                address: archive_address.clone(),
+                        for (filepath, (data_map, metadata)) in archive.map() {
+                            files.push(LocalFileInArchive {
+                                path: filepath.display().to_string(),
+                                metadata: metadata.clone(),
+                                file_access: PublicOrPrivateFile::Private(data_map.clone()),
                                 is_private: true,
-                                files,
-                            };
-
-                            let update = LocalUpdate {
-                                update_type: LocalUpdateType::ArchiveLoaded,
-                                archive: Some(archive_loaded),
-                                failed_archive: None,
-                                loading_archive: None,
-                                files: vec![],
-                                is_complete: false,
-                                temp_code: temp_code.clone(),
-                            };
-
-                            let _ = app.emit("local-update", update);
+                            });
                         }
-                        Err(_) => {
-                            let failed_archive = LocalFailedArchive {
-                                name: archive_name.clone(),
-                                address: archive_address.clone(),
-                                is_private: true,
-                            };
 
-                            let update = LocalUpdate {
-                                update_type: LocalUpdateType::ArchiveFailed,
-                                archive: None,
-                                failed_archive: Some(failed_archive),
-                                loading_archive: None,
-                                files: vec![],
-                                is_complete: false,
-                                temp_code: temp_code.clone(),
-                            };
+                        let archive_loaded = LocalArchiveLoaded {
+                            name: archive_name.clone(),
+                            address: archive_address.clone(),
+                            is_private: true,
+                            files,
+                        };
 
-                            let _ = app.emit("local-update", update);
-                        }
+                        let update = LocalUpdate {
+                            update_type: LocalUpdateType::ArchiveLoaded,
+                            archive: Some(archive_loaded),
+                            failed_archive: None,
+                            loading_archive: None,
+                            files: vec![],
+                            is_complete: false,
+                            temp_code: temp_code.clone(),
+                        };
+
+                        let _ = app.emit("local-update", update);
                     }
-                }
+                    Err(_) => {
+                        let failed_archive = LocalFailedArchive {
+                            name: archive_name.clone(),
+                            address: archive_address.clone(),
+                            is_private: true,
+                        };
+
+                        let update = LocalUpdate {
+                            update_type: LocalUpdateType::ArchiveFailed,
+                            archive: None,
+                            failed_archive: Some(failed_archive),
+                            loading_archive: None,
+                            files: vec![],
+                            is_complete: false,
+                            temp_code: temp_code.clone(),
+                        };
+
+                        let _ = app.emit("local-update", update);
+                    }
+                },
                 Err(_) => {
                     let failed_archive = LocalFailedArchive {
                         name: archive_name.clone(),
@@ -541,7 +573,7 @@ pub async fn get_local_structure_streaming(
         let app = app.clone();
         let archive_name = archive.name.clone();
         let archive_address = archive.address.clone();
-        
+
         // Emit loading status immediately
         let loading_update = LocalUpdate {
             update_type: LocalUpdateType::ArchiveLoading,
@@ -557,64 +589,62 @@ pub async fn get_local_structure_streaming(
             temp_code: temp_code.clone(),
         };
         let _ = app.emit("local-update", loading_update);
-        
+
         let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
             match get_local_public_archive_address(&archive_address) {
-                Ok(archive_addr) => {
-                    match client.archive_get_public(&archive_addr).await {
-                        Ok(archive) => {
-                            let mut files: Vec<LocalFileInArchive> = vec![];
-                            
-                            for (filepath, (data_addr, metadata)) in archive.map() {
-                                files.push(LocalFileInArchive {
-                                    path: filepath.display().to_string(),
-                                    metadata: metadata.clone(),
-                                    file_access: PublicOrPrivateFile::Public(*data_addr),
-                                    is_private: false,
-                                });
-                            }
+                Ok(archive_addr) => match client.archive_get_public(&archive_addr).await {
+                    Ok(archive) => {
+                        let mut files: Vec<LocalFileInArchive> = vec![];
 
-                            let archive_loaded = LocalArchiveLoaded {
-                                name: archive_name.clone(),
-                                address: archive_address.clone(),
+                        for (filepath, (data_addr, metadata)) in archive.map() {
+                            files.push(LocalFileInArchive {
+                                path: filepath.display().to_string(),
+                                metadata: metadata.clone(),
+                                file_access: PublicOrPrivateFile::Public(*data_addr),
                                 is_private: false,
-                                files,
-                            };
-
-                            let update = LocalUpdate {
-                                update_type: LocalUpdateType::ArchiveLoaded,
-                                archive: Some(archive_loaded),
-                                failed_archive: None,
-                                loading_archive: None,
-                                files: vec![],
-                                is_complete: false,
-                                temp_code: temp_code.clone(),
-                            };
-
-                            let _ = app.emit("local-update", update);
+                            });
                         }
-                        Err(_) => {
-                            let failed_archive = LocalFailedArchive {
-                                name: archive_name.clone(),
-                                address: archive_address.clone(),
-                                is_private: false,
-                            };
 
-                            let update = LocalUpdate {
-                                update_type: LocalUpdateType::ArchiveFailed,
-                                archive: None,
-                                failed_archive: Some(failed_archive),
-                                loading_archive: None,
-                                files: vec![],
-                                is_complete: false,
-                                temp_code: temp_code.clone(),
-                            };
+                        let archive_loaded = LocalArchiveLoaded {
+                            name: archive_name.clone(),
+                            address: archive_address.clone(),
+                            is_private: false,
+                            files,
+                        };
 
-                            let _ = app.emit("local-update", update);
-                        }
+                        let update = LocalUpdate {
+                            update_type: LocalUpdateType::ArchiveLoaded,
+                            archive: Some(archive_loaded),
+                            failed_archive: None,
+                            loading_archive: None,
+                            files: vec![],
+                            is_complete: false,
+                            temp_code: temp_code.clone(),
+                        };
+
+                        let _ = app.emit("local-update", update);
                     }
-                }
+                    Err(_) => {
+                        let failed_archive = LocalFailedArchive {
+                            name: archive_name.clone(),
+                            address: archive_address.clone(),
+                            is_private: false,
+                        };
+
+                        let update = LocalUpdate {
+                            update_type: LocalUpdateType::ArchiveFailed,
+                            archive: None,
+                            failed_archive: Some(failed_archive),
+                            loading_archive: None,
+                            files: vec![],
+                            is_complete: false,
+                            temp_code: temp_code.clone(),
+                        };
+
+                        let _ = app.emit("local-update", update);
+                    }
+                },
                 Err(_) => {
                     let failed_archive = LocalFailedArchive {
                         name: archive_name.clone(),
@@ -654,9 +684,12 @@ pub async fn get_local_structure_streaming(
         is_complete: true,
         temp_code: temp_code.clone(),
     };
-    app.emit("local-update", completion_update).map_err(|e| LocalStorageError::WriteError(
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-    ))?;
+    app.emit("local-update", completion_update).map_err(|e| {
+        LocalStorageError::WriteError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    })?;
 
     Ok(())
 }
