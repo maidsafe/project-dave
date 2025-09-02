@@ -31,16 +31,6 @@ const handleClickWallet = () => {
   }
 };
 
-const handleClickUpload = () => {
-  if (wallet.value.isConnected) {
-    navigateTo('/upload');
-  } else {
-    walletStore.showConnectWallet(() => {
-      navigateTo('/upload');
-    });
-  }
-};
-
 const toggleTokenDropdown = () => {
   if (!wallet.value.isConnected) {
     return walletStore.showConnectWallet();
@@ -176,13 +166,6 @@ onBeforeUnmount(() => {
           >
             <IconFiles class="w-5 h-5"/>
           </NuxtLink>
-          <div
-              @click="handleClickUpload"
-              class="w-10 h-10 bg-autonomi-red-300 flex items-center justify-center rounded-full cursor-pointer"
-              v-tooltip.bottom="'Upload'"
-          >
-            <i class="pi pi-plus-circle text-white"/>
-          </div>
 
           <!-- TOKEN BALANCE DROPDOWN -->
           <div ref="refTokenDropdown">
