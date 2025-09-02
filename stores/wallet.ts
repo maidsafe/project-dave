@@ -235,6 +235,8 @@ export const useWalletStore = defineStore("wallet", () => {
                     args: [input]
                 });
 
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
                 // wait for transaction
                 let _receipt = await waitForTransactionReceipt(wagmiAdapter.wagmiConfig, {hash: txHash});
 

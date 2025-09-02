@@ -64,6 +64,18 @@ const selectedDownloadItem = ref<any>();
 const selectedFileItem = ref<any>();
 const selectedUploadItem = ref<any>();
 const showUploadModal = ref(false);
+const showUploadOptionsModal = ref(false);
+const uploadOptionsData = ref<{
+  files: any[];
+  isFolder: boolean;
+  isPrivate: boolean;
+  addToVault: boolean;
+}>({
+  files: [],
+  isFolder: false,
+  isPrivate: true, // Default to private
+  addToVault: true  // Default to adding to vault
+});
 const uploadSteps = ref<any[]>([]);
 const currentUploadStep = ref<string>('');
 const quoteData = ref<any>(null);
@@ -762,7 +774,14 @@ const openPickerAndUploadFiles = async () => {
       })
   );
 
-  await uploadFiles(files);
+  // Show upload options modal instead of directly uploading
+  uploadOptionsData.value = {
+    files,
+    isFolder: false,
+    isPrivate: true,
+    addToVault: true
+  };
+  showUploadOptionsModal.value = true;
 };
 
 const openFolderPickerAndUploadFiles = async () => {
@@ -770,12 +789,45 @@ const openFolderPickerAndUploadFiles = async () => {
   if (selected === null) return;
 
   const files = [{path: selected, name: await basename(selected)}];
-  await uploadFiles(files, true);
+  
+  // Show upload options modal instead of directly uploading
+  uploadOptionsData.value = {
+    files,
+    isFolder: true,
+    isPrivate: true,
+    addToVault: true
+  };
+  showUploadOptionsModal.value = true;
 };
 
-const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolder: boolean = false) => {
+// Upload options modal handlers
+const handleConfirmUploadOptions = async () => {
+  showUploadOptionsModal.value = false;
+  
+  const { files, isFolder, isPrivate, addToVault } = uploadOptionsData.value;
+  
+  // All upload options are now fully supported!
+  
+  await uploadFiles(files, isFolder, isPrivate, addToVault);
+};
+
+const handleCancelUploadOptions = () => {
+  showUploadOptionsModal.value = false;
+  uploadOptionsData.value = {
+    files: [],
+    isFolder: false,
+    isPrivate: true,
+    addToVault: true
+  };
+};
+
+const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true) => {
   try {
-    let vaultKeySignature = await walletStore.getVaultKeySignature();
+    // Get vault key signature if needed (for private uploads or when adding to vault)
+    let vaultKeySignature = "";
+    if (isPrivate || addToVault) {
+      vaultKeySignature = await walletStore.getVaultKeySignature();
+    }
 
     // Create upload entry in the store (but keep it pending until payment)
     const frontendUploadId = uploadsStore.createUpload(files);
@@ -820,6 +872,8 @@ const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolde
       archiveName,
       vaultKeySignature,
       uploadId: frontendUploadId, // Pass our ID to backend
+      isPrivate, // Use actual privacy option
+      addToVault, // Use actual vault option
     });
 
     console.log(">>> Upload started with ID:", frontendUploadId);
@@ -2893,6 +2947,123 @@ onMounted(async () => {
       </TabView>
     </div>
 
+
+    <!-- Upload Options Modal -->
+    <Dialog
+        v-model:visible="showUploadOptionsModal"
+        modal
+        header="Upload Options"
+        :style="{ width: '450px' }"
+        :closable="true"
+    >
+      <div class="flex flex-col gap-6 p-1">
+        <!-- File Info -->
+        <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+          <div class="flex items-center gap-3">
+            <i :class="uploadOptionsData.isFolder ? 'pi pi-folder' : 'pi pi-file'" class="text-autonomi-blue-500"></i>
+            <div>
+              <div class="font-semibold text-sm">
+                {{ uploadOptionsData.isFolder ? 'Folder' : (uploadOptionsData.files.length === 1 ? 'File' : 'Files') }}
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">
+                {{ uploadOptionsData.isFolder ? uploadOptionsData.files[0]?.name : 
+                   (uploadOptionsData.files.length === 1 ? uploadOptionsData.files[0]?.name : `${uploadOptionsData.files.length} files`) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy Options -->
+        <div class="space-y-3">
+          <label class="text-sm font-semibold">Privacy</label>
+          <div class="space-y-3">
+            <div class="flex items-center">
+              <RadioButton 
+                v-model="uploadOptionsData.isPrivate" 
+                inputId="private" 
+                name="privacy" 
+                :value="true" 
+              />
+              <label for="private" class="ml-2 flex items-center gap-2 cursor-pointer">
+                <i class="pi pi-lock text-autonomi-blue-500"></i>
+                <div>
+                  <div class="font-medium">Private</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Encrypted and accessible only with your signature</div>
+                </div>
+              </label>
+            </div>
+            <div class="flex items-center">
+              <RadioButton 
+                v-model="uploadOptionsData.isPrivate" 
+                inputId="public" 
+                name="privacy" 
+                :value="false" 
+              />
+              <label for="public" class="ml-2 flex items-center gap-2 cursor-pointer">
+                <i class="pi pi-globe text-green-500"></i>
+                <div>
+                  <div class="font-medium">Public</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Accessible to anyone with the data address</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vault Options -->
+        <div class="space-y-3">
+          <label class="text-sm font-semibold">Storage</label>
+          <div class="space-y-3">
+            <div class="flex items-center">
+              <RadioButton 
+                v-model="uploadOptionsData.addToVault" 
+                inputId="vault" 
+                name="storage" 
+                :value="true" 
+              />
+              <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
+                <i class="pi pi-database text-autonomi-blue-500"></i>
+                <div>
+                  <div class="font-medium">Add to Vault</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault for easy access</div>
+                </div>
+              </label>
+            </div>
+            <div class="flex items-center">
+              <RadioButton 
+                v-model="uploadOptionsData.addToVault" 
+                inputId="network-only" 
+                name="storage" 
+                :value="false" 
+              />
+              <label for="network-only" class="ml-2 flex items-center gap-2 cursor-pointer">
+                <i class="pi pi-cloud text-gray-500"></i>
+                <div>
+                  <div class="font-medium">Network Only</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Store only on network, save data address manually</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <Button
+              label="Cancel"
+              severity="secondary"
+              @click="handleCancelUploadOptions"
+              outlined
+          />
+          <Button
+              label="Upload"
+              @click="handleConfirmUploadOptions"
+          />
+        </div>
+      </template>
+    </Dialog>
 
     <!-- Upload Progress Modal -->
     <DialogInvoice

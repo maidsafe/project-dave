@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
-use std::collections::HashMap;
 use ant::{
     app_data::AppData,
     files::{FileFromVault, VaultStructure},
@@ -13,9 +12,9 @@ use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
 use autonomi::client::quote::StoreQuote;
 use autonomi::client::vault::VaultSecretKey;
-use autonomi::files::PrivateArchive;
-use autonomi::Chunk;
+use autonomi::{Chunk};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 // Removed unused rand import
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
@@ -31,13 +30,32 @@ pub enum PendingUploadData {
         store_quote: StoreQuote,
         secret_key: VaultSecretKey,
     },
-    Archive {
-        files: Vec<File>,
-        archive_name: String,
-        private_archive: PrivateArchive,
+    SingleFilePublic {
+        file: File,
+        datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
-        secret_key: VaultSecretKey,
+        add_to_vault: bool,
+        vault_secret_key: Option<VaultSecretKey>,
+    },
+    PrivateArchive {
+        files: Vec<File>,
+        archive_name: String,
+        archive_datamap: DataMapChunk,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        add_to_vault: bool,
+        vault_secret_key: Option<VaultSecretKey>,
+    },
+    PublicArchive {
+        files: Vec<File>,
+        archive_name: String,
+        archive_datamap: DataMapChunk,
+        file_datamaps: Vec<DataMapChunk>,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        add_to_vault: bool,
+        vault_secret_key: Option<VaultSecretKey>,
     },
 }
 
@@ -47,16 +65,100 @@ pub struct PendingUploads {
 }
 
 impl PendingUploads {
-    pub fn store_single_file(&mut self, upload_id: String, file: File, datamap: DataMapChunk, chunks: Vec<Chunk>, store_quote: StoreQuote, secret_key: VaultSecretKey) {
-        self.uploads.insert(upload_id, PendingUploadData::SingleFile {
-            file, datamap, chunks, store_quote, secret_key
-        });
+    pub fn store_single_file(
+        &mut self,
+        upload_id: String,
+        file: File,
+        datamap: DataMapChunk,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        secret_key: VaultSecretKey,
+    ) {
+        self.uploads.insert(
+            upload_id,
+            PendingUploadData::SingleFile {
+                file,
+                datamap,
+                chunks,
+                store_quote,
+                secret_key,
+            },
+        );
     }
 
-    pub fn store_archive(&mut self, upload_id: String, files: Vec<File>, archive_name: String, private_archive: PrivateArchive, chunks: Vec<Chunk>, store_quote: StoreQuote, secret_key: VaultSecretKey) {
-        self.uploads.insert(upload_id, PendingUploadData::Archive {
-            files, archive_name, private_archive, chunks, store_quote, secret_key
-        });
+    pub fn store_single_file_public(
+        &mut self,
+        upload_id: String,
+        file: File,
+        datamap: DataMapChunk,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        add_to_vault: bool,
+        vault_secret_key: Option<VaultSecretKey>,
+    ) {
+        self.uploads.insert(
+            upload_id,
+            PendingUploadData::SingleFilePublic {
+                file,
+                datamap,
+                chunks,
+                store_quote,
+                add_to_vault,
+                vault_secret_key,
+            },
+        );
+    }
+
+    pub fn store_public_archive(
+        &mut self,
+        upload_id: String,
+        files: Vec<File>,
+        archive_name: String,
+        archive_datamap: DataMapChunk,
+        file_datamaps: Vec<DataMapChunk>,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        add_to_vault: bool,
+        vault_secret_key: Option<VaultSecretKey>,
+    ) {
+        self.uploads.insert(
+            upload_id,
+            PendingUploadData::PublicArchive {
+                files,
+                archive_name,
+                archive_datamap,
+                file_datamaps,
+                chunks,
+                store_quote,
+                add_to_vault,
+                vault_secret_key,
+            },
+        );
+    }
+
+    pub fn store_private_archive(
+        &mut self,
+        upload_id: String,
+        files: Vec<File>,
+        archive_name: String,
+        archive_datamap: DataMapChunk,
+        chunks: Vec<Chunk>,
+        store_quote: StoreQuote,
+        add_to_vault: bool,
+        vault_secret_key: Option<VaultSecretKey>,
+    ) {
+        self.uploads.insert(
+            upload_id,
+            PendingUploadData::PrivateArchive {
+                files,
+                archive_name,
+                archive_datamap,
+                chunks,
+                store_quote,
+                add_to_vault,
+                vault_secret_key,
+            },
+        );
     }
 
     pub fn take(&mut self, upload_id: &str) -> Option<PendingUploadData> {
@@ -108,15 +210,27 @@ async fn start_upload(
     files: Vec<File>,
     archive_name: Option<String>,
     vault_key_signature: String,
-    upload_id: String, // Frontend provides the upload ID
+    upload_id: String,  // Frontend provides the upload ID
+    is_private: bool,   // New: privacy option
+    add_to_vault: bool, // New: vault storage option
     shared_client: State<'_, SharedClient>,
     pending_uploads: State<'_, PendingUploadsState>,
-) -> Result<(), CommandError> { // No need to return ID since frontend already has it
-    
-    let secret_key = autonomi::client::vault::key::vault_key_from_signature_hex(
-        vault_key_signature.trim_start_matches("0x"),
-    )
-    .map_err(|e| CommandError { message: e.to_string() })?;
+) -> Result<(), CommandError> {
+    // No need to return ID since frontend already has it
+
+    // Determine vault secret key based on options
+    let vault_secret_key = if add_to_vault {
+        Some(
+            autonomi::client::vault::key::vault_key_from_signature_hex(
+                vault_key_signature.trim_start_matches("0x"),
+            )
+            .map_err(|e| CommandError {
+                message: e.to_string(),
+            })?,
+        )
+    } else {
+        None
+    };
 
     // Check if this is a single file upload (not a directory)
     let is_single_file = files.len() == 1 && {
@@ -128,31 +242,79 @@ async fn start_upload(
     };
 
     if is_single_file {
-        ant::files::start_single_file_upload(
-            app,
-            files.into_iter().next().unwrap(),
-            &secret_key,
-            upload_id.clone(),
-            shared_client,
-            Some(&*pending_uploads),
-        )
-        .await
-        .map_err(|e| CommandError { message: e.to_string() })?;
+        if is_private {
+            // Private file upload - always requires vault key for encryption
+            let secret_key = vault_secret_key.ok_or_else(|| CommandError {
+                message: "Private uploads require a vault signature".to_string(),
+            })?;
+
+            ant::files::start_single_file_upload(
+                app,
+                files.into_iter().next().unwrap(),
+                &secret_key,
+                upload_id.clone(),
+                shared_client,
+                Some(&*pending_uploads),
+            )
+            .await
+            .map_err(|e| CommandError {
+                message: e.to_string(),
+            })?;
+        } else {
+            // Public file upload - vault key is optional
+            ant::files::start_single_file_upload_public(
+                app,
+                files.into_iter().next().unwrap(),
+                upload_id.clone(),
+                add_to_vault,
+                vault_secret_key.as_ref(),
+                shared_client,
+                Some(&*pending_uploads),
+            )
+            .await
+            .map_err(|e| CommandError {
+                message: e.to_string(),
+            })?;
+        }
     } else {
+        // Archive uploads - support both public and private archives
         let archive_name = archive_name.unwrap_or_default();
-        ant::files::start_archive_upload(
-            app,
-            files,
-            archive_name,
-            &secret_key,
-            upload_id.clone(),
-            shared_client,
-            Some(&*pending_uploads),
-        )
-        .await
-        .map_err(|e| CommandError { message: e.to_string() })?;
+
+        if is_private {
+            // Private archive upload - vault key is optional (only needed for add_to_vault)
+            ant::files::start_private_archive_upload(
+                app,
+                files,
+                archive_name,
+                upload_id.clone(),
+                add_to_vault,
+                vault_secret_key.as_ref(),
+                shared_client,
+                Some(&*pending_uploads),
+            )
+            .await
+            .map_err(|e| CommandError {
+                message: e.to_string(),
+            })?;
+        } else {
+            // Public archive upload - vault key is optional (only needed for add_to_vault)
+            ant::files::start_public_archive_upload(
+                app,
+                files,
+                archive_name,
+                upload_id.clone(),
+                add_to_vault,
+                vault_secret_key.as_ref(),
+                shared_client,
+                Some(&*pending_uploads),
+            )
+            .await
+            .map_err(|e| CommandError {
+                message: e.to_string(),
+            })?;
+        }
     }
-    
+
     Ok(())
 }
 
@@ -164,24 +326,116 @@ async fn confirm_upload_payment(
     pending_uploads: State<'_, PendingUploadsState>,
 ) -> Result<(), CommandError> {
     let mut pending = pending_uploads.lock().await;
-    
+
     if let Some(upload_data) = pending.take(&upload_id) {
         match upload_data {
-            PendingUploadData::SingleFile { file, datamap, chunks, store_quote, secret_key } => {
+            PendingUploadData::SingleFile {
+                file,
+                datamap,
+                chunks,
+                store_quote,
+                secret_key,
+            } => {
                 ant::files::execute_single_file_upload(
-                    app, file, datamap, chunks, store_quote, &secret_key, upload_id, shared_client
-                ).await.map_err(|e| CommandError { message: e.to_string() })?;
+                    app,
+                    file,
+                    datamap,
+                    chunks,
+                    store_quote,
+                    &secret_key,
+                    upload_id,
+                    shared_client,
+                )
+                .await
+                .map_err(|e| CommandError {
+                    message: e.to_string(),
+                })?;
             }
-            PendingUploadData::Archive { files, archive_name, private_archive, chunks, store_quote, secret_key } => {
-                ant::files::execute_archive_upload(
-                    app, files, archive_name, private_archive, chunks, store_quote, &secret_key, upload_id, shared_client
-                ).await.map_err(|e| CommandError { message: e.to_string() })?;
+            PendingUploadData::SingleFilePublic {
+                file,
+                datamap,
+                chunks,
+                store_quote,
+                add_to_vault,
+                vault_secret_key,
+            } => {
+                ant::files::execute_single_file_upload_public(
+                    app,
+                    file,
+                    datamap,
+                    chunks,
+                    store_quote,
+                    upload_id,
+                    add_to_vault,
+                    vault_secret_key.as_ref(),
+                    shared_client,
+                )
+                .await
+                .map_err(|e| CommandError {
+                    message: e.to_string(),
+                })?;
+            }
+            PendingUploadData::PublicArchive {
+                files,
+                archive_name,
+                archive_datamap,
+                file_datamaps,
+                chunks,
+                store_quote,
+                add_to_vault,
+                vault_secret_key,
+            } => {
+                ant::files::execute_public_archive_upload(
+                    app,
+                    files,
+                    archive_name,
+                    archive_datamap,
+                    file_datamaps,
+                    chunks,
+                    store_quote,
+                    upload_id,
+                    add_to_vault,
+                    vault_secret_key.as_ref(),
+                    shared_client,
+                )
+                .await
+                .map_err(|e| CommandError {
+                    message: e.to_string(),
+                })?;
+            }
+            PendingUploadData::PrivateArchive {
+                files,
+                archive_name,
+                archive_datamap,
+                chunks,
+                store_quote,
+                add_to_vault,
+                vault_secret_key,
+            } => {
+                ant::files::execute_private_archive_upload(
+                    app,
+                    files,
+                    archive_name,
+                    archive_datamap,
+                    chunks,
+                    store_quote,
+                    upload_id,
+                    add_to_vault,
+                    vault_secret_key.as_ref(),
+                    shared_client,
+                )
+                .await
+                .map_err(|e| CommandError {
+                    message: e.to_string(),
+                })?;
             }
         }
     } else {
-        return Err(CommandError { message: format!("Upload {} not found or already processed", upload_id) });
+        return Err(CommandError {
+            message: format!("Upload {} not found or already processed", upload_id),
+        });
     }
-    
+
     Ok(())
 }
 
@@ -277,14 +531,14 @@ async fn add_local_archive_to_vault(
     eprintln!("archive_address: {}", archive_address);
     eprintln!("archive_name: {}", archive_name);
     eprintln!("is_private: {}", is_private);
-    
+
     let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
         vault_key_signature.trim_start_matches("0x"),
     ) {
         Ok(key) => {
             eprintln!("Successfully parsed vault key");
             key
-        },
+        }
         Err(e) => {
             eprintln!("Failed to parse vault key: {:?}", e);
             return Err(CommandError {
@@ -293,14 +547,20 @@ async fn add_local_archive_to_vault(
         }
     };
 
-    ant::files::add_local_archive_to_vault(&secret_key, &archive_address, &archive_name, is_private, shared_client)
-        .await
-        .map_err(|err| {
-            eprintln!("add_local_archive_to_vault failed with error: {:?}", err);
-            CommandError {
-                message: err.to_string(),
-            }
-        })
+    ant::files::add_local_archive_to_vault(
+        &secret_key,
+        &archive_address,
+        &archive_name,
+        is_private,
+        shared_client,
+    )
+    .await
+    .map_err(|err| {
+        eprintln!("add_local_archive_to_vault failed with error: {:?}", err);
+        CommandError {
+            message: err.to_string(),
+        }
+    })
 }
 
 #[tauri::command]
@@ -316,14 +576,14 @@ async fn add_local_file_to_vault(
     eprintln!("file_address: {}", file_address);
     eprintln!("file_name: {}", file_name);
     eprintln!("is_private: {}", is_private);
-    
+
     let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
         vault_key_signature.trim_start_matches("0x"),
     ) {
         Ok(key) => {
             eprintln!("Successfully parsed vault key");
             key
-        },
+        }
         Err(e) => {
             eprintln!("Failed to parse vault key: {:?}", e);
             return Err(CommandError {
@@ -332,14 +592,20 @@ async fn add_local_file_to_vault(
         }
     };
 
-    ant::files::add_local_file_to_vault(&secret_key, &file_address, &file_name, is_private, shared_client)
-        .await
-        .map_err(|err| {
-            eprintln!("add_local_file_to_vault failed with error: {:?}", err);
-            CommandError {
-                message: err.to_string(),
-            }
-        })
+    ant::files::add_local_file_to_vault(
+        &secret_key,
+        &file_address,
+        &file_name,
+        is_private,
+        shared_client,
+    )
+    .await
+    .map_err(|err| {
+        eprintln!("add_local_file_to_vault failed with error: {:?}", err);
+        CommandError {
+            message: err.to_string(),
+        }
+    })
 }
 
 #[tauri::command]
