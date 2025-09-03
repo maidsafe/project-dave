@@ -162,20 +162,7 @@ watchEffect(() => {
     <template #header>
       <div class="flex items-center justify-between w-full">
         <div class="flex items-center gap-3">
-          <img src="~/assets/img/autonomi-logo-text-white.svg" alt="Autonomi" class="h-6 filter invert dark:filter-none" />
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
-            <i class="pi pi-upload text-white"/>
-          </div>
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-autonomi-text-primary-dark">
-              Upload Progress
-            </h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              Getting quote for your files
-            </p>
-          </div>
+          <IconLogo alt="Autonomi" class="h-6 filter dark:filter-none"/>
         </div>
       </div>
     </template>

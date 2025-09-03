@@ -793,7 +793,7 @@ const openFolderPickerAndUploadFiles = async () => {
   if (selected === null) return;
 
   const files = [{path: selected, name: await basename(selected)}];
-  
+
   // Show upload options modal instead of directly uploading
   uploadOptionsData.value = {
     files,
@@ -807,11 +807,11 @@ const openFolderPickerAndUploadFiles = async () => {
 // Upload options modal handlers
 const handleConfirmUploadOptions = async () => {
   showUploadOptionsModal.value = false;
-  
-  const { files, isFolder, isPrivate, addToVault } = uploadOptionsData.value;
-  
+
+  const {files, isFolder, isPrivate, addToVault} = uploadOptionsData.value;
+
   // All upload options are now fully supported!
-  
+
   await uploadFiles(files, isFolder, isPrivate, addToVault);
 };
 
@@ -825,7 +825,10 @@ const handleCancelUploadOptions = () => {
   };
 };
 
-const uploadFiles = async (files: Array<{ path: string, name: string }>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true) => {
+const uploadFiles = async (files: Array<{
+  path: string,
+  name: string
+}>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true) => {
   try {
     // Get vault key signature if needed (for private uploads or when adding to vault)
     let vaultKeySignature = "";
@@ -1150,7 +1153,7 @@ const handleAddToVault = async (file: any) => {
             // Get file address and privacy - extract address from file_access structure
             let fileAddress = '';
             const isPrivate = file.type === 'private_file';
-            
+
             // Extract the network address from the file structure
             if (file?.file_access?.Public) {
               // For public files, use the public data address
@@ -1224,10 +1227,10 @@ const handleAddToVault = async (file: any) => {
 
           } catch (error: any) {
             console.error('Failed to add file to vault:', error);
-            
+
             // Hide the notification on error
             emit('hide-notify');
-            
+
             toast.add({
               severity: 'error',
               summary: 'Failed to Add',
@@ -1304,10 +1307,10 @@ const handleAddToVault = async (file: any) => {
 
         } catch (error: any) {
           console.error('Failed to add to vault:', error);
-          
+
           // Hide the notification on error
           emit('hide-notify');
-          
+
           toast.add({
             severity: 'error',
             summary: 'Failed to Add',
@@ -2301,7 +2304,7 @@ onMounted(async () => {
                   </div>
                   <div v-else-if="showLoadVaultButton" class="flex justify-center">
                     <CommonButton variant="secondary" size="medium" @click="loadVault">
-                      <i class="pi pi-globe mr-2" />
+                      <i class="pi pi-globe mr-2"/>
                       Load Vault
                     </CommonButton>
                   </div>
@@ -2324,7 +2327,7 @@ onMounted(async () => {
                 </div>
                 <div v-else-if="showLoadVaultButton" class="flex justify-center">
                   <CommonButton variant="secondary" size="medium" @click="loadVault">
-                    <i class="pi pi-globe mr-2" />
+                    <i class="pi pi-globe mr-2"/>
                     Load Vault
                   </CommonButton>
                 </div>
@@ -2976,8 +2979,10 @@ onMounted(async () => {
                 {{ uploadOptionsData.isFolder ? 'Folder' : (uploadOptionsData.files.length === 1 ? 'File' : 'Files') }}
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400">
-                {{ uploadOptionsData.isFolder ? uploadOptionsData.files[0]?.name : 
-                   (uploadOptionsData.files.length === 1 ? uploadOptionsData.files[0]?.name : `${uploadOptionsData.files.length} files`) }}
+                {{
+                  uploadOptionsData.isFolder ? uploadOptionsData.files[0]?.name :
+                      (uploadOptionsData.files.length === 1 ? uploadOptionsData.files[0]?.name : `${uploadOptionsData.files.length} files`)
+                }}
               </div>
             </div>
           </div>
@@ -2988,26 +2993,26 @@ onMounted(async () => {
           <label class="text-sm font-semibold">Privacy</label>
           <div class="space-y-3">
             <div class="flex items-center">
-              <RadioButton 
-                v-model="uploadOptionsData.isPrivate" 
-                inputId="private" 
-                name="privacy" 
-                :value="true" 
+              <RadioButton
+                  v-model="uploadOptionsData.isPrivate"
+                  inputId="private"
+                  name="privacy"
+                  :value="true"
               />
               <label for="private" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-lock text-autonomi-blue-500"></i>
                 <div>
                   <div class="font-medium">Private</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Encrypted and accessible only with your signature</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Only accessible with the data map</div>
                 </div>
               </label>
             </div>
             <div class="flex items-center">
-              <RadioButton 
-                v-model="uploadOptionsData.isPrivate" 
-                inputId="public" 
-                name="privacy" 
-                :value="false" 
+              <RadioButton
+                  v-model="uploadOptionsData.isPrivate"
+                  inputId="public"
+                  name="privacy"
+                  :value="false"
               />
               <label for="public" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-globe text-green-500"></i>
@@ -3025,32 +3030,34 @@ onMounted(async () => {
           <label class="text-sm font-semibold">Storage</label>
           <div class="space-y-3">
             <div class="flex items-center">
-              <RadioButton 
-                v-model="uploadOptionsData.addToVault" 
-                inputId="vault" 
-                name="storage" 
-                :value="true" 
+              <RadioButton
+                  v-model="uploadOptionsData.addToVault"
+                  inputId="vault"
+                  name="storage"
+                  :value="true"
               />
               <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-database text-autonomi-blue-500"></i>
                 <div>
                   <div class="font-medium">Add to Vault</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault for easy access</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault for easy access
+                  </div>
                 </div>
               </label>
             </div>
             <div class="flex items-center">
-              <RadioButton 
-                v-model="uploadOptionsData.addToVault" 
-                inputId="network-only" 
-                name="storage" 
-                :value="false" 
+              <RadioButton
+                  v-model="uploadOptionsData.addToVault"
+                  inputId="network-only"
+                  name="storage"
+                  :value="false"
               />
               <label for="network-only" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-cloud text-gray-500"></i>
                 <div>
                   <div class="font-medium">Network Only</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store only on network, save data address manually</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Store only on network and local vault
+                  </div>
                 </div>
               </label>
             </div>
