@@ -1395,14 +1395,14 @@ const handleDeleteLocalFile = async (file: any) => {
       // Regular file
       isArchive = false;
       isPublic = !!file.file_access.Public;
-      
+
       if (file.file_access.Public) {
         address = file.file_access.Public;
       } else if (file.file_access.Private) {
         // Handle both string and array formats for private keys
         if (Array.isArray(file.file_access.Private)) {
           address = '0x' + file.file_access.Private.map((byte: number) =>
-            byte.toString(16).padStart(2, '0')
+              byte.toString(16).padStart(2, '0')
           ).join('');
         } else {
           address = file.file_access.Private;
@@ -1444,7 +1444,7 @@ const handleDeleteLocalFile = async (file: any) => {
             commandName = isPublic ? 'delete_local_public_file' : 'delete_local_private_file';
           }
 
-          await invoke(commandName, { address });
+          await invoke(commandName, {address});
 
           toast.add({
             severity: 'success',
@@ -1557,16 +1557,16 @@ const handleDownloadFile = async (fileToDownload?: any) => {
 
       if (fileData.file_access.Private) {
         console.log('Downloading private file with dataMap:', fileData.file_access.Private);
-        
+
         let dataMap;
-        
+
         // Check if this is a local address (string) or actual datamap (object/array)
         if (typeof fileData.file_access.Private === 'string') {
           // This is a local address, fetch the actual datamap
           console.log('Fetching datamap from local storage for address:', fileData.file_access.Private);
           try {
-            dataMap = await invoke('get_local_private_file_access', { 
-              localAddr: fileData.file_access.Private 
+            dataMap = await invoke('get_local_private_file_access', {
+              localAddr: fileData.file_access.Private
             });
           } catch (error: any) {
             throw new Error(`Failed to get private file datamap: ${error.message}`);
@@ -1575,7 +1575,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
           // This is already a datamap, convert Vue Proxy to plain object
           dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
         }
-        
+
         await invoke('download_private_file', {
           dataMap: dataMap,
           toDest: uniquePath,
@@ -1609,7 +1609,8 @@ const handleDownloadFile = async (fileToDownload?: any) => {
         summary: 'Download Complete',
         detail: `File saved as: ${finalFileName}`,
         life: 8000,
-        group: 'download-success'
+        group: 'download-success',
+        data: { filePath: uniquePath }
       });
     } catch (error: any) {
       console.error('Download error:', error);
@@ -3045,14 +3046,25 @@ onMounted(async () => {
                     </span>
                     </div>
 
-                    <!-- Menu icon -->
-                    <i
-                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        @click.stop="
-                        selectedDownloadItem = download;
-                        refDownloadMenu.toggle($event);
-                      "
-                    />
+                    <div class="flex items-center gap-2">
+                      <!-- Show in File Manager button -->
+                      <button
+                          v-if="download.downloadPath"
+                          @click="showInFileManager(download.downloadPath)"
+                          class="text-sm px-3 py-1 text-sky-500 rounded transition-colors"
+                      >
+                        Show in Folder
+                      </button>
+
+                      <!-- Menu icon -->
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
+                          selectedDownloadItem = download;
+                          refDownloadMenu.toggle($event);
+                        "
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

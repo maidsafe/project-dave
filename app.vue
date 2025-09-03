@@ -163,7 +163,7 @@ onMounted(async () => {
                     }"
                       class="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 mt-2 block"
                   >
-                    Show in File Manager
+                    Show in Folder
                   </button>
                 </div>
               </div>
