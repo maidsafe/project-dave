@@ -87,6 +87,10 @@ const modalUploadId = ref<string | null>(null);
 const uploadQuotes = ref<Map<string, any>>(new Map());
 const localBreadcrumbs = ref<any[]>([]);
 
+// Vault loading control state
+const hasAttemptedVaultLoad = ref(false);
+const showLoadVaultButton = ref(false);
+
 // Vault removal loading state
 const pendingVaultRemoval = ref(false);
 const vaultRemovalItem = ref<{ name: string, isArchive: boolean } | null>(null);
@@ -2073,11 +2077,33 @@ const handleLocalBreadcrumbClick = (crumb: any) => {
   localFilesStore.changeDirectory(crumb);
 };
 
-onMounted(async () => {
+// Load vault method
+const loadVault = async () => {
   try {
-    fileStore.getAllFiles();
+    hasAttemptedVaultLoad.value = true;
+    showLoadVaultButton.value = false;
+    await fileStore.getAllFiles();
   } catch (err) {
     console.log('>>> Error getting files: ', err);
+    // Show load vault button again if loading fails
+    showLoadVaultButton.value = true;
+  }
+};
+
+onMounted(async () => {
+  // Check if we have a vault signature available
+  if (walletStore.hasVaultSignature()) {
+    // Auto-load vault if signature is available
+    try {
+      hasAttemptedVaultLoad.value = true;
+      fileStore.getAllFiles();
+    } catch (err) {
+      console.log('>>> Error getting files: ', err);
+      showLoadVaultButton.value = true;
+    }
+  } else {
+    // Show load vault button if no signature is available
+    showLoadVaultButton.value = true;
   }
 
   // Removed stuck upload auto-completion - let backend handle upload lifecycle properly
@@ -2273,6 +2299,12 @@ onMounted(async () => {
                   <div v-if="pendingVaultStructure">
                     <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                   </div>
+                  <div v-else-if="showLoadVaultButton" class="flex justify-center">
+                    <CommonButton variant="secondary" size="medium" @click="loadVault">
+                      <i class="pi pi-globe mr-2" />
+                      Load Vault
+                    </CommonButton>
+                  </div>
                   <div v-else>No files found.</div>
                 </div>
               </template>
@@ -2289,6 +2321,12 @@ onMounted(async () => {
               <div v-if="!combinedFiles.length" class="col-span-full p-8 text-center text-gray-500">
                 <div v-if="pendingVaultStructure">
                   <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
+                </div>
+                <div v-else-if="showLoadVaultButton" class="flex justify-center">
+                  <CommonButton variant="secondary" size="medium" @click="loadVault">
+                    <i class="pi pi-globe mr-2" />
+                    Load Vault
+                  </CommonButton>
                 </div>
                 <div v-else>No files found.</div>
               </div>

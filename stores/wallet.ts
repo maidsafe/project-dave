@@ -333,6 +333,19 @@ export const useWalletStore = defineStore("wallet", () => {
         }
     };
 
+    const hasVaultSignature = (): boolean => {
+        // Check for development environment variable first
+        const config = useRuntimeConfig();
+        const devVaultSignature = config.public.devVaultSignature;
+        
+        if (devVaultSignature) {
+            return true;
+        }
+        
+        // Check for cached signature
+        return !!cachedVaultKeySignature.value;
+    };
+
     // Return
     return {
         // State
@@ -354,6 +367,7 @@ export const useWalletStore = defineStore("wallet", () => {
         approveTokens,
         getVaultKeySignature,
         sign,
+        hasVaultSignature,
     };
 });
 
