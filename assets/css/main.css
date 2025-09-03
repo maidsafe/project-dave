@@ -35,6 +35,10 @@
     height: 2px;
 }
 
+.dark .p-tabview-ink-bar {
+    background-color: red;
+}
+
 /* Disable overscroll/bounce behavior */
 html, body {
     overscroll-behavior: none;

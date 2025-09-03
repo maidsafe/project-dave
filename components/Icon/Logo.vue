@@ -5,9 +5,9 @@ const {isDark} = useTheme();
 <template>
   <svg
       v-if="isDark"
-      width="29"
+      width="175"
       height="29"
-      viewBox="0 0 29 29"
+      viewBox="0 0 175 29"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
   >
