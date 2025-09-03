@@ -51,7 +51,7 @@ const {uploadProgress} = storeToRefs(uploadStore);
 const userStore = useUserStore();
 const {query} = storeToRefs(userStore);
 
-const activeTab = ref(0); // 0: Files, 1: Local Files, 2: Uploads, 3: Downloads
+const activeTab = ref(0); // 0: Files, 1: Local Vault, 2: Uploads, 3: Downloads
 const viewTypeVault = ref<'grid' | 'list'>('list');
 const breadcrumbs = ref<any[]>([]);
 const isVisibleFileInfo = ref(false);
@@ -450,7 +450,7 @@ const menuFiles = computed(() => {
     }
   }
 
-  // Add remove option for vault files only (not local files, loading archives)
+  // Add remove option for vault files only (not local vault, loading archives)
 
   if (activeTab.value === 0 && !file?.is_loading_archive) {
     // Determine if this is an archive file (file is inside an archive)
@@ -503,7 +503,7 @@ const menuFiles = computed(() => {
     }
   }
 
-  // Add upload to vault option for local files only
+  // Add upload to vault option for local vault only
   if (activeTab.value === 1 && !file?.is_loading_archive) {
     if (file?.isArchive || file?.is_failed_archive) {
       // Local archive or failed archive - upload archive to vault
@@ -940,7 +940,7 @@ const handleCopyDataAddress = async (file: any) => {
       // Alternative structure
       dataAddress = file.access_data.Public;
     } else if (file?.address) {
-      // For local files, use the address directly
+      // For local vault, use the address directly
       dataAddress = file.address;
     }
 
@@ -1840,7 +1840,7 @@ const setupEventListeners = async () => {
         setTimeout(() => {
           fileStore.getAllFiles();
           uploadStore.resetUpload();
-          // Also refresh local files if on that tab
+          // Also refresh local vault if on that tab
           if (activeTab.value === 1) {
             loadLocalFiles();
           }
@@ -1910,16 +1910,16 @@ setupEventListeners().catch(err => {
   console.error('>>> Error setting up event listeners:', err);
 });
 
-// Function to load local files structure
+// Function to load local vault structure
 const loadLocalFiles = async () => {
   try {
     await localFilesStore.getLocalStructure();
   } catch (error) {
-    console.error('Failed to load local files:', error);
+    console.error('Failed to load local vault:', error);
     toast.add({
       severity: 'error',
-      summary: 'Failed to Load Local Files',
-      detail: 'Could not retrieve local files',
+      summary: 'Failed to Load Local Vault',
+      detail: 'Could not retrieve local vault',
       life: 3000,
     });
   }
@@ -1927,7 +1927,7 @@ const loadLocalFiles = async () => {
 
 // Removed auto-complete stuck uploads logic - backend should handle upload completion properly
 
-// Watch for tab changes to load local files when needed
+// Watch for tab changes to load local vault when needed
 watch(activeTab, (newTab, oldTab) => {
   // Clear breadcrumbs when switching tabs to ensure proper isolation
   if (oldTab === 0) {
@@ -1937,7 +1937,7 @@ watch(activeTab, (newTab, oldTab) => {
       fileStore.changeDirectory(rootDirectory.value);
     }
   } else if (oldTab === 1) {
-    // Reset local files navigation when leaving local files tab
+    // Reset local vault navigation when leaving local vault tab
     localBreadcrumbs.value = [];
     if (localRootDirectory.value) {
       localFilesStore.changeDirectory(localRootDirectory.value);
@@ -1998,7 +1998,7 @@ const localDirectoryFiles = computed(() => {
   }
 });
 
-// Combine local files with loading and failed archive states (similar to vault files)
+// Combine local vault with loading and failed archive states (similar to vault files)
 const combinedLocalFiles = computed(() => {
   const regularFiles = localDirectoryFiles.value || [];
 
@@ -2116,7 +2116,7 @@ onMounted(async () => {
           <div
               v-if="activeTab === 0 || activeTab === 1"
               class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
-              v-tooltip.bottom="activeTab === 0 ? 'Refresh vault files' : 'Refresh local files'"
+              v-tooltip.bottom="activeTab === 0 ? 'Refresh vault files' : 'Refresh local vault'"
               @click="activeTab === 0 ? fileStore.getAllFiles() : loadLocalFiles()"
           >
             <i class="pi pi-refresh"/>
@@ -2362,10 +2362,10 @@ onMounted(async () => {
           </div>
         </TabPanel>
 
-        <!-- Local Files Tab -->
-        <TabPanel header="Local Files" :value="1">
+        <!-- Local Vault Tab -->
+        <TabPanel header="Local Vault" :value="1">
 
-          <!-- Local Files Breadcrumbs -->
+          <!-- Local Vault Breadcrumbs -->
           <div
               v-if="localBreadcrumbs?.length > 0"
               class="mx-[6rem] flex gap-4 items-center text-sm font-semibold flex-wrap my-4"
@@ -2374,7 +2374,7 @@ onMounted(async () => {
                 class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
                 @click="handleLocalBreadcrumbClick(localRootDirectory)"
             >
-              Local Files
+              Local Vault
             </div>
             <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"/>
 
@@ -2516,9 +2516,9 @@ onMounted(async () => {
               <template v-else>
                 <div class="col-span-12 p-8 text-center text-gray-500">
                   <div v-if="pendingLocalStructure">
-                    <i class="pi pi-spinner pi-spin mr-4"/>Loading local files...
+                    <i class="pi pi-spinner pi-spin mr-4"/>Loading local vault...
                   </div>
-                  <div v-else>No local files found. Files will appear here after you upload them.</div>
+                  <div v-else>No local vault found. Files will appear here after you upload them.</div>
                 </div>
               </template>
             </div>
@@ -2533,9 +2533,9 @@ onMounted(async () => {
             <div class="px-3 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
               <div v-if="!combinedLocalFiles.length" class="col-span-full p-8 text-center text-gray-500">
                 <div v-if="pendingLocalStructure">
-                  <i class="pi pi-spinner pi-spin mr-4"/>Loading local files...
+                  <i class="pi pi-spinner pi-spin mr-4"/>Loading local vault...
                 </div>
-                <div v-else>No local files found. Files will appear here after you upload them.</div>
+                <div v-else>No local vault found. Files will appear here after you upload them.</div>
               </div>
               <template v-else>
                 <div
@@ -3219,7 +3219,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Show type for local files -->
+        <!-- Show type for local vault -->
         <div v-if="selectedFileItem?.type" class="py-3">
           <div>Type</div>
           <div class="text-autonomi-text-primary">

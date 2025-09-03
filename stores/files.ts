@@ -101,7 +101,7 @@ export const useFileStore = defineStore("files", () => {
                 return;
             }
 
-            console.log(">>> Building Archive-based Local Drive...");
+            console.log(">>> Building Archive-based Local Vault...");
             rootDirectory.value = new Folder("Vault");
 
             vaultStructure.value.archives.forEach((archive: IArchive, archiveIndex: number) => {
@@ -231,7 +231,7 @@ export const useFileStore = defineStore("files", () => {
             // Set current directory
             currentDirectory.value = rootDirectory.value;
         } catch (error) {
-            console.log(">>> ERROR: Failed to build archive-based local drive", error);
+            console.log(">>> ERROR: Failed to build archive-based local vault", error);
             rootDirectory.value = null;
         }
     };
@@ -360,7 +360,7 @@ export const useFileStore = defineStore("files", () => {
 
             case "ArchiveLoaded":
                 if (update.archive) {
-                    // Remove from loading list by address (like local files)
+                    // Remove from loading list by address (like local vault)
                     loadingArchives.value = loadingArchives.value.filter(
                         a => a.address !== update.archive!.address
                     );

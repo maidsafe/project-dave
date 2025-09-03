@@ -104,7 +104,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
             }
 
             console.log(">>> Building Local Archive-based Drive...");
-            rootDirectory.value = new Folder("Local Files");
+            rootDirectory.value = new Folder("Local Vault");
 
             // Process archives that have been loaded
             localStructure.value.archives.forEach((archive: ILocalArchive, archiveIndex: number) => {
@@ -288,16 +288,16 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
         } catch (error: any) {
             console.log(">>> ERROR: Failed to get local structure:", error);
-            const message = error?.message || "There was an error getting your local files.";
+            const message = error?.message || "There was an error getting your local vault.";
 
             toast.add({
                 severity: "error",
-                summary: "Failed to get local files",
+                summary: "Failed to get local vault",
                 detail: message,
                 life: 3000,
             });
 
-            throw new Error("Failed to get local files");
+            throw new Error("Failed to get local vault");
         } finally {
             // Note: don't set pendingLocalStructure to false here, it will be set when streaming completes
         }
