@@ -520,6 +520,16 @@ const menuFiles = computed(() => {
           refFilesMenu.value.hide();
         },
       });
+      // Delete option for local archives
+      items.push({
+        label: 'Delete Archive',
+        icon: 'pi pi-trash',
+        class: 'text-red-600',
+        command: () => {
+          handleDeleteLocalFile(file);
+          refFilesMenu.value.hide();
+        },
+      });
     } else if (file?.path || file?.name) {
       // Local file - upload file to vault
       items.push({
@@ -528,6 +538,16 @@ const menuFiles = computed(() => {
         class: 'text-blue-600',
         command: () => {
           handleAddToVault(file);
+          refFilesMenu.value.hide();
+        },
+      });
+      // Delete option for local files
+      items.push({
+        label: 'Delete File',
+        icon: 'pi pi-trash',
+        class: 'text-red-600',
+        command: () => {
+          handleDeleteLocalFile(file);
           refFilesMenu.value.hide();
         },
       });
@@ -1044,12 +1064,26 @@ const handleRemoveFromVault = async (file: any, isArchiveFile: boolean) => {
   if (file.is_failed_archive && file.address) {
     // This is a failed archive - use its address directly
     archiveAddress = file.address;
-  } else if (file.isArchive && file.archive?.address) {
+  } else if (file.isArchive && file.archive) {
     // This is an archive folder itself - get address from the archive object
-    archiveAddress = file.archive.address;
-  } else if (isArchiveFile && file.archive_address) {
-    // This is a file within an archive
-    archiveAddress = file.archive_address;
+    if (file.archive.archive_access) {
+      // New structure with archive_access
+      if ('Private' in file.archive.archive_access) {
+        archiveAddress = file.archive.archive_access.Private;
+      } else {
+        archiveAddress = file.archive.archive_access.Public;
+      }
+    } else if (file.archive.address) {
+      // Old structure fallback
+      archiveAddress = file.archive.address;
+    }
+  } else if (isArchiveFile && file.archive_access) {
+    // This is a file within an archive - extract address from archive_access
+    if ('Private' in file.archive_access) {
+      archiveAddress = file.archive_access.Private;
+    } else {
+      archiveAddress = file.archive_access.Public;
+    }
   }
 
   // Show confirmation dialog using PrimeVue's confirm service
@@ -1252,8 +1286,20 @@ const handleAddToVault = async (file: any) => {
 
           if (file.archive) {
             // Regular archive folder
-            archiveAddress = file.archive.address;
-            isPrivate = file.archive.is_private;
+            if (file.archive.archive_access) {
+              // New structure
+              if ('Private' in file.archive.archive_access) {
+                archiveAddress = file.archive.archive_access.Private;
+                isPrivate = true;
+              } else {
+                archiveAddress = file.archive.archive_access.Public;
+                isPrivate = false;
+              }
+            } else {
+              // Old structure fallback
+              archiveAddress = file.archive.address;
+              isPrivate = file.archive.is_private;
+            }
           } else if (file.is_failed_archive || file.is_loading_archive) {
             // Failed or loading archive - address is directly on the file object
             archiveAddress = file.address;
@@ -1326,6 +1372,107 @@ const handleAddToVault = async (file: any) => {
       severity: 'error',
       summary: 'Error',
       detail: 'Failed to process request.',
+      life: 3000,
+    });
+  }
+};
+
+const handleDeleteLocalFile = async (file: any) => {
+  console.log("FILE: ", file);
+
+  try {
+    const fileName = file.name;
+    let isArchive = false;
+    let isPublic = false;
+    let address = '';
+
+    // Check if this is an archive
+    if (file.archive_access?.Private || file.archive_access?.Public) {
+      isArchive = true;
+      isPublic = !!file.archive_access.Public;
+      address = file.archive_access.Private || file.archive_access.Public;
+    } else if (file.file_access?.Private || file.file_access?.Public) {
+      // Regular file
+      isArchive = false;
+      isPublic = !!file.file_access.Public;
+      
+      if (file.file_access.Public) {
+        address = file.file_access.Public;
+      } else if (file.file_access.Private) {
+        // Handle both string and array formats for private keys
+        if (Array.isArray(file.file_access.Private)) {
+          address = '0x' + file.file_access.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+          ).join('');
+        } else {
+          address = file.file_access.Private;
+        }
+      }
+    } else {
+      throw new Error('Cannot determine file type - no file_access or archive_access found');
+    }
+
+    if (!address) {
+      throw new Error('Cannot identify file address to delete');
+    }
+
+    // Show confirmation dialog
+    const message = isArchive
+        ? `Are you sure you want to delete the archive "${fileName}" from your local vault? This action cannot be undone.`
+        : `Are you sure you want to delete the file "${fileName}" from your local vault? This action cannot be undone.`;
+
+    confirm.require({
+      message: message,
+      header: 'Confirm Delete',
+      icon: 'pi pi-exclamation-triangle',
+      rejectProps: {
+        label: 'Cancel',
+        severity: 'secondary',
+        outlined: true
+      },
+      acceptProps: {
+        label: 'Delete',
+        severity: 'danger'
+      },
+      accept: async () => {
+        try {
+          // Call the appropriate delete function based on file type and privacy
+          let commandName = '';
+          if (isArchive) {
+            commandName = isPublic ? 'delete_local_public_archive' : 'delete_local_private_archive';
+          } else {
+            commandName = isPublic ? 'delete_local_public_file' : 'delete_local_private_file';
+          }
+
+          await invoke(commandName, { address });
+
+          toast.add({
+            severity: 'success',
+            summary: 'Deleted',
+            detail: `${isArchive ? 'Archive' : 'File'} "${fileName}" has been deleted.`,
+            life: 3000,
+          });
+
+          // Refresh local vault files
+          localFilesStore.getLocalStructure();
+
+        } catch (error: any) {
+          console.error('Failed to delete local file:', error);
+          toast.add({
+            severity: 'error',
+            summary: 'Delete Failed',
+            detail: error?.message || 'Failed to delete file.',
+            life: 3000,
+          });
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('Error in handleDeleteLocalFile:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to process delete request.',
       life: 3000,
     });
   }
@@ -1404,10 +1551,31 @@ const handleDownloadFile = async (fileToDownload?: any) => {
 
       console.log('Download fileData.file_access:', fileData.file_access);
 
+      if (!fileData.file_access) {
+        throw new Error('No file access data available for download');
+      }
+
       if (fileData.file_access.Private) {
         console.log('Downloading private file with dataMap:', fileData.file_access.Private);
-        // Convert Vue Proxy to plain object
-        const dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
+        
+        let dataMap;
+        
+        // Check if this is a local address (string) or actual datamap (object/array)
+        if (typeof fileData.file_access.Private === 'string') {
+          // This is a local address, fetch the actual datamap
+          console.log('Fetching datamap from local storage for address:', fileData.file_access.Private);
+          try {
+            dataMap = await invoke('get_local_private_file_access', { 
+              localAddr: fileData.file_access.Private 
+            });
+          } catch (error: any) {
+            throw new Error(`Failed to get private file datamap: ${error.message}`);
+          }
+        } else {
+          // This is already a datamap, convert Vue Proxy to plain object
+          dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
+        }
+        
         await invoke('download_private_file', {
           dataMap: dataMap,
           toDest: uniquePath,
@@ -1420,6 +1588,8 @@ const handleDownloadFile = async (fileToDownload?: any) => {
           addr: addr,
           toDest: uniquePath,
         });
+      } else {
+        throw new Error('File access data is missing both Private and Public properties');
       }
 
       downloadsStore.updateDownload(downloadId, {

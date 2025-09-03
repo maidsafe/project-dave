@@ -757,6 +757,55 @@ async fn get_local_structure_streaming(
 }
 
 #[tauri::command]
+async fn delete_local_public_file(address: String) -> Result<(), CommandError> {
+    ant::local_storage::delete_local_public_file(address)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
+async fn delete_local_private_file(address: String) -> Result<(), CommandError> {
+    ant::local_storage::delete_local_private_file(address)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
+async fn delete_local_public_archive(address: String) -> Result<(), CommandError> {
+    ant::local_storage::delete_local_public_archive(address)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
+async fn delete_local_private_archive(address: String) -> Result<(), CommandError> {
+    ant::local_storage::delete_local_private_archive(address)
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })
+}
+
+#[tauri::command]
+async fn get_local_private_file_access(local_addr: String) -> Result<serde_json::Value, CommandError> {
+    let datamap = ant::local_storage::get_local_private_file_access(&local_addr)
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
+    
+    // Convert to JSON value for frontend
+    serde_json::to_value(datamap).map_err(|err| CommandError {
+        message: format!("Failed to serialize datamap: {}", err),
+    })
+}
+
+#[tauri::command]
 async fn get_unique_download_path(downloads_path: String, filename: String) -> Result<String, ()> {
     use std::path::Path;
 
@@ -821,6 +870,11 @@ pub async fn run() {
             load_local_public_archive,
             add_local_archive_to_vault,
             add_local_file_to_vault,
+            delete_local_public_file,
+            delete_local_private_file,
+            delete_local_public_archive,
+            delete_local_private_archive,
+            get_local_private_file_access,
             app_data,
             app_data_store,
             show_item_in_file_manager,

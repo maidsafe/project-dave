@@ -693,3 +693,68 @@ pub async fn get_local_structure_streaming(
 
     Ok(())
 }
+
+/// Delete a local public file
+pub async fn delete_local_public_file(address: String) -> Result<(), LocalStorageError> {
+    let user_data_path = get_user_data_dir()?;
+    let public_file_path = user_data_path.join("public_files").join(&address);
+    
+    if !public_file_path.exists() {
+        return Err(LocalStorageError::ReadError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Public file with address {} not found in local storage", address),
+        )));
+    }
+    
+    fs::remove_file(public_file_path).map_err(LocalStorageError::WriteError)?;
+    Ok(())
+}
+
+/// Delete a local private file
+pub async fn delete_local_private_file(address: String) -> Result<(), LocalStorageError> {
+    let user_data_path = get_user_data_dir()?;
+    let private_file_path = user_data_path.join("private_files").join(&address);
+    
+    if !private_file_path.exists() {
+        return Err(LocalStorageError::ReadError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Private file with address {} not found in local storage", address),
+        )));
+    }
+    
+    fs::remove_file(private_file_path).map_err(LocalStorageError::WriteError)?;
+    Ok(())
+}
+
+/// Delete a local public archive
+pub async fn delete_local_public_archive(address: String) -> Result<(), LocalStorageError> {
+    let user_data_path = get_user_data_dir()?;
+    let public_archive_path = user_data_path.join("file_archives").join(&address);
+    
+    if !public_archive_path.exists() {
+        return Err(LocalStorageError::ReadError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Public archive with address {} not found in local storage", address),
+        )));
+    }
+    
+    fs::remove_file(public_archive_path).map_err(LocalStorageError::WriteError)?;
+    Ok(())
+}
+
+/// Delete a local private archive
+pub async fn delete_local_private_archive(address: String) -> Result<(), LocalStorageError> {
+    let user_data_path = get_user_data_dir()?;
+    let private_archive_path = user_data_path.join("private_file_archives").join(&address);
+    
+    if !private_archive_path.exists() {
+        return Err(LocalStorageError::ReadError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Private archive with address {} not found in local storage", address),
+        )));
+    }
+    
+    fs::remove_file(private_archive_path).map_err(LocalStorageError::WriteError)?;
+    Ok(())
+}
+

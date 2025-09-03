@@ -3,8 +3,11 @@ import type {IFolder, IFile, IFailedArchive} from "~/types/folder";
 
 interface ILocalArchive {
     name: string;
-    address: string;
-    is_private: boolean;
+    archive_access: {
+        Private: string;
+    } | {
+        Public: string;
+    };
     files?: any[];
 }
 
@@ -16,6 +19,18 @@ interface ILocalFileStructure {
 
 export const useLocalFilesStore = defineStore("localFiles", () => {
     const toast = useToast();
+    
+    // Helper functions for archive_access
+    const getArchiveAddress = (archive: ILocalArchive): string => {
+        if ('Private' in archive.archive_access) {
+            return archive.archive_access.Private;
+        }
+        return archive.archive_access.Public;
+    };
+    
+    const isPrivateArchive = (archive: ILocalArchive): boolean => {
+        return 'Private' in archive.archive_access;
+    };
 
     // Class - reuse the same Folder class from files store
     class Folder {
@@ -134,8 +149,9 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                                     is_loading: false,
                                     load_error: false,
                                     name: part,
-                                    archive_name: archive.name || `archive_${archiveIndex}`,
-                                    type: archive.is_private ? 'private_file' : 'public_file'
+                                    archive_name: archive.name,
+                                    archive_access: archive.archive_access,
+                                    type: isPrivateArchive(archive) ? 'private_file' : 'public_file'
                                 });
                             } else {
                                 // This is a subdirectory - create regular folder (not archive folder)
@@ -157,7 +173,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                     while (rootDirectory.value!.getChild(archiveFolderName)) {
                         const existingChild = rootDirectory.value!.getChild(archiveFolderName);
                         // If it's the same archive (same address), don't create a duplicate
-                        if (existingChild && existingChild.archive && existingChild.archive.address === archive.address) {
+                        if (existingChild && existingChild.archive && getArchiveAddress(existingChild.archive) === getArchiveAddress(archive)) {
                             // Same archive, don't add counter - just skip creating a new folder
                             return;
                         }
@@ -186,7 +202,8 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                                     load_error: false,
                                     name: part,
                                     archive_name: archive.name,
-                                    type: archive.is_private ? 'private_file' : 'public_file'
+                                    archive_access: archive.archive_access,
+                                    type: isPrivateArchive(archive) ? 'private_file' : 'public_file'
                                 });
                             } else {
                                 // This is a subdirectory within the archive
@@ -305,32 +322,33 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
     const loadLocalArchive = async (archive: ILocalArchive) => {
         try {
+            const archiveAddress = getArchiveAddress(archive);
             // Add to loading list
-            if (!loadingArchives.value.find(a => a.address === archive.address)) {
+            if (!loadingArchives.value.find(a => a.address === archiveAddress)) {
                 loadingArchives.value.push({
                     name: archive.name,
-                    address: archive.address,
-                    is_private: archive.is_private
+                    address: archiveAddress,
+                    is_private: isPrivateArchive(archive)
                 });
             }
 
             let archiveContents;
-            if (archive.is_private) {
+            if (isPrivateArchive(archive)) {
                 archiveContents = await invoke('load_local_private_archive', {
-                    localAddr: archive.address
+                    localAddr: archiveAddress
                 });
             } else {
                 archiveContents = await invoke('load_local_public_archive', {
-                    addressHex: archive.address
+                    addressHex: archiveAddress
                 });
             }
 
             // Remove from loading list
-            loadingArchives.value = loadingArchives.value.filter(a => a.address !== archive.address);
+            loadingArchives.value = loadingArchives.value.filter(a => a.address !== archiveAddress);
 
             // Add files to archive and add to loaded archives
             archive.files = archiveContents;
-            loadedArchives.value.set(archive.address, archive);
+            loadedArchives.value.set(archiveAddress, archive);
 
             if (localStructure.value) {
                 localStructure.value.archives.push(archive);
@@ -341,17 +359,18 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
         } catch (error: any) {
             console.error(`>>> Failed to load local archive: ${archive.name}`, error);
 
+            const archiveAddress = getArchiveAddress(archive);
             // Remove from loading list
-            loadingArchives.value = loadingArchives.value.filter(a => a.address !== archive.address);
+            loadingArchives.value = loadingArchives.value.filter(a => a.address !== archiveAddress);
 
             // Add to failed archives
             const failedArchive = {
                 name: archive.name,
-                address: archive.address,
-                is_private: archive.is_private
+                address: archiveAddress,
+                is_private: isPrivateArchive(archive)
             };
 
-            if (!failedArchives.value.find(a => a.address === archive.address)) {
+            if (!failedArchives.value.find(a => a.address === archiveAddress)) {
                 failedArchives.value.push(failedArchive);
                 if (localStructure.value) {
                     localStructure.value.failed_archives.push(failedArchive);
@@ -429,20 +448,25 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                         a => a.address !== update.archive!.address
                     );
 
-                    // Add the archive with files, avoiding duplicates
-                    const archiveWithFiles = {
-                        ...update.archive,
+                    // Transform the archive to use archive_access structure
+                    const transformedArchive: ILocalArchive = {
+                        name: update.archive.name,
+                        archive_access: update.archive.is_private 
+                            ? { Private: update.archive.address }
+                            : { Public: update.archive.address },
                         files: update.archive.files
                     };
 
                     // Check if archive already exists by address
-                    const existingArchive = localStructure.value.archives.find(a => a.address === archiveWithFiles.address);
+                    const existingArchive = localStructure.value.archives.find(a => 
+                        getArchiveAddress(a) === update.archive.address
+                    );
                     if (!existingArchive) {
-                        localStructure.value.archives.push(archiveWithFiles);
+                        localStructure.value.archives.push(transformedArchive);
                     }
 
                     // Add archive to loaded archives map
-                    loadedArchives.value.set(update.archive.address, archiveWithFiles);
+                    loadedArchives.value.set(update.archive.address, transformedArchive);
 
                     // Rebuild directory structure to include new archive
                     buildRootDirectory();
