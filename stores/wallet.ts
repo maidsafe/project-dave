@@ -307,8 +307,12 @@ export const useWalletStore = defineStore("wallet", () => {
             const hex = toHex(VAULT_SECRET_KEY_SEED);
             const ethSignedMessageHash = toEthSignedMessageHash(hex);
             pendingMessageSignature.value = true;
-            const signature = await sign(keccak256(ethSignedMessageHash));
-            cachedVaultKeySignature.value = signature.slice(0, -2); // Remove recovery ID
+            try {
+                const signature = await sign(keccak256(ethSignedMessageHash));
+                cachedVaultKeySignature.value = signature.slice(0, -2); // Remove recovery ID
+            } finally {
+                pendingMessageSignature.value = false;
+            }
         }
 
         console.log("Cached vault key signature:", cachedVaultKeySignature.value);
