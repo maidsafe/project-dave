@@ -38,7 +38,9 @@ const handleCancelNotify = () => {
       <div
         class="flex flex-col px-8 py-8 gap-6 rounded-2xl bg-autonomi-blue-600 gap-y-1 "
       >
-        <IconLogo :dark="true" />
+        <div class="flex justify-start">
+          <img src="~/assets/img/autonomi-logo-text-white.svg" alt="Autonomi" class="h-6" />
+        </div>
 
         <div class="mt-6 text-white font-semibold flex items-center gap-2">
             <i class="pi pi-spin pi-spinner text-autonomi-red-300" />{{ title }}

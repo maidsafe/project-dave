@@ -57,7 +57,9 @@ const handleLogIn = async () => {
       <div
         class="flex flex-col px-8 py-8 gap-6 rounded-2xl bg-autonomi-blue-600 dark:bg-black"
       >
-        <IconLogo :dark="true" />
+        <div class="flex justify-start">
+          <img src="~/assets/img/autonomi-logo-text-white.svg" alt="Autonomi" class="h-6" />
+        </div>
 
         <div
           v-if="pendingConnectWallet || wallet.isConnected"
