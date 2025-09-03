@@ -2128,14 +2128,14 @@ onMounted(async () => {
         <div class="flex items-center gap-3">
           <div
               v-if="(activeTab === 0 && currentDirectory?.parent) || (activeTab === 1 && localCurrentDirectory?.parent)"
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer transition-colors duration-200"
               @click="activeTab === 1 ? handleLocalGoBack(localCurrentDirectory.parent) : handleGoBack(currentDirectory.parent)"
           >
             <i class="pi pi-reply -scale-x-100 translate"/>
           </div>
 
           <div
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 cursor-pointer transition-colors duration-200"
               @click="$event => { refUploadDropdown.toggle($event); }"
               v-tooltip.bottom="'Upload'"
           >
@@ -2144,7 +2144,7 @@ onMounted(async () => {
 
           <div
               v-if="activeTab === 0 || activeTab === 1"
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer transition-colors duration-200 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
               v-tooltip.bottom="activeTab === 0 ? 'Refresh vault files' : 'Refresh local vault'"
               @click="activeTab === 0 ? fileStore.getAllFiles() : loadLocalFiles()"
           >
@@ -2152,7 +2152,7 @@ onMounted(async () => {
           </div>
 
           <div
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer relative top-0 hover:-top-1 transition-all duration-300 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer transition-colors duration-200 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
               @click="$event => { refFilesViewMenu.toggle($event); }"
           >
             <i class="pi pi-bars"/>
