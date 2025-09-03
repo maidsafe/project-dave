@@ -2173,12 +2173,9 @@ onMounted(async () => {
           >
             <div class="grid grid-cols-12 font-semibold mb-10">
               <div
-                  class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] text-autonomi-red-300"
+                  class="col-span-11 pl-[6rem] text-autonomi-red-300"
               >
                 Name
-              </div>
-              <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
-                Upload Date
               </div>
               <div class="col-span-1 text-autonomi-red-300">
                 <i class="pi pi-user"/>
@@ -2204,7 +2201,7 @@ onMounted(async () => {
                 >
                   <!-- Folder/File Name -->
                   <div
-                      class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] flex items-center"
+                      class="col-span-11 pl-[6rem] flex items-center"
                   >
                     <template v-if="file.is_failed_archive">
                       <!-- This is a failed archive -->
@@ -2250,17 +2247,6 @@ onMounted(async () => {
                       <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
                       <span class="text-ellipsis overflow-hidden whitespace-nowrap">{{ file.name }}</span>
                     </template>
-                  </div>
-
-                  <!-- Upload Date -->
-                  <div
-                      class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
-                  >
-                    {{
-                      file?.metadata?.uploaded && !file.is_failed_archive
-                          ? secondsToDate(file.metadata.uploaded).toLocaleString()
-                          : ''
-                    }}
                   </div>
 
                   <!-- Menu -->
@@ -2404,12 +2390,9 @@ onMounted(async () => {
           >
             <div class="grid grid-cols-12 font-semibold mb-10">
               <div
-                  class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] text-autonomi-red-300"
+                  class="col-span-11 pl-[6rem] text-autonomi-red-300"
               >
                 Name
-              </div>
-              <div class="hidden xl:block xl:col-span-3 text-autonomi-red-300">
-                Upload Date
               </div>
               <div class="col-span-1 text-autonomi-red-300">
                 <i class="pi pi-user"/>
@@ -2435,7 +2418,7 @@ onMounted(async () => {
                 >
                   <!-- Folder/File Name -->
                   <div
-                      class="col-span-11 md:col-span-9 xl:col-span-8 pl-[6rem] flex items-center"
+                      class="col-span-11 pl-[6rem] flex items-center"
                   >
                     <template v-if="file.is_failed_archive">
                       <!-- This is a failed archive -->
@@ -2481,17 +2464,6 @@ onMounted(async () => {
                       <i :class="file.isArchive ? 'pi pi-box mr-4 text-amber-600 dark:text-amber-400' : 'pi pi-folder mr-4'"/>
                       <span class="text-ellipsis overflow-hidden whitespace-nowrap">{{ file.name }}</span>
                     </template>
-                  </div>
-
-                  <!-- Upload Date -->
-                  <div
-                      class="hidden xl:block xl:col-span-3 text-autonomi-text-primary dark:text-autonomi-text-primary-dark"
-                  >
-                    {{
-                      file?.metadata?.uploaded && !file.is_failed_archive
-                          ? secondsToDate(file.metadata.uploaded).toLocaleString()
-                          : ''
-                    }}
                   </div>
 
                   <!-- Menu -->
