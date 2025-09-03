@@ -62,7 +62,7 @@ watchEffect(() => {
       notifyType: 'info',
       title: 'Sign message request',
       details:
-          'To view your files please sign the message request in your mobile wallet.',
+          'To view your vault please sign the message request in your mobile wallet.',
       enabledCancel: true,
     });
   } else {
@@ -172,7 +172,7 @@ onMounted(async () => {
           <Toast position="bottom-right"/>
           <ConfirmDialog :pt="{
             root: { style: 'max-width: 450px !important;' }
-          }" />
+          }"/>
         </div>
 
         <DialogConnectWallet
