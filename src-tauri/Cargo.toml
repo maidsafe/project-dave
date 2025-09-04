@@ -22,9 +22,9 @@ autonomi = { git = "https://github.com/maidsafe/autonomi", branch = "main" }
 rand = "0.8.5"
 dirs-next = "~2.0.0"
 directories = "5.0"
-tauri = { version = "2", features = [] }
-tauri-plugin-shell = "2"
-tauri-plugin-opener = "2"
+tauri = { version = "2.8.5", features = [] }
+tauri-plugin-shell = "2.3.1"
+tauri-plugin-opener = "2.5.0"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 serde = { version = "1", features = ["derive"] }
