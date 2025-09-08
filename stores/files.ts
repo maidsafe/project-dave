@@ -298,6 +298,9 @@ export const useFileStore = defineStore("files", () => {
                 life: 3000,
             });
 
+            // Reset loading state on error
+            pendingVaultStructure.value = false;
+
             throw new Error("Failed to get vault structure");
         }
     };
