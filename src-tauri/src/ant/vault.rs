@@ -6,7 +6,7 @@ use autonomi::vault::{
     vault_split_bytes, VaultError, VaultSecretKey, NUM_OF_SCRATCHPADS_PER_GRAPH_ENTRY,
     VAULT_HEAD_DERIVATION_INDEX,
 };
-use autonomi::{Bytes, Client, GraphEntry, PublicKey, ScratchpadAddress};
+use autonomi::{AttoTokens, Bytes, Client, GraphEntry, PublicKey, Scratchpad, ScratchpadAddress};
 use tracing::info;
 
 pub async fn vault_quote(
@@ -102,6 +102,12 @@ pub async fn vault_quote(
             info!("Scratchpad at {target_addr:?} does not exist, quote is {scratchpad_quote:?}");
 
             quote.0.extend(scratchpad_quote.0);
+
+            // TODO: check if payment proof is actually in the receipt when creating/updating scratchpad
+
+            if !quote.0.contains_key(&target_addr.xorname()) {
+                panic!("No scratchpad xorname in the quote");
+            };
         }
     }
 
@@ -174,15 +180,25 @@ pub async fn vault_update(
             );
         } else {
             info!("Creating Scratchpad at {target_addr:?}");
-            let (price, addr) = client
-                .scratchpad_create(
-                    &sp_secret_key.into(),
-                    *USER_DATA_VAULT_CONTENT_IDENTIFIER,
-                    &content,
-                    PaymentOption::Receipt(receipt.clone()),
-                )
+
+            let counter = 0;
+
+            let scratchpad = Scratchpad::new(
+                &sp_secret_key.into(),
+                *USER_DATA_VAULT_CONTENT_IDENTIFIER,
+                &content,
+                counter,
+            );
+
+            if !receipt.contains_key(&target_addr.xorname()) {
+                panic!("No scratchpad xorname in the receipt");
+            }
+
+            let (cost, addr) = client
+                .scratchpad_put(scratchpad, PaymentOption::Receipt(receipt.clone()))
                 .await?;
-            info!("Created Scratchpad at {addr:?} with cost of {price:?}");
+
+            info!("Created Scratchpad at {addr:?} for cost {cost:?}");
         }
     }
 
