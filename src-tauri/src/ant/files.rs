@@ -185,7 +185,7 @@ pub async fn collect_files_from_directory(
     Ok(files)
 }
 
-pub async fn start_single_file_upload(
+pub async fn start_private_single_file_upload(
     app: AppHandle,
     file: File,
     secret_key: &VaultSecretKey,
@@ -2118,7 +2118,7 @@ pub async fn add_local_file_to_vault(
     }
 }
 
-pub async fn start_single_file_upload_public(
+pub async fn start_public_single_file_upload(
     app: AppHandle,
     file: File,
     upload_id: String,

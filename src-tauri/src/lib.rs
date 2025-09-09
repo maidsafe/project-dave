@@ -12,7 +12,7 @@ use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
 use autonomi::client::quote::StoreQuote;
 use autonomi::client::vault::VaultSecretKey;
-use autonomi::{Chunk};
+use autonomi::Chunk;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 // Removed unused rand import
@@ -248,7 +248,7 @@ async fn start_upload(
                 message: "Private uploads require a vault signature".to_string(),
             })?;
 
-            ant::files::start_single_file_upload(
+            ant::files::start_private_single_file_upload(
                 app,
                 files.into_iter().next().unwrap(),
                 &secret_key,
@@ -262,7 +262,7 @@ async fn start_upload(
             })?;
         } else {
             // Public file upload - vault key is optional
-            ant::files::start_single_file_upload_public(
+            ant::files::start_public_single_file_upload(
                 app,
                 files.into_iter().next().unwrap(),
                 upload_id.clone(),
@@ -793,12 +793,16 @@ async fn delete_local_private_archive(address: String) -> Result<(), CommandErro
 }
 
 #[tauri::command]
-async fn get_local_private_file_access(local_addr: String) -> Result<serde_json::Value, CommandError> {
-    let datamap = ant::local_storage::get_local_private_file_access(&local_addr)
-        .map_err(|err| CommandError {
-            message: err.to_string(),
+async fn get_local_private_file_access(
+    local_addr: String,
+) -> Result<serde_json::Value, CommandError> {
+    let datamap =
+        ant::local_storage::get_local_private_file_access(&local_addr).map_err(|err| {
+            CommandError {
+                message: err.to_string(),
+            }
         })?;
-    
+
     // Convert to JSON value for frontend
     serde_json::to_value(datamap).map_err(|err| CommandError {
         message: format!("Failed to serialize datamap: {}", err),
