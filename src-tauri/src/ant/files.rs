@@ -8,7 +8,7 @@ use autonomi::client::GetError;
 use autonomi::data::DataAddress;
 use autonomi::files::{Metadata, PrivateArchive, PublicArchive};
 use autonomi::vault::user_data::UserDataVaultError;
-use autonomi::{Amount, Bytes, Chunk};
+use autonomi::{vault, Amount, Bytes, Chunk};
 use hex;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -86,6 +86,8 @@ pub enum UploadError {
     Scratchpad(String),
     #[error("Failed to emit payment order: {0}")]
     EmitEvent(String),
+    #[error("Failed to serialize data: {0}")]
+    Serialization(String),
 }
 
 #[derive(ThisError, Debug)]
@@ -190,6 +192,7 @@ pub async fn start_private_single_file_upload(
     file: File,
     secret_key: &VaultSecretKey,
     upload_id: String,
+    add_to_vault: bool,
     shared_client: State<'_, SharedClient>,
     pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
 ) -> Result<(), UploadError> {
@@ -231,7 +234,38 @@ pub async fn start_private_single_file_upload(
         })?;
     println!(">>> Got store quote successfully");
 
-    let total_cost: Amount = store_quote
+    // If add_to_vault is true, get vault quote and add to total
+    let mut total_store_quote = store_quote;
+    if add_to_vault {
+        println!(">>> Getting vault quote for add_to_vault...");
+        // We'll need to create the vault data containing the file info
+        let file_name = file.name.clone();
+
+        let mut user_data = client
+            .vault_get_user_data(&secret_key)
+            .await
+            .unwrap_or(UserData::new());
+
+        user_data
+            .private_files
+            .insert(DataMapChunk::from(datamap.clone()), file_name);
+
+        // Serialize user data to bytes for vault quote
+        let vault_data = user_data
+            .to_bytes()
+            .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+        // Get vault quote
+        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+            .await
+            .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
+
+        println!(">>> Got vault quote, merging with store quote");
+        // Merge vault quote with store quote
+        total_store_quote.0.extend(vault_quote.0);
+    }
+
+    let total_cost: Amount = total_store_quote
         .payments()
         .iter()
         .map(|(_, _, amount)| *amount)
@@ -240,7 +274,7 @@ pub async fn start_private_single_file_upload(
 
     // Emit quote event with cost information
     let payments: Vec<serde_json::Value> = if has_payments {
-        store_quote
+        total_store_quote
             .payments()
             .iter()
             .map(|(addr, _, amount)| {
@@ -255,7 +289,7 @@ pub async fn start_private_single_file_upload(
         vec![]
     };
 
-    let raw_payments: Vec<_> = store_quote
+    let raw_payments: Vec<_> = total_store_quote
         .payments()
         .into_iter()
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
@@ -310,9 +344,10 @@ pub async fn start_private_single_file_upload(
                 file,
                 DataMapChunk::from(datamap),
                 chunks,
-                store_quote,
+                total_store_quote,
                 secret_key,
                 upload_id,
+                add_to_vault,
                 shared_client,
             )
             .await?;
@@ -325,8 +360,9 @@ pub async fn start_private_single_file_upload(
             file,
             DataMapChunk::from(datamap),
             chunks,
-            store_quote,
+            total_store_quote,
             secret_key.clone(),
+            add_to_vault,
         );
     }
     // If payment required, the execution will happen when confirm_upload_payment is called
@@ -342,6 +378,7 @@ pub async fn execute_single_file_upload(
     store_quote: StoreQuote,
     secret_key: &VaultSecretKey,
     upload_id: String,
+    add_to_vault: bool,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), UploadError> {
     let client = shared_client.get_client().await?;
@@ -385,22 +422,28 @@ pub async fn execute_single_file_upload(
                 .await
                 .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-            // Store file in vault
-            let mut user_data = client
-                .get_user_data_from_vault(&secret_key)
-                .await
-                .unwrap_or(UserData::new());
+            // Store file in vault if requested
+            if add_to_vault {
+                let mut user_data = client
+                    .vault_get_user_data(&secret_key)
+                    .await
+                    .unwrap_or(UserData::new());
 
-            // Add the single file to user data (not as archive)
-            user_data
-                .private_files
-                .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
+                // Add the single file to user data (not as archive)
+                user_data
+                    .private_files
+                    .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
 
-            // Store updated user data in vault
-            client
-                .put_user_data_to_vault(&secret_key, receipt.into(), user_data)
-                .await
-                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+                // Serialize user data for vault update
+                let vault_data = user_data
+                    .to_bytes()
+                    .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+                // Use vault_update with the receipt (which already includes vault payment)
+                crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
+                    .await
+                    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+            }
 
             // Store file locally
             local_storage::write_local_private_file(
@@ -535,7 +578,40 @@ pub async fn start_private_archive_upload(
 
     println!(">>> Got store quote successfully");
 
-    let total_cost: Amount = store_quote
+    // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
+    let mut total_store_quote = store_quote;
+    if add_to_vault && vault_secret_key.is_some() {
+        let secret_key = vault_secret_key.unwrap();
+        println!(">>> Getting vault quote for private archive add_to_vault...");
+        // We'll need to create the vault data containing the archive info
+        let archive_name_clone = archive_name.clone();
+
+        // Create user data structure for this archive
+        let mut user_data = client
+            .vault_get_user_data(&secret_key)
+            .await
+            .unwrap_or(UserData::new());
+
+        user_data
+            .private_file_archives
+            .insert(archive_datamap_chunk.clone(), archive_name_clone);
+
+        // Serialize user data to bytes for vault quote
+        let vault_data = user_data
+            .to_bytes()
+            .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+        // Get vault quote
+        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+            .await
+            .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
+
+        println!(">>> Got vault quote for private archive, merging with store quote");
+        // Merge vault quote with store quote
+        total_store_quote.0.extend(vault_quote.0);
+    }
+
+    let total_cost: Amount = total_store_quote
         .payments()
         .iter()
         .map(|(_, _, amount)| *amount)
@@ -544,7 +620,7 @@ pub async fn start_private_archive_upload(
 
     // Emit quote event with cost information
     let payments: Vec<serde_json::Value> = if has_payments {
-        store_quote
+        total_store_quote
             .payments()
             .iter()
             .map(|(addr, _, amount)| {
@@ -559,7 +635,7 @@ pub async fn start_private_archive_upload(
         vec![]
     };
 
-    let raw_payments: Vec<_> = store_quote
+    let raw_payments: Vec<_> = total_store_quote
         .payments()
         .into_iter()
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
@@ -614,7 +690,7 @@ pub async fn start_private_archive_upload(
                 archive_name,
                 archive_datamap_chunk,
                 all_chunks,
-                store_quote,
+                total_store_quote,
                 upload_id,
                 add_to_vault,
                 vault_secret_key,
@@ -631,7 +707,7 @@ pub async fn start_private_archive_upload(
             archive_name,
             archive_datamap_chunk,
             all_chunks,
-            store_quote,
+            total_store_quote,
             add_to_vault,
             vault_secret_key.cloned(),
         );
@@ -724,31 +800,22 @@ pub async fn execute_private_archive_upload(
                     println!(">>> Adding private archive to vault...");
 
                     let mut user_data = client
-                        .get_user_data_from_vault(secret_key)
+                        .vault_get_user_data(&secret_key)
                         .await
-                        .unwrap_or_else(|err| {
-                            println!(
-                                ">>> Failed to get user data from vault, creating new: {:?}",
-                                err
-                            );
-                            UserData::new()
-                        });
+                        .unwrap_or(UserData::new());
 
                     // Add the private archive to the vault using the archive datamap
                     user_data
                         .private_file_archives
                         .insert(archive_datamap.clone(), archive_name.clone());
 
-                    // Need empty receipt for vault update
-                    let empty_store_quote = client
-                        .get_store_quotes(DataTypes::Chunk, std::iter::empty())
-                        .await
-                        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-                    let vault_receipt =
-                        autonomi::client::payment::receipt_from_store_quotes(empty_store_quote);
+                    // Serialize user data for vault update
+                    let vault_data = user_data
+                        .to_bytes()
+                        .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
-                    client
-                        .put_user_data_to_vault(secret_key, vault_receipt.into(), user_data)
+                    // Use vault_update with the receipt (which already includes vault payment)
+                    crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
                         .await
                         .map_err(|err| {
                             println!(">>> Failed to update vault: {:?}", err);
@@ -923,7 +990,42 @@ pub async fn start_public_archive_upload(
         })?;
     println!(">>> Got store quote successfully");
 
-    let total_cost: Amount = store_quote
+    // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
+    let mut total_store_quote = store_quote;
+    if add_to_vault && vault_secret_key.is_some() {
+        let secret_key = vault_secret_key.unwrap();
+        println!(">>> Getting vault quote for public archive add_to_vault...");
+        // We'll need to create the vault data containing the archive info
+        let archive_name_clone = archive_name.clone();
+        let archive_data_address = archive_datamap.address();
+
+        // Create user data structure for this archive
+        let mut user_data = client
+            .vault_get_user_data(&secret_key)
+            .await
+            .unwrap_or(UserData::new());
+
+        user_data.file_archives.insert(
+            DataAddress::new(*archive_data_address.xorname()),
+            archive_name_clone,
+        );
+
+        // Serialize user data to bytes for vault quote
+        let vault_data = user_data
+            .to_bytes()
+            .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+        // Get vault quote
+        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+            .await
+            .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
+
+        println!(">>> Got vault quote for public archive, merging with store quote");
+        // Merge vault quote with store quote
+        total_store_quote.0.extend(vault_quote.0);
+    }
+
+    let total_cost: Amount = total_store_quote
         .payments()
         .iter()
         .map(|(_, _, amount)| *amount)
@@ -932,7 +1034,7 @@ pub async fn start_public_archive_upload(
 
     // Emit quote event with cost information
     let payments: Vec<serde_json::Value> = if has_payments {
-        store_quote
+        total_store_quote
             .payments()
             .iter()
             .map(|(addr, _, amount)| {
@@ -947,7 +1049,7 @@ pub async fn start_public_archive_upload(
         vec![]
     };
 
-    let raw_payments: Vec<_> = store_quote
+    let raw_payments: Vec<_> = total_store_quote
         .payments()
         .into_iter()
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
@@ -1003,7 +1105,7 @@ pub async fn start_public_archive_upload(
                 archive_datamap_chunk,
                 file_datamaps,
                 all_chunks,
-                store_quote,
+                total_store_quote,
                 upload_id,
                 add_to_vault,
                 vault_secret_key,
@@ -1021,7 +1123,7 @@ pub async fn start_public_archive_upload(
             archive_datamap_chunk,
             file_datamaps,
             all_chunks,
-            store_quote,
+            total_store_quote,
             add_to_vault,
             vault_secret_key.cloned(),
         );
@@ -1138,31 +1240,22 @@ pub async fn execute_public_archive_upload(
                     println!(">>> Adding public archive to vault...");
 
                     let mut user_data = client
-                        .get_user_data_from_vault(secret_key)
+                        .vault_get_user_data(&secret_key)
                         .await
-                        .unwrap_or_else(|err| {
-                            println!(
-                                ">>> Failed to get user data from vault, creating new: {:?}",
-                                err
-                            );
-                            UserData::new()
-                        });
+                        .unwrap_or(UserData::new());
 
                     // Add the public archive to the vault using the archive datamap address
                     user_data
                         .file_archives
                         .insert(public_archive_address, archive_name.clone());
 
-                    // Need empty receipt for vault update
-                    let empty_store_quote = client
-                        .get_store_quotes(DataTypes::Chunk, std::iter::empty())
-                        .await
-                        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-                    let vault_receipt =
-                        autonomi::client::payment::receipt_from_store_quotes(empty_store_quote);
+                    // Serialize user data for vault update
+                    let vault_data = user_data
+                        .to_bytes()
+                        .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
-                    client
-                        .put_user_data_to_vault(secret_key, vault_receipt.into(), user_data)
+                    // Use vault_update with the receipt (which already includes vault payment)
+                    crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
                         .await
                         .map_err(|err| {
                             println!(">>> Failed to update vault: {:?}", err);
@@ -2173,7 +2266,41 @@ pub async fn start_public_single_file_upload(
         })?;
     println!(">>> Got store quote successfully");
 
-    let total_cost: Amount = store_quote
+    // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
+    let mut total_store_quote = store_quote;
+    if add_to_vault && vault_secret_key.is_some() {
+        let secret_key = vault_secret_key.unwrap();
+        println!(">>> Getting vault quote for public file add_to_vault...");
+        // We'll need to create the vault data containing the file info
+        let file_name = file.name.clone();
+        let data_address = datamap.address();
+
+        // Create user data structure for this file
+        let mut user_data = client
+            .vault_get_user_data(&secret_key)
+            .await
+            .unwrap_or(UserData::new());
+
+        user_data
+            .public_files
+            .insert(DataAddress::new(*data_address.xorname()), file_name);
+
+        // Serialize user data to bytes for vault quote
+        let vault_data = user_data
+            .to_bytes()
+            .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+        // Get vault quote
+        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+            .await
+            .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
+
+        println!(">>> Got vault quote for public file, merging with store quote");
+        // Merge vault quote with store quote
+        total_store_quote.0.extend(vault_quote.0);
+    }
+
+    let total_cost: Amount = total_store_quote
         .payments()
         .iter()
         .map(|(_, _, amount)| *amount)
@@ -2182,7 +2309,7 @@ pub async fn start_public_single_file_upload(
 
     // Emit quote event with cost information
     let payments: Vec<serde_json::Value> = if has_payments {
-        store_quote
+        total_store_quote
             .payments()
             .iter()
             .map(|(addr, _, amount)| {
@@ -2197,7 +2324,7 @@ pub async fn start_public_single_file_upload(
         vec![]
     };
 
-    let raw_payments: Vec<_> = store_quote
+    let raw_payments: Vec<_> = total_store_quote
         .payments()
         .into_iter()
         .filter(|(_, _, amount)| *amount > Amount::ZERO)
@@ -2251,7 +2378,7 @@ pub async fn start_public_single_file_upload(
                 file,
                 datamap_chunk,
                 chunks,
-                store_quote,
+                total_store_quote,
                 upload_id,
                 add_to_vault,
                 vault_secret_key,
@@ -2267,7 +2394,7 @@ pub async fn start_public_single_file_upload(
             file,
             datamap_chunk,
             chunks,
-            store_quote,
+            total_store_quote,
             add_to_vault,
             vault_secret_key.cloned(),
         );
@@ -2370,32 +2497,24 @@ pub async fn execute_single_file_upload_public(
                     println!(">>> Adding public file to vault...");
 
                     let file_name = file.name.clone();
+
                     let mut user_data = client
-                        .get_user_data_from_vault(secret_key)
+                        .vault_get_user_data(&secret_key)
                         .await
-                        .unwrap_or_else(|err| {
-                            println!(
-                                ">>> Failed to get user data from vault, creating new: {:?}",
-                                err
-                            );
-                            UserData::new()
-                        });
+                        .unwrap_or(UserData::new());
 
                     // Add the public file to the vault using the datamap address
                     user_data
                         .public_files
                         .insert(public_data_address, file_name.clone());
 
-                    // Need empty receipt for vault update
-                    let empty_store_quote = client
-                        .get_store_quotes(DataTypes::Chunk, std::iter::empty())
-                        .await
-                        .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-                    let vault_receipt =
-                        autonomi::client::payment::receipt_from_store_quotes(empty_store_quote);
+                    // Serialize user data for vault update
+                    let vault_data = user_data
+                        .to_bytes()
+                        .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
-                    client
-                        .put_user_data_to_vault(secret_key, vault_receipt.into(), user_data)
+                    // Use vault_update with the receipt (which already includes vault payment)
+                    crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
                         .await
                         .map_err(|err| {
                             println!(">>> Failed to update vault: {:?}", err);

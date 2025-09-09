@@ -29,6 +29,7 @@ pub enum PendingUploadData {
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         secret_key: VaultSecretKey,
+        add_to_vault: bool,
     },
     SingleFilePublic {
         file: File,
@@ -73,6 +74,7 @@ impl PendingUploads {
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         secret_key: VaultSecretKey,
+        add_to_vault: bool,
     ) {
         self.uploads.insert(
             upload_id,
@@ -82,6 +84,7 @@ impl PendingUploads {
                 chunks,
                 store_quote,
                 secret_key,
+                add_to_vault,
             },
         );
     }
@@ -253,6 +256,7 @@ async fn start_upload(
                 files.into_iter().next().unwrap(),
                 &secret_key,
                 upload_id.clone(),
+                add_to_vault,
                 shared_client,
                 Some(&*pending_uploads),
             )
@@ -335,6 +339,7 @@ async fn confirm_upload_payment(
                 chunks,
                 store_quote,
                 secret_key,
+                add_to_vault,
             } => {
                 ant::files::execute_single_file_upload(
                     app,
@@ -344,6 +349,7 @@ async fn confirm_upload_payment(
                     store_quote,
                     &secret_key,
                     upload_id,
+                    add_to_vault,
                     shared_client,
                 )
                 .await

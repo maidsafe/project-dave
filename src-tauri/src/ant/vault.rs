@@ -89,6 +89,8 @@ pub async fn vault_quote(
 
         let target_addr = ScratchpadAddress::new(sp_secret_key.public_key().into());
 
+        info!("Checking existence of Scratchpad at {target_addr:?}...");
+
         if !client.scratchpad_check_existence(&target_addr).await? {
             let scratchpad_quote = client
                 .get_store_quotes(
@@ -96,6 +98,8 @@ pub async fn vault_quote(
                     std::iter::once((target_addr.xorname(), content.len())),
                 )
                 .await?;
+
+            info!("Scratchpad at {target_addr:?} does not exist, quote is {scratchpad_quote:?}");
 
             quote.0.extend(scratchpad_quote.0);
         }
