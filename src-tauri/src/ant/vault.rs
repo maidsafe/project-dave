@@ -139,15 +139,45 @@ pub async fn vault_update(
     );
 
     while scratchpad_derivations.len() < contents.len() {
-        let (new_free_graphentry_derivation, new_scratchpad_derivations, graph_cost) = client
-            .expand_capacity(
-                &main_secret_key,
-                &cur_free_graph_entry_derivation,
-                PaymentOption::Receipt(receipt.clone()),
-            )
+        let own_secret_key = main_secret_key.derive_key(&cur_free_graph_entry_derivation);
+
+        let parents = vec![];
+        let initial_value = [0u8; 32];
+
+        // Pointing to the next GraphEntry
+        let new_graph_entry_derivation = DerivationIndex::random(&mut rand::thread_rng());
+        let public_key: PublicKey = main_secret_key
+            .derive_key(&new_graph_entry_derivation)
+            .public_key()
+            .into();
+
+        let mut descendants = vec![(public_key, new_graph_entry_derivation.into_bytes())];
+
+        // Pointing to other future Scratchpads
+        descendants.extend((0..NUM_OF_SCRATCHPADS_PER_GRAPH_ENTRY).map(|_| {
+            let derivation_index = DerivationIndex::random(&mut rand::thread_rng());
+            let public_key: PublicKey = main_secret_key
+                .derive_key(&derivation_index)
+                .public_key()
+                .into();
+            (public_key, derivation_index.into_bytes())
+        }));
+
+        let graph_entry = GraphEntry::new(
+            &own_secret_key.into(),
+            parents,
+            initial_value,
+            descendants.clone(),
+        );
+
+        // Upload the GraphEntry
+        let (_graph_cost, _addr) = client
+            .graph_entry_put(graph_entry, PaymentOption::Receipt(receipt.clone()))
             .await?;
 
-        cur_free_graph_entry_derivation = new_free_graphentry_derivation;
+        let new_scratchpad_derivations = descendants.split_off(1);
+
+        cur_free_graph_entry_derivation = new_graph_entry_derivation;
         scratchpad_derivations.extend(&new_scratchpad_derivations);
     }
 
