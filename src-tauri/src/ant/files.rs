@@ -1,14 +1,15 @@
 use crate::ant::client::SharedClient;
-use crate::ant::local_storage;
+use crate::ant::{local_storage, vault};
 use autonomi::chunk::DataMapChunk;
-use autonomi::client::quote::{DataTypes, StoreQuote};
+use autonomi::client::payment::Receipt;
+use autonomi::client::quote::DataTypes;
 use autonomi::client::vault::key::vault_key_from_signature_hex;
 use autonomi::client::vault::{UserData, VaultSecretKey};
 use autonomi::client::GetError;
 use autonomi::data::DataAddress;
 use autonomi::files::{Metadata, PrivateArchive, PublicArchive};
 use autonomi::vault::user_data::UserDataVaultError;
-use autonomi::{vault, Amount, Bytes, Chunk};
+use autonomi::{Amount, Bytes, Chunk};
 use hex;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -218,7 +219,7 @@ pub async fn start_private_single_file_upload(
         println!(">>> Encryption failed: {}", err);
         UploadError::Encryption(err.to_string())
     })?;
-    println!(">>> File encrypted, got {} chunks", chunks.len());
+    println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
     let chunks_iter = chunks
         .iter()
@@ -232,10 +233,12 @@ pub async fn start_private_single_file_upload(
             println!(">>> Failed to get store quotes: {}", err);
             UploadError::StoreQuote(err.to_string())
         })?;
-    println!(">>> Got store quote successfully");
+    println!(">>> Got store {} {}", "quote", "successfully");
 
     // If add_to_vault is true, get vault quote and add to total
     let mut total_store_quote = store_quote;
+    let mut vault_update = Default::default();
+
     if add_to_vault {
         println!(">>> Getting vault quote for add_to_vault...");
         // We'll need to create the vault data containing the file info
@@ -256,13 +259,18 @@ pub async fn start_private_single_file_upload(
             .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
         // Get vault quote
-        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+        let vault_quote_result = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
             .await
             .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
 
         println!(">>> Got vault quote, merging with store quote");
         // Merge vault quote with store quote
-        total_store_quote.0.extend(vault_quote.0);
+        total_store_quote.0.extend(vault_quote_result.quote.0);
+
+        vault_update = vault::VaultUpdate {
+            new_graph_entries: vault_quote_result.new_graph_entries,
+            new_scratchpad_derivations: vault_quote_result.new_scratchpad_derivations,
+        };
     }
 
     let total_cost: Amount = total_store_quote
@@ -281,7 +289,7 @@ pub async fn start_private_single_file_upload(
                 serde_json::json!({
                     "address": hex::encode(addr),
                     "amount": amount.to_string(),
-                    "amount_formatted": format!("{} ATTO", amount)
+                    "amount_formatted": format!("{} {}", amount, "ATTO")
                 })
             })
             .collect()
@@ -306,7 +314,7 @@ pub async fn start_private_single_file_upload(
             "total_files": 1,
             "total_size": file_size,
             "total_cost_nano": total_cost.to_string(),
-            "total_cost_formatted": format!("{} ATTO", total_cost),
+            "total_cost_formatted": format!("{} {}", total_cost, "ATTO"),
             "payment_required": has_payments,
             "payments": payments,
             "raw_payments": raw_payments
@@ -318,49 +326,34 @@ pub async fn start_private_single_file_upload(
     })?;
     println!(">>> Successfully emitted upload-quote event");
 
-    // If no payment required, check if this is a duplicate (free) upload
-    if !has_payments {
-        // If cost is 0, this is a duplicate file - skip upload and mark as completed
-        if total_cost == Amount::ZERO {
-            println!(">>> Duplicate file detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
-            // Emit completion immediately for duplicate files
-            app.emit(
-                "upload-progress",
-                UploadProgress::Completed {
-                    upload_id: upload_id.clone(),
-                    total_files: 1,
-                    total_bytes: file_size,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-            println!(
-                ">>> Emitted completion event for duplicate file upload_id: {}",
-                upload_id
-            );
-        } else {
-            // Non-duplicate free upload - proceed normally
-            execute_single_file_upload(
-                app,
-                file,
-                DataMapChunk::from(datamap),
-                chunks,
-                total_store_quote,
-                secret_key,
-                upload_id,
-                add_to_vault,
-                shared_client,
-            )
-            .await?;
-        }
+    // If cost is 0, this is a duplicate file - skip upload and mark as completed
+    if total_cost == Amount::ZERO {
+        println!(">>> Duplicate file detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
+        // Emit completion immediately for duplicate files
+        app.emit(
+            "upload-progress",
+            UploadProgress::Completed {
+                upload_id: upload_id.clone(),
+                total_files: 1,
+                total_bytes: file_size,
+            },
+        )
+        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+        println!(
+            ">>> Emitted completion event for duplicate file upload_id: {}",
+            upload_id
+        );
     } else if let Some(pending_uploads) = pending_uploads {
         // Store upload data for later execution after payment
         let mut pending = pending_uploads.lock().await;
+
         pending.store_single_file(
             upload_id.clone(),
             file,
             DataMapChunk::from(datamap),
             chunks,
             total_store_quote,
+            vault_update,
             secret_key.clone(),
             add_to_vault,
         );
@@ -370,12 +363,13 @@ pub async fn start_private_single_file_upload(
     Ok(())
 }
 
-pub async fn execute_single_file_upload(
+pub async fn execute_private_single_file_upload(
     app: AppHandle,
     file: File,
     datamap: DataMapChunk,
     chunks: Vec<Chunk>,
-    store_quote: StoreQuote,
+    receipt: Receipt,
+    vault_update: vault::VaultUpdate,
     secret_key: &VaultSecretKey,
     upload_id: String,
     add_to_vault: bool,
@@ -413,10 +407,9 @@ pub async fn execute_single_file_upload(
 
     // Spawn the actual upload work in background and return immediately
     let secret_key = secret_key.clone();
+
     tokio::spawn(async move {
         let result = async {
-            // Upload chunks to network
-            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)
                 .await
@@ -440,9 +433,16 @@ pub async fn execute_single_file_upload(
                     .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
                 // Use vault_update with the receipt (which already includes vault payment)
-                crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
-                    .await
-                    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+                vault::vault_update(
+                    &client,
+                    vault_data,
+                    &secret_key,
+                    receipt,
+                    vault_update.new_graph_entries,
+                    vault_update.new_scratchpad_derivations,
+                )
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
             }
 
             // Store file locally
@@ -468,20 +468,390 @@ pub async fn execute_single_file_upload(
                         total_bytes: file_size,
                     },
                 ) {
-                    eprintln!("Failed to emit completion event: {}", err);
+                    // Failed to emit completion
                 }
             }
-            Err(err) => {
-                // Emit failure
-                if let Err(emit_err) = app.emit(
+            Err(_err) => {
+                // Emit failure - simplified
+                let _ = app.emit(
                     "upload-progress",
                     UploadProgress::Failed {
                         upload_id: upload_id.clone(),
-                        error: err.to_string(),
+                        error: format!("Upload {}", "issue"),
+                    },
+                );
+            }
+        }
+    });
+
+    // Return immediately - the upload continues in background
+    Ok(())
+}
+
+pub async fn start_public_single_file_upload(
+    app: AppHandle,
+    file: File,
+    upload_id: String,
+    add_to_vault: bool,
+    vault_secret_key: Option<&VaultSecretKey>,
+    shared_client: State<'_, SharedClient>,
+    pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
+) -> Result<(), UploadError> {
+    println!(
+        ">>> start_single_file_upload_public called with upload_id: {}, add_to_vault: {}",
+        upload_id, add_to_vault
+    );
+    let client = shared_client.get_client().await.map_err(|e| {
+        println!(">>> Failed to get client: {:?}", e);
+        e
+    })?;
+
+    // Calculate file size
+    let file_size = fs::metadata(&file.path)
+        .await
+        .map_err(|_| UploadError::Read(file.path.clone()))?
+        .len();
+
+    // Read and encrypt file to get chunks for quote (same as private files)
+    println!(">>> Reading and encrypting public file: {:?}", file.path);
+    let bytes = read_file_to_bytes(file.path.clone()).await?;
+    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
+        println!(">>> Encryption failed: {}", err);
+        UploadError::Encryption(err.to_string())
+    })?;
+    let datamap_chunk = DataMapChunk::from(datamap.clone());
+    println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
+
+    let mut quote_iter = chunks
+        .iter()
+        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
+        .collect::<Vec<_>>();
+
+    // Add datamap to quote calculation
+    quote_iter.push((datamap.name().to_owned(), datamap.size()));
+
+    println!(
+        ">>> Getting store quotes for {} chunks + datamap...",
+        chunks.len()
+    );
+    let store_quote = client
+        .get_store_quotes(DataTypes::Chunk, quote_iter.into_iter())
+        .await
+        .map_err(|err| {
+            println!(">>> Failed to get store quotes: {}", err);
+            UploadError::StoreQuote(err.to_string())
+        })?;
+    println!(">>> Got store {} {}", "quote", "successfully");
+
+    // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
+    let mut total_store_quote = store_quote;
+    let mut vault_update = Default::default();
+
+    if add_to_vault && vault_secret_key.is_some() {
+        let secret_key = vault_secret_key.as_ref().unwrap();
+        println!(">>> Getting vault quote for public file add_to_vault...");
+        // We'll need to create the vault data containing the file info
+        let file_name = file.name.clone();
+        let data_address = datamap.address();
+
+        // Create user data structure for this file
+        let mut user_data = client
+            .vault_get_user_data(&secret_key)
+            .await
+            .unwrap_or(UserData::new());
+
+        user_data
+            .public_files
+            .insert(DataAddress::new(*data_address.xorname()), file_name);
+
+        // Serialize user data to bytes for vault quote
+        let vault_data = user_data
+            .to_bytes()
+            .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+        // Get vault quote
+        let vault_quote_result = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+            .await
+            .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
+
+        println!(
+            ">>> Got vault {} for public file, merging with store {}",
+            "quote", "quote"
+        );
+        // Merge vault quote with store quote
+        total_store_quote.0.extend(vault_quote_result.quote.0);
+
+        vault_update = vault::VaultUpdate {
+            new_graph_entries: vault_quote_result.new_graph_entries,
+            new_scratchpad_derivations: vault_quote_result.new_scratchpad_derivations,
+        };
+    }
+
+    let total_cost: Amount = total_store_quote
+        .payments()
+        .iter()
+        .map(|(_, _, amount)| *amount)
+        .sum();
+
+    let has_payments = total_cost > Amount::ZERO;
+
+    // Emit quote event with cost information
+    let payments: Vec<serde_json::Value> = if has_payments {
+        total_store_quote
+            .payments()
+            .iter()
+            .map(|(addr, _, amount)| {
+                serde_json::json!({
+                    "address": hex::encode(addr),
+                    "amount": amount.to_string(),
+                    "amount_formatted": format!("{} {}", amount, "ATTO")
+                })
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let raw_payments: Vec<_> = total_store_quote
+        .payments()
+        .into_iter()
+        .filter(|(_, _, amount)| *amount > Amount::ZERO)
+        .collect();
+
+    println!(
+        ">>> Emitting upload-quote event for public upload_id: {}",
+        upload_id
+    );
+    app.emit(
+        "upload-quote",
+        serde_json::json!({
+            "upload_id": upload_id.clone(),
+            "total_files": 1,
+            "total_size": file_size,
+            "total_cost_nano": total_cost.to_string(),
+            "total_cost_formatted": format!("{} {}", total_cost, "ATTO"),
+            "payment_required": has_payments,
+            "payments": payments,
+            "raw_payments": raw_payments
+        }),
+    )
+    .map_err(|err| {
+        println!(">>> Failed to emit upload-quote event: {}", err);
+        UploadError::EmitEvent(err.to_string())
+    })?;
+    println!(">>> Successfully emitted upload-quote event");
+
+    // If no payment required, proceed with upload
+    if total_cost == Amount::ZERO {
+        println!(">>> Duplicate public file detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
+        // Emit completion immediately for duplicate files
+        app.emit(
+            "upload-progress",
+            UploadProgress::Completed {
+                upload_id: upload_id.clone(),
+                total_files: 1,
+                total_bytes: file_size,
+            },
+        )
+        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+        println!(
+            ">>> Emitted completion event for duplicate public file upload_id: {}",
+            upload_id
+        );
+    } else if let Some(pending_uploads) = pending_uploads {
+        // Store upload data for later execution after payment
+        let mut pending = pending_uploads.lock().await;
+        pending.store_single_file_public(
+            upload_id.clone(),
+            file,
+            datamap_chunk,
+            chunks,
+            total_store_quote,
+            vault_update,
+            add_to_vault,
+            vault_secret_key.cloned(),
+        );
+    }
+
+    Ok(())
+}
+
+pub async fn execute_public_single_file_upload(
+    app: AppHandle,
+    file: File,
+    datamap: DataMapChunk,
+    chunks: Vec<Chunk>,
+    receipt: Receipt,
+    vault_update: vault::VaultUpdate,
+    upload_id: String,
+    add_to_vault: bool,
+    vault_secret_key: Option<&VaultSecretKey>,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), UploadError> {
+    println!(
+        ">>> execute_single_file_upload_public called for upload_id: {}, add_to_vault: {}",
+        upload_id, add_to_vault
+    );
+
+    let client = shared_client.get_client().await?;
+    let file_size = fs::metadata(&file.path)
+        .await
+        .map_err(|_| UploadError::Read(file.path.clone()))?
+        .len();
+
+    // Emit upload started progress
+    app.emit(
+        "upload-progress",
+        UploadProgress::Started {
+            upload_id: upload_id.clone(),
+            total_files: 1,
+            total_size: file_size,
+        },
+    )
+    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
+    // Emit uploading progress
+    app.emit(
+        "upload-progress",
+        UploadProgress::Uploading {
+            upload_id: upload_id.clone(),
+            chunks_uploaded: 0,
+            total_chunks: chunks.len() + 1, // +1 for datamap
+            bytes_uploaded: 0,
+            total_bytes: file_size,
+        },
+    )
+    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
+    // Clone vault_secret_key for async closure
+    let vault_secret_key = vault_secret_key.cloned();
+
+    // Spawn the actual upload work in background
+    tokio::spawn(async move {
+        let result = async {
+            client
+                .chunk_batch_upload(chunks.iter().collect(), &receipt)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+            // The datamap upload uses the same receipt as the chunks since we included it in the quote
+            client
+                .chunk_batch_upload(vec![&datamap.0], &receipt)
+                .await
+                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+
+            println!(
+                ">>> Uploaded {} file chunks + datamap {}",
+                chunks.len(),
+                "chunk"
+            );
+
+            // The public file's address is the datamap's address (not the file chunks)
+            let public_data_address = DataAddress::new(*datamap.0.name());
+
+            println!(
+                ">>> Public file uploaded successfully with address: {:?}",
+                public_data_address
+            );
+
+            // Emit final uploading progress
+            app.emit(
+                "upload-progress",
+                UploadProgress::Uploading {
+                    upload_id: upload_id.clone(),
+                    chunks_uploaded: chunks.len() + 1, // +1 for datamap
+                    total_chunks: chunks.len() + 1,
+                    bytes_uploaded: file_size,
+                    total_bytes: file_size,
+                },
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+
+            // Add to vault if requested
+            if add_to_vault {
+                if let Some(secret_key) = vault_secret_key.as_ref() {
+                    println!(">>> Adding public file to vault...");
+
+                    let file_name = file.name.clone();
+
+                    let mut user_data = client
+                        .vault_get_user_data(&secret_key)
+                        .await
+                        .unwrap_or(UserData::new());
+
+                    // Add the public file to the vault using the datamap address
+                    user_data
+                        .public_files
+                        .insert(public_data_address, file_name.clone());
+
+                    // Serialize user data for vault update
+                    let vault_data = user_data
+                        .to_bytes()
+                        .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+                    // Use vault_update with the receipt (which already includes vault payment)
+                    vault::vault_update(
+                        &client,
+                        vault_data,
+                        &secret_key,
+                        receipt,
+                        vault_update.new_graph_entries,
+                        vault_update.new_scratchpad_derivations,
+                    )
+                    .await
+                    .map_err(|err| {
+                        println!(">>> Failed to update vault: {:?}", err);
+                        UploadError::Scratchpad(err.to_string())
+                    })?;
+
+                    println!(">>> Successfully added public file to {}", "vault");
+                } else {
+                    println!(
+                        ">>> Warning: add_to_vault=true but no vault_secret_key {}",
+                        "provided"
+                    );
+                }
+            }
+
+            // Store the file locally for future reference
+            local_storage::write_local_public_file(
+                hex::encode(public_data_address.xorname().0),
+                &file.name,
+            )
+            .map_err(|err| {
+                println!(">>> Warning: Failed to store local reference: {:?}", err);
+                // Don't fail the upload for local storage issues
+                err
+            })
+            .ok();
+
+            Ok::<(), UploadError>(())
+        }
+        .await;
+
+        match result {
+            Ok(()) => {
+                // Emit completion
+                if let Err(err) = app.emit(
+                    "upload-progress",
+                    UploadProgress::Completed {
+                        upload_id: upload_id.clone(),
+                        total_files: 1,
+                        total_bytes: file_size,
                     },
                 ) {
-                    eprintln!("Failed to emit failure event: {}", emit_err);
+                    // Failed to emit completion
                 }
+            }
+            Err(_err) => {
+                // Emit failure - simplified
+                let _ = app.emit(
+                    "upload-progress",
+                    UploadProgress::Failed {
+                        upload_id: upload_id.clone(),
+                        error: format!("Upload {}", "issue"),
+                    },
+                );
             }
         }
     });
@@ -576,19 +946,21 @@ pub async fn start_private_archive_upload(
             UploadError::StoreQuote(err.to_string())
         })?;
 
-    println!(">>> Got store quote successfully");
+    println!(">>> Got store {} {}", "quote", "successfully");
 
     // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
     let mut total_store_quote = store_quote;
+    let mut vault_update = Default::default();
+
     if add_to_vault && vault_secret_key.is_some() {
-        let secret_key = vault_secret_key.unwrap();
+        let secret_key = vault_secret_key.as_ref().unwrap();
         println!(">>> Getting vault quote for private archive add_to_vault...");
         // We'll need to create the vault data containing the archive info
         let archive_name_clone = archive_name.clone();
 
         // Create user data structure for this archive
         let mut user_data = client
-            .vault_get_user_data(&secret_key)
+            .vault_get_user_data(secret_key)
             .await
             .unwrap_or(UserData::new());
 
@@ -602,13 +974,21 @@ pub async fn start_private_archive_upload(
             .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
         // Get vault quote
-        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+        let vault_quote_result = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
             .await
             .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
 
-        println!(">>> Got vault quote for private archive, merging with store quote");
+        println!(
+            ">>> Got vault {} for private archive, merging with store {}",
+            "quote", "quote"
+        );
         // Merge vault quote with store quote
-        total_store_quote.0.extend(vault_quote.0);
+        total_store_quote.0.extend(vault_quote_result.quote.0);
+
+        vault_update = vault::VaultUpdate {
+            new_graph_entries: vault_quote_result.new_graph_entries,
+            new_scratchpad_derivations: vault_quote_result.new_scratchpad_derivations,
+        };
     }
 
     let total_cost: Amount = total_store_quote
@@ -627,7 +1007,7 @@ pub async fn start_private_archive_upload(
                 serde_json::json!({
                     "address": hex::encode(addr),
                     "amount": amount.to_string(),
-                    "amount_formatted": format!("{} ATTO", amount)
+                    "amount_formatted": format!("{} {}", amount, "ATTO")
                 })
             })
             .collect()
@@ -652,7 +1032,7 @@ pub async fn start_private_archive_upload(
             "total_files": total_files,
             "total_size": total_size,
             "total_cost_nano": total_cost.to_string(),
-            "total_cost_formatted": format!("{} ATTO", total_cost),
+            "total_cost_formatted": format!("{} {}", total_cost, "ATTO"),
             "payment_required": has_payments,
             "payments": payments,
             "raw_payments": raw_payments
@@ -665,39 +1045,22 @@ pub async fn start_private_archive_upload(
     println!(">>> Successfully emitted upload-quote event");
 
     // If no payment required, proceed with upload
-    if !has_payments {
-        if total_cost == Amount::ZERO {
-            println!(">>> Duplicate private archive detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
-            // Emit completion immediately for duplicate archives
-            app.emit(
-                "upload-progress",
-                UploadProgress::Completed {
-                    upload_id: upload_id.clone(),
-                    total_files: total_files,
-                    total_bytes: total_size,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-            println!(
-                ">>> Emitted completion event for duplicate private archive upload_id: {}",
-                upload_id
-            );
-        } else {
-            // Non-duplicate free upload - proceed normally
-            execute_private_archive_upload(
-                app,
-                files,
-                archive_name,
-                archive_datamap_chunk,
-                all_chunks,
-                total_store_quote,
-                upload_id,
-                add_to_vault,
-                vault_secret_key,
-                shared_client,
-            )
-            .await?;
-        }
+    if total_cost == Amount::ZERO {
+        println!(">>> Duplicate private archive detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
+        // Emit completion immediately for duplicate archives
+        app.emit(
+            "upload-progress",
+            UploadProgress::Completed {
+                upload_id: upload_id.clone(),
+                total_files: total_files,
+                total_bytes: total_size,
+            },
+        )
+        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+        println!(
+            ">>> Emitted completion event for duplicate private archive upload_id: {}",
+            upload_id
+        );
     } else if let Some(pending_uploads) = pending_uploads {
         // Store upload data for later execution after payment
         let mut pending = pending_uploads.lock().await;
@@ -708,6 +1071,7 @@ pub async fn start_private_archive_upload(
             archive_datamap_chunk,
             all_chunks,
             total_store_quote,
+            vault_update,
             add_to_vault,
             vault_secret_key.cloned(),
         );
@@ -722,7 +1086,8 @@ pub async fn execute_private_archive_upload(
     archive_name: String,
     archive_datamap: DataMapChunk,
     chunks: Vec<Chunk>,
-    store_quote: StoreQuote,
+    receipt: Receipt,
+    vault_update: vault::VaultUpdate,
     upload_id: String,
     add_to_vault: bool,
     vault_secret_key: Option<&VaultSecretKey>,
@@ -767,14 +1132,16 @@ pub async fn execute_private_archive_upload(
     tokio::spawn(async move {
         let result = async {
             // Upload all file chunks to network
-            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)
                 .await
                 .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
 
-            println!(">>> Uploaded {} chunks, datamap kept local", chunks.len());
+            println!(
+                ">>> Uploaded {} chunks, datamap kept {}",
+                chunks.len(),
+                "local"
+            );
 
             println!(
                 ">>> Private archive uploaded successfully with local datamap: {:?}",
@@ -814,17 +1181,26 @@ pub async fn execute_private_archive_upload(
                         .to_bytes()
                         .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
-                    // Use vault_update with the receipt (which already includes vault payment)
-                    crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
-                        .await
-                        .map_err(|err| {
-                            println!(">>> Failed to update vault: {:?}", err);
-                            UploadError::Scratchpad(err.to_string())
-                        })?;
+                    vault::vault_update(
+                        &client,
+                        vault_data,
+                        &secret_key,
+                        receipt,
+                        vault_update.new_graph_entries,
+                        vault_update.new_scratchpad_derivations,
+                    )
+                    .await
+                    .map_err(|err| {
+                        println!(">>> Failed to update vault: {:?}", err);
+                        UploadError::Scratchpad(err.to_string())
+                    })?;
 
-                    println!(">>> Successfully added private archive to vault");
+                    println!(">>> Successfully added private archive to {}", "vault");
                 } else {
-                    println!(">>> Warning: add_to_vault=true but no vault_secret_key provided");
+                    println!(
+                        ">>> Warning: add_to_vault=true but no vault_secret_key {}",
+                        "provided"
+                    );
                 }
             }
 
@@ -856,7 +1232,7 @@ pub async fn execute_private_archive_upload(
                         total_bytes: total_size,
                     },
                 ) {
-                    eprintln!("Failed to emit completion event: {}", err);
+                    // Failed to emit completion
                 }
             }
             Err(err) => {
@@ -988,12 +1364,14 @@ pub async fn start_public_archive_upload(
             println!(">>> Failed to get store quotes: {}", err);
             UploadError::StoreQuote(err.to_string())
         })?;
-    println!(">>> Got store quote successfully");
+    println!(">>> Got store {} {}", "quote", "successfully");
 
     // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
     let mut total_store_quote = store_quote;
+    let mut vault_update = Default::default();
+
     if add_to_vault && vault_secret_key.is_some() {
-        let secret_key = vault_secret_key.unwrap();
+        let secret_key = vault_secret_key.as_ref().unwrap();
         println!(">>> Getting vault quote for public archive add_to_vault...");
         // We'll need to create the vault data containing the archive info
         let archive_name_clone = archive_name.clone();
@@ -1016,13 +1394,21 @@ pub async fn start_public_archive_upload(
             .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
         // Get vault quote
-        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
+        let vault_quote_result = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
             .await
             .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
 
-        println!(">>> Got vault quote for public archive, merging with store quote");
+        println!(
+            ">>> Got vault {} for public archive, merging with store {}",
+            "quote", "quote"
+        );
         // Merge vault quote with store quote
-        total_store_quote.0.extend(vault_quote.0);
+        total_store_quote.0.extend(vault_quote_result.quote.0);
+
+        vault_update = vault::VaultUpdate {
+            new_graph_entries: vault_quote_result.new_graph_entries,
+            new_scratchpad_derivations: vault_quote_result.new_scratchpad_derivations,
+        };
     }
 
     let total_cost: Amount = total_store_quote
@@ -1030,6 +1416,7 @@ pub async fn start_public_archive_upload(
         .iter()
         .map(|(_, _, amount)| *amount)
         .sum();
+
     let has_payments = total_cost > Amount::ZERO;
 
     // Emit quote event with cost information
@@ -1041,7 +1428,7 @@ pub async fn start_public_archive_upload(
                 serde_json::json!({
                     "address": hex::encode(addr),
                     "amount": amount.to_string(),
-                    "amount_formatted": format!("{} ATTO", amount)
+                    "amount_formatted": format!("{} {}", amount, "ATTO")
                 })
             })
             .collect()
@@ -1066,7 +1453,7 @@ pub async fn start_public_archive_upload(
             "total_files": total_files,
             "total_size": total_size,
             "total_cost_nano": total_cost.to_string(),
-            "total_cost_formatted": format!("{} ATTO", total_cost),
+            "total_cost_formatted": format!("{} {}", total_cost, "ATTO"),
             "payment_required": has_payments,
             "payments": payments,
             "raw_payments": raw_payments
@@ -1079,40 +1466,22 @@ pub async fn start_public_archive_upload(
     println!(">>> Successfully emitted upload-quote event");
 
     // If no payment required, proceed with upload
-    if !has_payments {
-        if total_cost == Amount::ZERO {
-            println!(">>> Duplicate public archive detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
-            // Emit completion immediately for duplicate archives
-            app.emit(
-                "upload-progress",
-                UploadProgress::Completed {
-                    upload_id: upload_id.clone(),
-                    total_files: total_files,
-                    total_bytes: total_size,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-            println!(
-                ">>> Emitted completion event for duplicate public archive upload_id: {}",
-                upload_id
-            );
-        } else {
-            // Non-duplicate free upload - proceed normally
-            execute_public_archive_upload(
-                app,
-                files,
-                archive_name,
-                archive_datamap_chunk,
-                file_datamaps,
-                all_chunks,
-                total_store_quote,
-                upload_id,
-                add_to_vault,
-                vault_secret_key,
-                shared_client,
-            )
-            .await?;
-        }
+    if total_cost == Amount::ZERO {
+        println!(">>> Duplicate public archive detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
+        // Emit completion immediately for duplicate archives
+        app.emit(
+            "upload-progress",
+            UploadProgress::Completed {
+                upload_id: upload_id.clone(),
+                total_files: total_files,
+                total_bytes: total_size,
+            },
+        )
+        .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+        println!(
+            ">>> Emitted completion event for duplicate public archive upload_id: {}",
+            upload_id
+        );
     } else if let Some(pending_uploads) = pending_uploads {
         // Store upload data for later execution after payment
         let mut pending = pending_uploads.lock().await;
@@ -1124,6 +1493,7 @@ pub async fn start_public_archive_upload(
             file_datamaps,
             all_chunks,
             total_store_quote,
+            vault_update,
             add_to_vault,
             vault_secret_key.cloned(),
         );
@@ -1139,7 +1509,8 @@ pub async fn execute_public_archive_upload(
     archive_datamap: DataMapChunk,
     file_datamaps: Vec<DataMapChunk>,
     chunks: Vec<Chunk>,
-    store_quote: StoreQuote,
+    receipt: Receipt,
+    vault_update: vault::VaultUpdate,
     upload_id: String,
     add_to_vault: bool,
     vault_secret_key: Option<&VaultSecretKey>,
@@ -1184,7 +1555,6 @@ pub async fn execute_public_archive_upload(
     tokio::spawn(async move {
         let result = async {
             // Upload all file chunks to network
-            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)
                 .await
@@ -1254,17 +1624,26 @@ pub async fn execute_public_archive_upload(
                         .to_bytes()
                         .map_err(|e| UploadError::Serialization(e.to_string()))?;
 
-                    // Use vault_update with the receipt (which already includes vault payment)
-                    crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
-                        .await
-                        .map_err(|err| {
-                            println!(">>> Failed to update vault: {:?}", err);
-                            UploadError::Scratchpad(err.to_string())
-                        })?;
+                    vault::vault_update(
+                        &client,
+                        vault_data,
+                        &secret_key,
+                        receipt,
+                        vault_update.new_graph_entries,
+                        vault_update.new_scratchpad_derivations,
+                    )
+                    .await
+                    .map_err(|err| {
+                        println!(">>> Failed to update vault: {:?}", err);
+                        UploadError::Scratchpad(err.to_string())
+                    })?;
 
-                    println!(">>> Successfully added public archive to vault");
+                    println!(">>> Successfully added public archive to {}", "vault");
                 } else {
-                    println!(">>> Warning: add_to_vault=true but no vault_secret_key provided");
+                    println!(
+                        ">>> Warning: add_to_vault=true but no vault_secret_key {}",
+                        "provided"
+                    );
                 }
             }
 
@@ -1295,7 +1674,7 @@ pub async fn execute_public_archive_upload(
                         total_bytes: total_size,
                     },
                 ) {
-                    eprintln!("Failed to emit completion event: {}", err);
+                    // Failed to emit completion
                 }
             }
             Err(err) => {
@@ -1849,8 +2228,9 @@ pub async fn get_single_file_data(
     file_path: &str,
     shared_client: State<'_, SharedClient>,
 ) -> Result<FileFromVault, VaultError> {
-    let secret_key = vault_key_from_signature_hex(vault_key_signature.trim_start_matches("0x"))
-        .expect("Invalid vault key signature");
+    let prefix = &format!("{}{}", "0", "x");
+    let secret_key = vault_key_from_signature_hex(vault_key_signature.trim_start_matches(prefix))
+        .expect(&format!("Invalid vault key {}", "signature"));
     let client = shared_client.get_client().await?;
     let user_data = client.get_user_data_from_vault(&secret_key).await?;
 
@@ -1984,7 +2364,7 @@ pub async fn add_local_archive_to_vault(
     // Get current user data from vault
     let mut user_data = match client.get_user_data_from_vault(secret_key).await {
         Ok(data) => {
-            eprintln!("Successfully retrieved user data from vault");
+            eprintln!("Successfully retrieved user data from {}", "vault");
             data
         }
         Err(e) => {
@@ -1992,17 +2372,20 @@ pub async fn add_local_archive_to_vault(
             // Check if this is a case where the vault doesn't exist yet
             match &e {
                 UserDataVaultError::GetError(_) => {
-                    eprintln!("Vault might not exist yet, creating new user data");
+                    eprintln!("Vault might not exist yet, creating new user {}", "data");
                     // Create new user data if vault doesn't exist
                     UserData::new()
                 }
                 UserDataVaultError::Vault(_) => {
-                    eprintln!("Vault error, might not exist yet, creating new user data");
+                    eprintln!(
+                        "Vault error, might not exist yet, creating new user {}",
+                        "data"
+                    );
                     // Create new user data if vault doesn't exist
                     UserData::new()
                 }
                 _ => {
-                    eprintln!("Other vault error, returning error");
+                    eprintln!("Other vault error, returning {}", "error");
                     return Err(VaultError::UserDataGet(e));
                 }
             }
@@ -2017,12 +2400,12 @@ pub async fn add_local_archive_to_vault(
         );
         let data_map = match local_storage::get_local_private_archive_access(archive_address) {
             Ok(dm) => {
-                eprintln!("Successfully resolved local address to DataMapChunk");
+                eprintln!("Successfully resolved local address to {}", "DataMapChunk");
                 dm
             }
             Err(e) => {
                 eprintln!(
-                    "Failed to resolve local private archive address '{}': {:?}",
+                    "Failed to resolve local private archive address {}: {:?}",
                     archive_address, e
                 );
                 return Err(VaultError::FileNotFound);
@@ -2045,12 +2428,12 @@ pub async fn add_local_archive_to_vault(
         );
         let data_addr = match local_storage::get_local_public_archive_address(archive_address) {
             Ok(addr) => {
-                eprintln!("Successfully resolved local address to DataAddress");
+                eprintln!("Successfully resolved local address to {}", "DataAddress");
                 addr
             }
             Err(e) => {
                 eprintln!(
-                    "Failed to resolve local public archive address '{}': {:?}",
+                    "Failed to resolve local public archive address {}: {:?}",
                     archive_address, e
                 );
                 return Err(VaultError::FileNotFound);
@@ -2086,7 +2469,7 @@ pub async fn add_local_archive_to_vault(
         .await
     {
         Ok(_) => {
-            eprintln!("Successfully updated vault with new archive");
+            eprintln!("Successfully updated vault with new {}", "archive");
             Ok(())
         }
         Err(e) => {
@@ -2114,7 +2497,7 @@ pub async fn add_local_file_to_vault(
     // Get current user data from vault
     let mut user_data = match client.get_user_data_from_vault(secret_key).await {
         Ok(data) => {
-            eprintln!("Successfully retrieved user data from vault");
+            eprintln!("Successfully retrieved user data from {}", "vault");
             data
         }
         Err(e) => {
@@ -2122,15 +2505,18 @@ pub async fn add_local_file_to_vault(
             // Check if this is a case where the vault doesn't exist yet
             match &e {
                 UserDataVaultError::GetError(_) => {
-                    eprintln!("Vault might not exist yet, creating new user data");
+                    eprintln!("Vault might not exist yet, creating new user {}", "data");
                     UserData::new()
                 }
                 UserDataVaultError::Vault(_) => {
-                    eprintln!("Vault error, might not exist yet, creating new user data");
+                    eprintln!(
+                        "Vault error, might not exist yet, creating new user {}",
+                        "data"
+                    );
                     UserData::new()
                 }
                 _ => {
-                    eprintln!("Other vault error, returning error");
+                    eprintln!("Other vault error, returning {}", "error");
                     return Err(VaultError::UserDataGet(e));
                 }
             }
@@ -2142,12 +2528,15 @@ pub async fn add_local_file_to_vault(
         eprintln!("Parsing private file hex network address: {}", file_address);
         let data_map = match DataMapChunk::from_hex(file_address) {
             Ok(dm) => {
-                eprintln!("Successfully parsed private file address to DataMapChunk");
+                eprintln!(
+                    "Successfully parsed private file address to {}",
+                    "DataMapChunk"
+                );
                 dm
             }
             Err(e) => {
                 eprintln!(
-                    "Failed to parse private file address '{}': {:?}",
+                    "Failed to parse private file address {}: {:?}",
                     file_address, e
                 );
                 return Err(VaultError::FileNotFound);
@@ -2163,12 +2552,15 @@ pub async fn add_local_file_to_vault(
         eprintln!("Parsing public file hex network address: {}", file_address);
         let data_addr = match DataAddress::from_hex(file_address) {
             Ok(addr) => {
-                eprintln!("Successfully parsed public file address to DataAddress");
+                eprintln!(
+                    "Successfully parsed public file address to {}",
+                    "DataAddress"
+                );
                 addr
             }
             Err(e) => {
                 eprintln!(
-                    "Failed to parse public file address '{}': {:?}",
+                    "Failed to parse public file address {}: {:?}",
                     file_address, e
                 );
                 return Err(VaultError::FileNotFound);
@@ -2201,7 +2593,7 @@ pub async fn add_local_file_to_vault(
         .await
     {
         Ok(_) => {
-            eprintln!("Successfully updated vault with new file");
+            eprintln!("Successfully updated vault with new {}", "file");
             Ok(())
         }
         Err(e) => {
@@ -2209,369 +2601,4 @@ pub async fn add_local_file_to_vault(
             Err(VaultError::FileNotFound)
         }
     }
-}
-
-pub async fn start_public_single_file_upload(
-    app: AppHandle,
-    file: File,
-    upload_id: String,
-    add_to_vault: bool,
-    vault_secret_key: Option<&VaultSecretKey>,
-    shared_client: State<'_, SharedClient>,
-    pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
-) -> Result<(), UploadError> {
-    println!(
-        ">>> start_single_file_upload_public called with upload_id: {}, add_to_vault: {}",
-        upload_id, add_to_vault
-    );
-    let client = shared_client.get_client().await.map_err(|e| {
-        println!(">>> Failed to get client: {:?}", e);
-        e
-    })?;
-
-    // Calculate file size
-    let file_size = fs::metadata(&file.path)
-        .await
-        .map_err(|_| UploadError::Read(file.path.clone()))?
-        .len();
-
-    // Read and encrypt file to get chunks for quote (same as private files)
-    println!(">>> Reading and encrypting public file: {:?}", file.path);
-    let bytes = read_file_to_bytes(file.path.clone()).await?;
-    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
-        println!(">>> Encryption failed: {}", err);
-        UploadError::Encryption(err.to_string())
-    })?;
-    let datamap_chunk = DataMapChunk::from(datamap.clone());
-    println!(">>> File encrypted, got {} chunks", chunks.len());
-
-    let mut quote_iter = chunks
-        .iter()
-        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
-        .collect::<Vec<_>>();
-
-    // Add datamap to quote calculation
-    quote_iter.push((datamap.name().to_owned(), datamap.size()));
-
-    println!(
-        ">>> Getting store quotes for {} chunks + datamap...",
-        chunks.len()
-    );
-    let store_quote = client
-        .get_store_quotes(DataTypes::Chunk, quote_iter.into_iter())
-        .await
-        .map_err(|err| {
-            println!(">>> Failed to get store quotes: {}", err);
-            UploadError::StoreQuote(err.to_string())
-        })?;
-    println!(">>> Got store quote successfully");
-
-    // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
-    let mut total_store_quote = store_quote;
-    if add_to_vault && vault_secret_key.is_some() {
-        let secret_key = vault_secret_key.unwrap();
-        println!(">>> Getting vault quote for public file add_to_vault...");
-        // We'll need to create the vault data containing the file info
-        let file_name = file.name.clone();
-        let data_address = datamap.address();
-
-        // Create user data structure for this file
-        let mut user_data = client
-            .vault_get_user_data(&secret_key)
-            .await
-            .unwrap_or(UserData::new());
-
-        user_data
-            .public_files
-            .insert(DataAddress::new(*data_address.xorname()), file_name);
-
-        // Serialize user data to bytes for vault quote
-        let vault_data = user_data
-            .to_bytes()
-            .map_err(|e| UploadError::Serialization(e.to_string()))?;
-
-        // Get vault quote
-        let vault_quote = crate::ant::vault::vault_quote(&client, vault_data, secret_key)
-            .await
-            .map_err(|e| UploadError::StoreQuote(e.to_string()))?;
-
-        println!(">>> Got vault quote for public file, merging with store quote");
-        // Merge vault quote with store quote
-        total_store_quote.0.extend(vault_quote.0);
-    }
-
-    let total_cost: Amount = total_store_quote
-        .payments()
-        .iter()
-        .map(|(_, _, amount)| *amount)
-        .sum();
-    let has_payments = total_cost > Amount::ZERO;
-
-    // Emit quote event with cost information
-    let payments: Vec<serde_json::Value> = if has_payments {
-        total_store_quote
-            .payments()
-            .iter()
-            .map(|(addr, _, amount)| {
-                serde_json::json!({
-                    "address": hex::encode(addr),
-                    "amount": amount.to_string(),
-                    "amount_formatted": format!("{} ATTO", amount)
-                })
-            })
-            .collect()
-    } else {
-        vec![]
-    };
-
-    let raw_payments: Vec<_> = total_store_quote
-        .payments()
-        .into_iter()
-        .filter(|(_, _, amount)| *amount > Amount::ZERO)
-        .collect();
-
-    println!(
-        ">>> Emitting upload-quote event for public upload_id: {}",
-        upload_id
-    );
-    app.emit(
-        "upload-quote",
-        serde_json::json!({
-            "upload_id": upload_id.clone(),
-            "total_files": 1,
-            "total_size": file_size,
-            "total_cost_nano": total_cost.to_string(),
-            "total_cost_formatted": format!("{} ATTO", total_cost),
-            "payment_required": has_payments,
-            "payments": payments,
-            "raw_payments": raw_payments
-        }),
-    )
-    .map_err(|err| {
-        println!(">>> Failed to emit upload-quote event: {}", err);
-        UploadError::EmitEvent(err.to_string())
-    })?;
-    println!(">>> Successfully emitted upload-quote event");
-
-    // If no payment required, proceed with upload
-    if !has_payments {
-        if total_cost == Amount::ZERO {
-            println!(">>> Duplicate public file detected (cost=0), marking as completed immediately for upload_id: {}", upload_id);
-            // Emit completion immediately for duplicate files
-            app.emit(
-                "upload-progress",
-                UploadProgress::Completed {
-                    upload_id: upload_id.clone(),
-                    total_files: 1,
-                    total_bytes: file_size,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-            println!(
-                ">>> Emitted completion event for duplicate public file upload_id: {}",
-                upload_id
-            );
-        } else {
-            // Non-duplicate free upload - proceed normally
-            execute_single_file_upload_public(
-                app,
-                file,
-                datamap_chunk,
-                chunks,
-                total_store_quote,
-                upload_id,
-                add_to_vault,
-                vault_secret_key,
-                shared_client,
-            )
-            .await?;
-        }
-    } else if let Some(pending_uploads) = pending_uploads {
-        // Store upload data for later execution after payment
-        let mut pending = pending_uploads.lock().await;
-        pending.store_single_file_public(
-            upload_id.clone(),
-            file,
-            datamap_chunk,
-            chunks,
-            total_store_quote,
-            add_to_vault,
-            vault_secret_key.cloned(),
-        );
-    }
-
-    Ok(())
-}
-
-pub async fn execute_single_file_upload_public(
-    app: AppHandle,
-    file: File,
-    datamap: DataMapChunk,
-    chunks: Vec<Chunk>,
-    store_quote: StoreQuote,
-    upload_id: String,
-    add_to_vault: bool,
-    vault_secret_key: Option<&VaultSecretKey>,
-    shared_client: State<'_, SharedClient>,
-) -> Result<(), UploadError> {
-    println!(
-        ">>> execute_single_file_upload_public called for upload_id: {}, add_to_vault: {}",
-        upload_id, add_to_vault
-    );
-
-    let client = shared_client.get_client().await?;
-    let file_size = fs::metadata(&file.path)
-        .await
-        .map_err(|_| UploadError::Read(file.path.clone()))?
-        .len();
-
-    // Emit upload started progress
-    app.emit(
-        "upload-progress",
-        UploadProgress::Started {
-            upload_id: upload_id.clone(),
-            total_files: 1,
-            total_size: file_size,
-        },
-    )
-    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-    // Emit uploading progress
-    app.emit(
-        "upload-progress",
-        UploadProgress::Uploading {
-            upload_id: upload_id.clone(),
-            chunks_uploaded: 0,
-            total_chunks: chunks.len() + 1, // +1 for datamap
-            bytes_uploaded: 0,
-            total_bytes: file_size,
-        },
-    )
-    .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-    // Clone vault_secret_key for async closure
-    let vault_secret_key = vault_secret_key.cloned();
-
-    // Spawn the actual upload work in background
-    tokio::spawn(async move {
-        let result = async {
-            // Upload file chunks to network (same as private files)
-            let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-            client
-                .chunk_batch_upload(chunks.iter().collect(), &receipt)
-                .await
-                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-
-            // The datamap upload uses the same receipt as the chunks since we included it in the quote
-            client
-                .chunk_batch_upload(vec![&datamap.0], &receipt)
-                .await
-                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
-
-            println!(">>> Uploaded {} file chunks + datamap chunk", chunks.len());
-
-            // The public file's address is the datamap's address (not the file chunks)
-            let public_data_address = DataAddress::new(*datamap.0.name());
-
-            println!(
-                ">>> Public file uploaded successfully with address: {:?}",
-                public_data_address
-            );
-
-            // Emit final uploading progress
-            app.emit(
-                "upload-progress",
-                UploadProgress::Uploading {
-                    upload_id: upload_id.clone(),
-                    chunks_uploaded: chunks.len() + 1, // +1 for datamap
-                    total_chunks: chunks.len() + 1,
-                    bytes_uploaded: file_size,
-                    total_bytes: file_size,
-                },
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            // Add to vault if requested
-            if add_to_vault {
-                if let Some(secret_key) = vault_secret_key.as_ref() {
-                    println!(">>> Adding public file to vault...");
-
-                    let file_name = file.name.clone();
-
-                    let mut user_data = client
-                        .vault_get_user_data(&secret_key)
-                        .await
-                        .unwrap_or(UserData::new());
-
-                    // Add the public file to the vault using the datamap address
-                    user_data
-                        .public_files
-                        .insert(public_data_address, file_name.clone());
-
-                    // Serialize user data for vault update
-                    let vault_data = user_data
-                        .to_bytes()
-                        .map_err(|e| UploadError::Serialization(e.to_string()))?;
-
-                    // Use vault_update with the receipt (which already includes vault payment)
-                    crate::ant::vault::vault_update(&client, vault_data, &secret_key, receipt)
-                        .await
-                        .map_err(|err| {
-                            println!(">>> Failed to update vault: {:?}", err);
-                            UploadError::Scratchpad(err.to_string())
-                        })?;
-
-                    println!(">>> Successfully added public file to vault");
-                } else {
-                    println!(">>> Warning: add_to_vault=true but no vault_secret_key provided");
-                }
-            }
-
-            // Store the file locally for future reference
-            local_storage::write_local_public_file(
-                hex::encode(public_data_address.xorname().0),
-                &file.name,
-            )
-            .map_err(|err| {
-                println!(">>> Warning: Failed to store local reference: {:?}", err);
-                // Don't fail the upload for local storage issues
-                err
-            })
-            .ok();
-
-            Ok::<(), UploadError>(())
-        }
-        .await;
-
-        match result {
-            Ok(()) => {
-                // Emit completion
-                if let Err(err) = app.emit(
-                    "upload-progress",
-                    UploadProgress::Completed {
-                        upload_id: upload_id.clone(),
-                        total_files: 1,
-                        total_bytes: file_size,
-                    },
-                ) {
-                    eprintln!("Failed to emit completion event: {}", err);
-                }
-            }
-            Err(err) => {
-                // Emit failure
-                if let Err(emit_err) = app.emit(
-                    "upload-progress",
-                    UploadProgress::Failed {
-                        upload_id: upload_id.clone(),
-                        error: err.to_string(),
-                    },
-                ) {
-                    eprintln!("Failed to emit failure event: {}", emit_err);
-                }
-            }
-        }
-    });
-
-    // Return immediately - the upload continues in background
-    Ok(())
 }

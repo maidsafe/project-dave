@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::ant::client::SharedClient;
 use crate::ant::files::File;
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
+use crate::ant::vault::VaultUpdate;
 use ant::{
     app_data::AppData,
     files::{FileFromVault, VaultStructure},
@@ -28,6 +29,7 @@ pub enum PendingUploadData {
         datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         secret_key: VaultSecretKey,
         add_to_vault: bool,
     },
@@ -36,6 +38,7 @@ pub enum PendingUploadData {
         datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
     },
@@ -45,6 +48,7 @@ pub enum PendingUploadData {
         archive_datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
     },
@@ -55,6 +59,7 @@ pub enum PendingUploadData {
         file_datamaps: Vec<DataMapChunk>,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
     },
@@ -73,6 +78,7 @@ impl PendingUploads {
         datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         secret_key: VaultSecretKey,
         add_to_vault: bool,
     ) {
@@ -83,6 +89,7 @@ impl PendingUploads {
                 datamap,
                 chunks,
                 store_quote,
+                vault_update,
                 secret_key,
                 add_to_vault,
             },
@@ -96,6 +103,7 @@ impl PendingUploads {
         datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
     ) {
@@ -106,6 +114,7 @@ impl PendingUploads {
                 datamap,
                 chunks,
                 store_quote,
+                vault_update,
                 add_to_vault,
                 vault_secret_key,
             },
@@ -121,6 +130,7 @@ impl PendingUploads {
         file_datamaps: Vec<DataMapChunk>,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
     ) {
@@ -133,6 +143,7 @@ impl PendingUploads {
                 file_datamaps,
                 chunks,
                 store_quote,
+                vault_update,
                 add_to_vault,
                 vault_secret_key,
             },
@@ -147,6 +158,7 @@ impl PendingUploads {
         archive_datamap: DataMapChunk,
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
+        vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
     ) {
@@ -158,6 +170,7 @@ impl PendingUploads {
                 archive_datamap,
                 chunks,
                 store_quote,
+                vault_update,
                 add_to_vault,
                 vault_secret_key,
             },
@@ -338,15 +351,19 @@ async fn confirm_upload_payment(
                 datamap,
                 chunks,
                 store_quote,
+                vault_update,
                 secret_key,
                 add_to_vault,
             } => {
-                ant::files::execute_single_file_upload(
+                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+
+                ant::files::execute_private_single_file_upload(
                     app,
                     file,
                     datamap,
                     chunks,
-                    store_quote,
+                    receipt,
+                    vault_update,
                     &secret_key,
                     upload_id,
                     add_to_vault,
@@ -362,15 +379,19 @@ async fn confirm_upload_payment(
                 datamap,
                 chunks,
                 store_quote,
+                vault_update,
                 add_to_vault,
                 vault_secret_key,
             } => {
-                ant::files::execute_single_file_upload_public(
+                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+
+                ant::files::execute_public_single_file_upload(
                     app,
                     file,
                     datamap,
                     chunks,
-                    store_quote,
+                    receipt,
+                    vault_update,
                     upload_id,
                     add_to_vault,
                     vault_secret_key.as_ref(),
@@ -389,8 +410,11 @@ async fn confirm_upload_payment(
                 chunks,
                 store_quote,
                 add_to_vault,
+                vault_update,
                 vault_secret_key,
             } => {
+                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+
                 ant::files::execute_public_archive_upload(
                     app,
                     files,
@@ -398,7 +422,8 @@ async fn confirm_upload_payment(
                     archive_datamap,
                     file_datamaps,
                     chunks,
-                    store_quote,
+                    receipt,
+                    vault_update,
                     upload_id,
                     add_to_vault,
                     vault_secret_key.as_ref(),
@@ -415,16 +440,20 @@ async fn confirm_upload_payment(
                 archive_datamap,
                 chunks,
                 store_quote,
+                vault_update,
                 add_to_vault,
                 vault_secret_key,
             } => {
+                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+
                 ant::files::execute_private_archive_upload(
                     app,
                     files,
                     archive_name,
                     archive_datamap,
                     chunks,
-                    store_quote,
+                    receipt,
+                    vault_update,
                     upload_id,
                     add_to_vault,
                     vault_secret_key.as_ref(),

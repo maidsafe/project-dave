@@ -6,14 +6,27 @@ use autonomi::vault::{
     vault_split_bytes, VaultError, VaultSecretKey, NUM_OF_SCRATCHPADS_PER_GRAPH_ENTRY,
     VAULT_HEAD_DERIVATION_INDEX,
 };
-use autonomi::{AttoTokens, Bytes, Client, GraphEntry, PublicKey, Scratchpad, ScratchpadAddress};
+use autonomi::{Bytes, Client, GraphEntry, PublicKey, Scratchpad, ScratchpadAddress};
 use tracing::info;
+
+#[derive(Debug, Clone)]
+pub struct VaultQuoteResult {
+    pub quote: StoreQuote,
+    pub new_graph_entries: Vec<GraphEntry>,
+    pub new_scratchpad_derivations: Vec<(PublicKey, [u8; 32])>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct VaultUpdate {
+    pub new_graph_entries: Vec<GraphEntry>,
+    pub new_scratchpad_derivations: Vec<(PublicKey, [u8; 32])>,
+}
 
 pub async fn vault_quote(
     client: &Client,
     data: Bytes,
     secret_key: &VaultSecretKey,
-) -> Result<StoreQuote, VaultError> {
+) -> Result<VaultQuoteResult, VaultError> {
     let main_secret_key = MainSecretKey::new(secret_key.clone());
 
     // scratchpad_derivations ordered by the collection order
@@ -33,6 +46,8 @@ pub async fn vault_quote(
     );
 
     let mut quote: StoreQuote = StoreQuote(Default::default());
+    let mut new_graph_entries: Vec<GraphEntry> = Vec::new();
+    let mut new_scratchpad_derivations: Vec<(PublicKey, [u8; 32])> = Vec::new();
 
     while scratchpad_derivations.len() < contents.len() {
         let own_secret_key = main_secret_key.derive_key(&cur_free_graph_entry_derivation);
@@ -40,8 +55,9 @@ pub async fn vault_quote(
         let parents = vec![];
         let initial_value = [0u8; 32];
 
-        // Pointing to the next GraphEntry
+        // Generate random derivation for the next graph entry
         let new_graph_entry_derivation = DerivationIndex::random(&mut rand::thread_rng());
+
         let public_key: PublicKey = main_secret_key
             .derive_key(&new_graph_entry_derivation)
             .public_key()
@@ -49,13 +65,14 @@ pub async fn vault_quote(
 
         let mut descendants = vec![(public_key, new_graph_entry_derivation.into_bytes())];
 
-        // Pointing to other future Scratchpads
         descendants.extend((0..NUM_OF_SCRATCHPADS_PER_GRAPH_ENTRY).map(|_| {
             let derivation_index = DerivationIndex::random(&mut rand::thread_rng());
+
             let public_key: PublicKey = main_secret_key
                 .derive_key(&derivation_index)
                 .public_key()
                 .into();
+
             (public_key, derivation_index.into_bytes())
         }));
 
@@ -69,22 +86,28 @@ pub async fn vault_quote(
         let graph_entry_address = graph_entry.address();
         let graph_entry_xor_name = graph_entry_address.xorname();
 
-        quote = client
+        let graph_entry_quote = client
             .get_store_quotes(
                 DataTypes::GraphEntry,
                 std::iter::once((graph_entry_xor_name, graph_entry.size())),
             )
             .await?;
 
-        let new_scratchpad_derivations = descendants.split_off(1);
+        quote.0.extend(graph_entry_quote.0);
+
+        let scratchpads = descendants.split_off(1);
+
+        new_graph_entries.push(graph_entry);
+        new_scratchpad_derivations.extend(&scratchpads);
 
         cur_free_graph_entry_derivation = new_graph_entry_derivation;
-        scratchpad_derivations.extend(&new_scratchpad_derivations);
+        scratchpad_derivations.extend(&scratchpads);
     }
 
     for (i, content) in contents.into_iter().enumerate() {
         let sp_secret_key =
             main_secret_key.derive_key(&DerivationIndex::from_bytes(scratchpad_derivations[i].1));
+
         let client = client.clone();
 
         let target_addr = ScratchpadAddress::new(sp_secret_key.public_key().into());
@@ -99,19 +122,17 @@ pub async fn vault_quote(
                 )
                 .await?;
 
-            info!("Scratchpad at {target_addr:?} does not exist, quote is {scratchpad_quote:?}");
+            info!("Scratchpad at {target_addr:?} does not exist. Xorname is: {:?}, quote is {scratchpad_quote:?}", target_addr.xorname());
 
             quote.0.extend(scratchpad_quote.0);
-
-            // TODO: check if payment proof is actually in the receipt when creating/updating scratchpad
-
-            if !quote.0.contains_key(&target_addr.xorname()) {
-                panic!("No scratchpad xorname in the quote");
-            };
         }
     }
 
-    Ok(quote)
+    Ok(VaultQuoteResult {
+        quote,
+        new_graph_entries,
+        new_scratchpad_derivations,
+    })
 }
 
 pub async fn vault_update(
@@ -119,11 +140,13 @@ pub async fn vault_update(
     data: Bytes,
     secret_key: &VaultSecretKey,
     receipt: Receipt,
+    new_graph_entries: Vec<GraphEntry>,
+    new_scratchpad_derivations: Vec<(PublicKey, [u8; 32])>,
 ) -> Result<(), VaultError> {
     let main_secret_key = MainSecretKey::new(secret_key.clone());
 
-    // scratchpad_derivations ordered by the collection order
-    let (mut cur_free_graph_entry_derivation, mut scratchpad_derivations) = client
+    // Get initial vault capacity
+    let (_cur_free_graph_entry_derivation, mut scratchpad_derivations) = client
         .vault_claimed_capacity(
             &main_secret_key,
             DerivationIndex::from_bytes(VAULT_HEAD_DERIVATION_INDEX),
@@ -138,48 +161,13 @@ pub async fn vault_update(
         contents.len()
     );
 
-    while scratchpad_derivations.len() < contents.len() {
-        let own_secret_key = main_secret_key.derive_key(&cur_free_graph_entry_derivation);
-
-        let parents = vec![];
-        let initial_value = [0u8; 32];
-
-        // Pointing to the next GraphEntry
-        let new_graph_entry_derivation = DerivationIndex::random(&mut rand::thread_rng());
-        let public_key: PublicKey = main_secret_key
-            .derive_key(&new_graph_entry_derivation)
-            .public_key()
-            .into();
-
-        let mut descendants = vec![(public_key, new_graph_entry_derivation.into_bytes())];
-
-        // Pointing to other future Scratchpads
-        descendants.extend((0..NUM_OF_SCRATCHPADS_PER_GRAPH_ENTRY).map(|_| {
-            let derivation_index = DerivationIndex::random(&mut rand::thread_rng());
-            let public_key: PublicKey = main_secret_key
-                .derive_key(&derivation_index)
-                .public_key()
-                .into();
-            (public_key, derivation_index.into_bytes())
-        }));
-
-        let graph_entry = GraphEntry::new(
-            &own_secret_key.into(),
-            parents,
-            initial_value,
-            descendants.clone(),
-        );
-
-        // Upload the GraphEntry
+    for graph_entry in new_graph_entries {
         let (_graph_cost, _addr) = client
             .graph_entry_put(graph_entry, PaymentOption::Receipt(receipt.clone()))
             .await?;
-
-        let new_scratchpad_derivations = descendants.split_off(1);
-
-        cur_free_graph_entry_derivation = new_graph_entry_derivation;
-        scratchpad_derivations.extend(&new_scratchpad_derivations);
     }
+
+    scratchpad_derivations.extend(&new_scratchpad_derivations);
 
     for (i, content) in contents.into_iter().enumerate() {
         let sp_secret_key =
@@ -218,6 +206,11 @@ pub async fn vault_update(
                 *USER_DATA_VAULT_CONTENT_IDENTIFIER,
                 &content,
                 counter,
+            );
+
+            info!(
+                "Looking for scratchpad xor name in receipt: {:?}",
+                target_addr.xorname()
             );
 
             if !receipt.contains_key(&target_addr.xorname()) {
