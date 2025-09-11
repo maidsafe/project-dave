@@ -645,11 +645,15 @@ async fn add_local_file_to_vault(
 
 #[tauri::command]
 async fn download_private_file(
-    data_map: DataMapChunk,
+    data_map: String,
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
-    ant::files::download_private_file(&data_map, to_dest, shared_client)
+    let data_map_chunk = DataMapChunk::from_hex(&data_map).map_err(|err| CommandError {
+        message: err.to_string(),
+    })?;
+
+    ant::files::download_private_file(&data_map_chunk, to_dest, shared_client)
         .await
         .map_err(|err| CommandError {
             message: err.to_string(),

@@ -1557,25 +1557,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
 
       if (fileData.file_access.Private) {
         console.log('Downloading private file with dataMap:', fileData.file_access.Private);
-
-        let dataMap;
-
-        // Check if this is a local address (string) or actual datamap (object/array)
-        if (typeof fileData.file_access.Private === 'string') {
-          // This is a local address, fetch the actual datamap
-          console.log('Fetching datamap from local storage for address:', fileData.file_access.Private);
-          try {
-            dataMap = await invoke('get_local_private_file_access', {
-              localAddr: fileData.file_access.Private
-            });
-          } catch (error: any) {
-            throw new Error(`Failed to get private file datamap: ${error.message}`);
-          }
-        } else {
-          // This is already a datamap, convert Vue Proxy to plain object
-          dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
-        }
-
+        const dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
         await invoke('download_private_file', {
           dataMap: dataMap,
           toDest: uniquePath,
@@ -1610,7 +1592,7 @@ const handleDownloadFile = async (fileToDownload?: any) => {
         detail: `File saved as: ${finalFileName}`,
         life: 8000,
         group: 'download-success',
-        data: { filePath: uniquePath }
+        data: {filePath: uniquePath}
       });
     } catch (error: any) {
       console.error('Download error:', error);
