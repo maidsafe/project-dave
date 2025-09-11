@@ -1375,7 +1375,7 @@ pub async fn start_public_archive_upload(
         println!(">>> Getting vault quote for public archive add_to_vault...");
         // We'll need to create the vault data containing the archive info
         let archive_name_clone = archive_name.clone();
-        let archive_data_address = archive_datamap.address();
+        let archive_data_address = archive_datamap_chunk.address();
 
         // Create user data structure for this archive
         let mut user_data = client
@@ -1384,7 +1384,7 @@ pub async fn start_public_archive_upload(
             .unwrap_or(UserData::new());
 
         user_data.file_archives.insert(
-            DataAddress::new(*archive_data_address.xorname()),
+            DataAddress::from_hex(&archive_data_address).map_err(|e| UploadError::Serialization(e.to_string()))?,
             archive_name_clone,
         );
 
@@ -2393,26 +2393,26 @@ pub async fn add_local_archive_to_vault(
     };
 
     if is_private {
-        // Resolve local address to actual network DataMapChunk
+        // Parse the hex archive address directly to DataMapChunk
         eprintln!(
-            "Resolving local private archive address: {}",
+            "Parsing private archive hex address: {}",
             archive_address
         );
-        let data_map = match local_storage::get_local_private_archive_access(archive_address) {
+        let data_map = match DataMapChunk::from_hex(archive_address) {
             Ok(dm) => {
-                eprintln!("Successfully resolved local address to {}", "DataMapChunk");
+                eprintln!("Successfully parsed archive address to {}", "DataMapChunk");
                 dm
             }
             Err(e) => {
                 eprintln!(
-                    "Failed to resolve local private archive address {}: {:?}",
+                    "Failed to parse private archive address {}: {:?}",
                     archive_address, e
                 );
                 return Err(VaultError::FileNotFound);
             }
         };
 
-        // Add to private archives using the resolved network address
+        // Add to private archives using the network address
         user_data
             .private_file_archives
             .insert(data_map, archive_name.to_string());
@@ -2421,19 +2421,19 @@ pub async fn add_local_archive_to_vault(
             archive_address, archive_name
         );
     } else {
-        // Resolve local address to actual network DataAddress
+        // Parse the hex archive address directly to DataAddress
         eprintln!(
-            "Resolving local public archive address: {}",
+            "Parsing public archive hex address: {}",
             archive_address
         );
-        let data_addr = match local_storage::get_local_public_archive_address(archive_address) {
+        let data_addr = match DataAddress::from_hex(archive_address) {
             Ok(addr) => {
-                eprintln!("Successfully resolved local address to {}", "DataAddress");
+                eprintln!("Successfully parsed archive address to {}", "DataAddress");
                 addr
             }
             Err(e) => {
                 eprintln!(
-                    "Failed to resolve local public archive address {}: {:?}",
+                    "Failed to parse public archive address {}: {:?}",
                     archive_address, e
                 );
                 return Err(VaultError::FileNotFound);

@@ -2,7 +2,7 @@
 
 use crate::ant::client::SharedClient;
 use crate::ant::files::PublicOrPrivateFile;
-use autonomi::client::files::archive_private::PrivateArchiveDataMap;
+use autonomi::chunk::DataMapChunk;
 use autonomi::client::files::archive_public::ArchiveAddress;
 use autonomi::data::DataAddress;
 use serde::{Deserialize, Serialize};
@@ -154,8 +154,8 @@ pub fn get_local_public_file_archives() -> Result<HashMap<ArchiveAddress, String
 }
 
 /// Get all local private file archives
-pub fn get_local_private_file_archives(
-) -> Result<HashMap<PrivateArchiveDataMap, String>, LocalStorageError> {
+pub fn get_local_private_file_archives() -> Result<HashMap<DataMapChunk, String>, LocalStorageError>
+{
     let user_data_path = get_user_data_dir()?;
     let private_file_archives_path = user_data_path.join("private_file_archives");
     fs::create_dir_all(&private_file_archives_path).map_err(LocalStorageError::WriteError)?;
@@ -173,11 +173,8 @@ pub fn get_local_private_file_archives(
             if let Ok(private_file_archive) =
                 serde_json::from_str::<PrivateFileArchive>(&file_content)
             {
-                if let Ok(private_file_archive_access) =
-                    PrivateArchiveDataMap::from_hex(&private_file_archive.secret_access)
-                {
-                    private_file_archives
-                        .insert(private_file_archive_access, private_file_archive.name);
+                if let Ok(datamap) = DataMapChunk::from_hex(&private_file_archive.secret_access) {
+                    private_file_archives.insert(datamap, private_file_archive.name);
                 }
             }
         }
@@ -216,8 +213,7 @@ pub fn get_local_public_files() -> Result<HashMap<DataAddress, String>, LocalSto
 }
 
 /// Get all local private files
-pub fn get_local_private_files() -> Result<HashMap<PrivateArchiveDataMap, String>, LocalStorageError>
-{
+pub fn get_local_private_files() -> Result<HashMap<DataMapChunk, String>, LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let private_files_path = user_data_path.join("private_files");
     let mut files = HashMap::new();
@@ -235,7 +231,7 @@ pub fn get_local_private_files() -> Result<HashMap<PrivateArchiveDataMap, String
         })?;
         if let Ok(content) = fs::read_to_string(entry.path()) {
             if let Ok(private_file) = serde_json::from_str::<PrivateFile>(&content) {
-                if let Ok(datamap) = PrivateArchiveDataMap::from_hex(&private_file.secret_access) {
+                if let Ok(datamap) = DataMapChunk::from_hex(&private_file.secret_access) {
                     files.insert(datamap, private_file.name);
                 }
             }
@@ -325,7 +321,7 @@ pub struct LocalFileInArchive {
 /// Get archive access data for loading its contents
 pub fn get_local_private_archive_access(
     local_addr: &str,
-) -> Result<PrivateArchiveDataMap, LocalStorageError> {
+) -> Result<DataMapChunk, LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let private_file_archives_path = user_data_path.join("private_file_archives");
     let file_path = private_file_archives_path.join(local_addr);
@@ -333,9 +329,8 @@ pub fn get_local_private_archive_access(
     let file_content = fs::read_to_string(file_path).map_err(LocalStorageError::ReadError)?;
     let private_file_archive: PrivateFileArchive =
         serde_json::from_str(&file_content).map_err(LocalStorageError::ParseError)?;
-    let private_file_archive_access =
-        PrivateArchiveDataMap::from_hex(&private_file_archive.secret_access)
-            .map_err(|e| LocalStorageError::HexError(e.to_string()))?;
+    let private_file_archive_access = DataMapChunk::from_hex(&private_file_archive.secret_access)
+        .map_err(|e| LocalStorageError::HexError(e.to_string()))?;
 
     Ok(private_file_archive_access)
 }
@@ -348,9 +343,7 @@ pub fn get_local_public_archive_address(
 }
 
 /// Get private file access data for adding to vault
-pub fn get_local_private_file_access(
-    local_addr: &str,
-) -> Result<PrivateArchiveDataMap, LocalStorageError> {
+pub fn get_local_private_file_access(local_addr: &str) -> Result<DataMapChunk, LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let private_files_path = user_data_path.join("private_files");
     let file_path = private_files_path.join(local_addr);
@@ -358,7 +351,7 @@ pub fn get_local_private_file_access(
     let file_content = fs::read_to_string(file_path).map_err(LocalStorageError::ReadError)?;
     let private_file: PrivateFile =
         serde_json::from_str(&file_content).map_err(LocalStorageError::ParseError)?;
-    let private_file_access = PrivateArchiveDataMap::from_hex(&private_file.secret_access)
+    let private_file_access = DataMapChunk::from_hex(&private_file.secret_access)
         .map_err(|e| LocalStorageError::HexError(e.to_string()))?;
 
     Ok(private_file_access)
@@ -378,7 +371,7 @@ pub fn get_all_local_files() -> Result<LocalFileData, LocalStorageError> {
     for (datamap, name) in get_local_private_file_archives()? {
         private_file_archives.push(LocalArchive {
             name,
-            address: datamap.address(),
+            address: datamap.to_hex(),
         });
     }
 
@@ -394,7 +387,7 @@ pub fn get_all_local_files() -> Result<LocalFileData, LocalStorageError> {
     for (datamap, name) in get_local_private_files()? {
         private_files.push(LocalFile {
             name,
-            address: datamap.address(),
+            address: datamap.to_hex(),
         });
     }
 
@@ -490,7 +483,7 @@ pub async fn get_local_structure_streaming(
 
         let temp_code = temp_code.clone();
         let task = tokio::spawn(async move {
-            match get_local_private_archive_access(&archive_address) {
+            match DataMapChunk::from_hex(&archive_address) {
                 Ok(archive_datamap) => match client.archive_get(&archive_datamap).await {
                     Ok(archive) => {
                         let mut files: Vec<LocalFileInArchive> = vec![];
@@ -523,7 +516,8 @@ pub async fn get_local_structure_streaming(
 
                         let _ = app.emit("local-update", update);
                     }
-                    Err(_) => {
+                    Err(err) => {
+                        println!(">>> Failed to get private archive: {:?}", err);
                         let failed_archive = LocalFailedArchive {
                             name: archive_name.clone(),
                             address: archive_address.clone(),
@@ -543,7 +537,8 @@ pub async fn get_local_structure_streaming(
                         let _ = app.emit("local-update", update);
                     }
                 },
-                Err(_) => {
+                Err(err) => {
+                    println!(">>> Failed to get local private archive access: {:?}", err);
                     let failed_archive = LocalFailedArchive {
                         name: archive_name.clone(),
                         address: archive_address.clone(),
@@ -698,14 +693,17 @@ pub async fn get_local_structure_streaming(
 pub async fn delete_local_public_file(address: String) -> Result<(), LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let public_file_path = user_data_path.join("public_files").join(&address);
-    
+
     if !public_file_path.exists() {
         return Err(LocalStorageError::ReadError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Public file with address {} not found in local storage", address),
+            format!(
+                "Public file with address {} not found in local storage",
+                address
+            ),
         )));
     }
-    
+
     fs::remove_file(public_file_path).map_err(LocalStorageError::WriteError)?;
     Ok(())
 }
@@ -714,14 +712,17 @@ pub async fn delete_local_public_file(address: String) -> Result<(), LocalStorag
 pub async fn delete_local_private_file(address: String) -> Result<(), LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let private_file_path = user_data_path.join("private_files").join(&address);
-    
+
     if !private_file_path.exists() {
         return Err(LocalStorageError::ReadError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Private file with address {} not found in local storage", address),
+            format!(
+                "Private file with address {} not found in local storage",
+                address
+            ),
         )));
     }
-    
+
     fs::remove_file(private_file_path).map_err(LocalStorageError::WriteError)?;
     Ok(())
 }
@@ -730,14 +731,17 @@ pub async fn delete_local_private_file(address: String) -> Result<(), LocalStora
 pub async fn delete_local_public_archive(address: String) -> Result<(), LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let public_archive_path = user_data_path.join("file_archives").join(&address);
-    
+
     if !public_archive_path.exists() {
         return Err(LocalStorageError::ReadError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Public archive with address {} not found in local storage", address),
+            format!(
+                "Public archive with address {} not found in local storage",
+                address
+            ),
         )));
     }
-    
+
     fs::remove_file(public_archive_path).map_err(LocalStorageError::WriteError)?;
     Ok(())
 }
@@ -746,15 +750,17 @@ pub async fn delete_local_public_archive(address: String) -> Result<(), LocalSto
 pub async fn delete_local_private_archive(address: String) -> Result<(), LocalStorageError> {
     let user_data_path = get_user_data_dir()?;
     let private_archive_path = user_data_path.join("private_file_archives").join(&address);
-    
+
     if !private_archive_path.exists() {
         return Err(LocalStorageError::ReadError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Private archive with address {} not found in local storage", address),
+            format!(
+                "Private archive with address {} not found in local storage",
+                address
+            ),
         )));
     }
-    
+
     fs::remove_file(private_archive_path).map_err(LocalStorageError::WriteError)?;
     Ok(())
 }
-
