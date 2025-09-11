@@ -967,8 +967,9 @@ const handleCopyDataAddress = async (file: any) => {
       // Alternative structure
       dataAddress = file.access_data.Public;
     } else if (file?.address) {
-      // For local vault, use the address directly
+      // Fallback for local vault (may be deprecated)
       dataAddress = file.address;
+      console.warn('Using deprecated address field for file:', file.path);
     }
 
     if (dataAddress) {
@@ -1023,8 +1024,9 @@ const handleCopySecretKey = async (file: any) => {
         secretKey = file.access_data.Private;
       }
     } else if (file?.address && (file?.type === 'private_file' || file?.type === 'private_archive')) {
-      // For local private files, use the address
+      // Fallback for local private files (may be deprecated)
       secretKey = file.address;
+      console.warn('Using deprecated address field for private file:', file.path);
     }
 
     if (secretKey) {
@@ -1558,9 +1560,9 @@ const handleDownloadFile = async (fileToDownload?: any) => {
       console.log('Downloading file with access:', fileData.file_access);
 
       if (fileData.file_access.Private) {
-        console.log('Downloading private file with dataMap:', fileData.file_access.Private);
+        console.log('Downloading private file with data_map_chunk:', fileData.file_access.Private);
         await invoke('download_private_file', {
-          dataMap: fileData.file_access.Private,
+          dataMapChunk: fileData.file_access.Private,
           toDest: uniquePath,
         });
       } else if (fileData.file_access.Public) {
