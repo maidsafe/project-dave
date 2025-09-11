@@ -1559,17 +1559,15 @@ const handleDownloadFile = async (fileToDownload?: any) => {
 
       if (fileData.file_access.Private) {
         console.log('Downloading private file with dataMap:', fileData.file_access.Private);
-        const dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
         await invoke('download_private_file', {
-          dataMap: dataMap,
+          dataMap: fileData.file_access.Private,
           toDest: uniquePath,
         });
       } else if (fileData.file_access.Public) {
         console.log('Downloading public file with addr:', fileData.file_access.Public);
-        // Convert Vue Proxy to plain object  
-        const addr = JSON.parse(JSON.stringify(fileData.file_access.Public));
+        // Public file_access now contains the data address string directly
         await invoke('download_public_file', {
-          addr: addr,
+          addr: fileData.file_access.Public,
           toDest: uniquePath,
         });
       } else {

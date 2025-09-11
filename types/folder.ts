@@ -35,16 +35,16 @@ export interface IFileMetadata {
   is_loaded: boolean;
   archive_name: string;
   access_data?: {
-    Public?: any[];
-    Private?: any[];
+    Public?: string; // Data address string
+    Private?: any; // DataMapChunk bytes
   };
 }
 
 export interface IFile {
   file_access: {
-    Private: any[];
+    Private: any; // Bytes array containing datamap chunk
   } | {
-    Public: any[];
+    Public: string; // Data address string
   }
   metadata: {
     uploaded: number;
@@ -61,7 +61,7 @@ export interface IFile {
 /*
  DEV Sample of IFile
 {
-  file_access: {Private: BYTES ARRAY}
+  file_access: {Private: BYTES ARRAY} or {Public: "data_address_string"}
   metadata: {uploaded: 1734804991, created: 1734804991, modified: 1734804991, size: 4357964}
   path: "/ant.log"
 }
