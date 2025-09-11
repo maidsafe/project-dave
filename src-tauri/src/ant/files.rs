@@ -1384,7 +1384,8 @@ pub async fn start_public_archive_upload(
             .unwrap_or(UserData::new());
 
         user_data.file_archives.insert(
-            DataAddress::from_hex(&archive_data_address).map_err(|e| UploadError::Serialization(e.to_string()))?,
+            DataAddress::from_hex(&archive_data_address)
+                .map_err(|e| UploadError::Serialization(e.to_string()))?,
             archive_name_clone,
         );
 
@@ -1700,11 +1701,11 @@ pub async fn execute_public_archive_upload(
 pub struct FileFromVault {
     path: String,
     metadata: Metadata,
-    file_access: PublicOrPrivateFile,
+    file_access: FileAccess,
 }
 
 impl FileFromVault {
-    pub fn new(path: String, metadata: Metadata, file_access: PublicOrPrivateFile) -> Self {
+    pub fn new(path: String, metadata: Metadata, file_access: FileAccess) -> Self {
         Self {
             path,
             metadata,
@@ -1769,7 +1770,7 @@ pub struct FileMetadata {
     pub file_type: FileType,
     pub is_loaded: bool,
     pub archive_name: String,
-    pub access_data: Option<PublicOrPrivateFile>,
+    pub access_data: Option<FileAccess>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1779,7 +1780,7 @@ pub enum FileType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum PublicOrPrivateFile {
+pub enum FileAccess {
     Public(DataAddress),
     Private(DataMapChunk),
 }
@@ -1810,7 +1811,7 @@ pub async fn get_vault_structure(
                     file_type: FileType::Private,
                     is_loaded: false,
                     archive_name: archive_name.clone(),
-                    access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
+                    access_data: Some(FileAccess::Private(data_map.clone())),
                 };
                 files.push(file);
             }
@@ -1844,7 +1845,7 @@ pub async fn get_vault_structure(
                     file_type: FileType::Public,
                     is_loaded: false,
                     archive_name: archive_name.clone(),
-                    access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
+                    access_data: Some(FileAccess::Public(*data_addr)),
                 };
                 files.push(file);
             }
@@ -1875,7 +1876,7 @@ pub async fn get_vault_structure(
             file_type: FileType::Private,
             is_loaded: true,
             archive_name: String::new(),
-            access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
+            access_data: Some(FileAccess::Private(data_map.clone())),
         };
         individual_files.push(file);
     }
@@ -1888,7 +1889,7 @@ pub async fn get_vault_structure(
             file_type: FileType::Public,
             is_loaded: true,
             archive_name: String::new(),
-            access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
+            access_data: Some(FileAccess::Public(*data_addr)),
         };
         individual_files.push(file);
     }
@@ -1922,7 +1923,7 @@ pub async fn get_vault_structure_streaming(
             file_type: FileType::Private,
             is_loaded: true,
             archive_name: String::new(),
-            access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
+            access_data: Some(FileAccess::Private(data_map.clone())),
         };
         individual_files.push(file);
     }
@@ -1935,7 +1936,7 @@ pub async fn get_vault_structure_streaming(
             file_type: FileType::Public,
             is_loaded: true,
             archive_name: String::new(),
-            access_data: Some(PublicOrPrivateFile::Public(*data_addr)),
+            access_data: Some(FileAccess::Public(*data_addr)),
         };
         individual_files.push(file);
     }
@@ -1994,7 +1995,7 @@ pub async fn get_vault_structure_streaming(
                             file_type: FileType::Private,
                             is_loaded: true,
                             archive_name: archive_name.clone(),
-                            access_data: Some(PublicOrPrivateFile::Private(data_map.clone())),
+                            access_data: Some(FileAccess::Private(data_map.clone())),
                         });
                     }
 
@@ -2078,7 +2079,7 @@ pub async fn get_vault_structure_streaming(
                             file_type: FileType::Public,
                             is_loaded: true,
                             archive_name: archive_name.clone(),
-                            access_data: Some(PublicOrPrivateFile::Public(data_addr.clone())),
+                            access_data: Some(FileAccess::Public(data_addr.clone())),
                         });
                     }
 
@@ -2163,7 +2164,7 @@ pub async fn get_files_from_vault(
         let file = FileFromVault::new(
             name.clone(),
             autonomi::files::Metadata::new_with_size(0),
-            PublicOrPrivateFile::Private(data_map.clone()),
+            FileAccess::Private(data_map.clone()),
         );
         files.push(file);
     }
@@ -2173,7 +2174,7 @@ pub async fn get_files_from_vault(
         let file = FileFromVault::new(
             name.clone(),
             autonomi::files::Metadata::new_with_size(0),
-            PublicOrPrivateFile::Public(*data_addr),
+            FileAccess::Public(*data_addr),
         );
         files.push(file);
     }
@@ -2207,6 +2208,8 @@ pub async fn download_public_file(
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
+    println!("Downloading public file: {}", addr);
+
     let client = shared_client.get_client().await?;
     let result = client.file_download_public(addr, to_dest.clone()).await;
 
@@ -2240,7 +2243,7 @@ pub async fn get_single_file_data(
             return Ok(FileFromVault::new(
                 file_path.to_string(),
                 autonomi::files::Metadata::new_with_size(0),
-                PublicOrPrivateFile::Private(data_map.clone()),
+                FileAccess::Private(data_map.clone()),
             ));
         }
     }
@@ -2251,7 +2254,7 @@ pub async fn get_single_file_data(
             return Ok(FileFromVault::new(
                 file_path.to_string(),
                 autonomi::files::Metadata::new_with_size(0),
-                PublicOrPrivateFile::Public(*data_addr),
+                FileAccess::Public(*data_addr),
             ));
         }
     }
@@ -2394,10 +2397,7 @@ pub async fn add_local_archive_to_vault(
 
     if is_private {
         // Parse the hex archive address directly to DataMapChunk
-        eprintln!(
-            "Parsing private archive hex address: {}",
-            archive_address
-        );
+        eprintln!("Parsing private archive hex address: {}", archive_address);
         let data_map = match DataMapChunk::from_hex(archive_address) {
             Ok(dm) => {
                 eprintln!("Successfully parsed archive address to {}", "DataMapChunk");
@@ -2422,10 +2422,7 @@ pub async fn add_local_archive_to_vault(
         );
     } else {
         // Parse the hex archive address directly to DataAddress
-        eprintln!(
-            "Parsing public archive hex address: {}",
-            archive_address
-        );
+        eprintln!("Parsing public archive hex address: {}", archive_address);
         let data_addr = match DataAddress::from_hex(archive_address) {
             Ok(addr) => {
                 eprintln!("Successfully parsed archive address to {}", "DataAddress");

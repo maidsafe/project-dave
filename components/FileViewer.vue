@@ -1555,6 +1555,8 @@ const handleDownloadFile = async (fileToDownload?: any) => {
         throw new Error('No file access data available for download');
       }
 
+      console.log('Downloading file with access:', fileData.file_access);
+
       if (fileData.file_access.Private) {
         console.log('Downloading private file with dataMap:', fileData.file_access.Private);
         const dataMap = JSON.parse(JSON.stringify(fileData.file_access.Private));
