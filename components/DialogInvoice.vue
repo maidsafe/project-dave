@@ -155,8 +155,13 @@ watchEffect(() => {
       position="center"
       :closable="canClose"
       :draggable="false"
-      pt:root:class="!border-0"
+      pt:root:class="!border-0 dark:bg-gray-900"
       pt:mask:class="backdrop-blur-sm"
+      pt:header:class="dark:bg-gray-900 dark:border-gray-700"
+      pt:title:class="dark:text-white font-semibold"
+      pt:content:class="dark:bg-gray-900"
+      pt:footer:class="dark:bg-gray-900 dark:border-gray-700"
+      pt:closeButton:class="dark:text-gray-400 dark:hover:text-white"
       @hide="emit('close-modal')"
   >
     <template #header>

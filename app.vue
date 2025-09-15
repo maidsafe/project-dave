@@ -21,7 +21,7 @@ createAppKit({
   },
 });
 
-const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer dark:hover:text-white`;
+const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary dark:text-gray-300 hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer dark:hover:text-white`;
 
 // State
 const walletStore = useWalletStore();
@@ -171,7 +171,15 @@ onMounted(async () => {
           </Toast>
           <Toast position="bottom-right"/>
           <ConfirmDialog :pt="{
-            root: { style: 'max-width: 450px !important;' }
+            root: {
+              style: 'max-width: 450px !important;',
+              class: 'dark:bg-gray-900'
+            },
+            header: { class: 'dark:bg-gray-900 dark:border-gray-700' },
+            content: { class: 'dark:bg-gray-900' },
+            footer: { class: 'dark:bg-gray-900 dark:border-gray-700' },
+            icon: { class: 'dark:text-gray-400' },
+            message: { class: 'dark:text-gray-200' }
           }"/>
         </div>
 

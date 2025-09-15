@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
                   class="h-[100px] flex items-center justify-between px-10 border-t-2 border-t-white dark:border-t-black hover:bg-white dark:hover:bg-autonomi-blue-200/10 transition-all duration-300 cursor-pointer"
               >
                 <div>
-                  <div class="text-2xl font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark">
+                  <div class="text-2xl font-semibold text-autonomi-header-text dark:text-gray-300">
                     About us
                   </div>
                   <!-- <div class="text-xs font-semibold text-autonomi-gray-500">

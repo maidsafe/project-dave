@@ -39,6 +39,25 @@
     background-color: red;
 }
 
+/* Tab header text styling for dark mode */
+.dark .p-tabview-tab-header {
+    color: rgb(209 213 219) !important; /* gray-300 */
+}
+
+.dark .p-tabview-tab-header:hover {
+    color: white !important;
+}
+
+/* Popover dark mode styling */
+.dark .p-popover {
+    background-color: #26264C !important; /* autonomi-blue-600 */
+}
+
+.dark .p-popover-content {
+    background-color: #26264C !important; /* autonomi-blue-600 */
+    color: rgb(209 213 219) !important; /* gray-300 */
+}
+
 /* Disable overscroll/bounce behavior */
 html, body {
     overscroll-behavior: none;

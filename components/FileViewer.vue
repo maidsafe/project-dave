@@ -3150,6 +3150,14 @@ onMounted(async () => {
         header="Upload Options"
         :style="{ width: '450px' }"
         :closable="true"
+        :pt="{
+          root: 'dark:bg-gray-900',
+          header: 'dark:bg-gray-900 dark:border-gray-700',
+          title: 'dark:text-white font-semibold',
+          content: 'dark:bg-gray-900',
+          footer: 'dark:bg-gray-900 dark:border-gray-700',
+          closeButton: 'dark:text-gray-400 dark:hover:text-white'
+        }"
     >
       <div class="flex flex-col gap-6 p-1">
         <!-- File Info -->
@@ -3157,7 +3165,7 @@ onMounted(async () => {
           <div class="flex items-center gap-3">
             <i :class="uploadOptionsData.isFolder ? 'pi pi-folder' : 'pi pi-file'" class="text-autonomi-blue-500"></i>
             <div>
-              <div class="font-semibold text-sm">
+              <div class="font-semibold text-sm dark:text-gray-200">
                 {{ uploadOptionsData.isFolder ? 'Folder' : (uploadOptionsData.files.length === 1 ? 'File' : 'Files') }}
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400">
@@ -3172,7 +3180,7 @@ onMounted(async () => {
 
         <!-- Privacy Options -->
         <div class="space-y-3">
-          <label class="text-sm font-semibold">Privacy</label>
+          <label class="text-sm font-semibold dark:text-gray-200">Privacy</label>
           <div class="space-y-3">
             <div class="flex items-center">
               <RadioButton
@@ -3184,7 +3192,7 @@ onMounted(async () => {
               <label for="private" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-lock text-autonomi-blue-500"></i>
                 <div>
-                  <div class="font-medium">Private</div>
+                  <div class="font-medium dark:text-gray-200">Private</div>
                   <div class="text-xs text-gray-600 dark:text-gray-400">Only accessible with the data map</div>
                 </div>
               </label>
@@ -3199,7 +3207,7 @@ onMounted(async () => {
               <label for="public" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-globe text-green-500"></i>
                 <div>
-                  <div class="font-medium">Public</div>
+                  <div class="font-medium dark:text-gray-200">Public</div>
                   <div class="text-xs text-gray-600 dark:text-gray-400">Accessible to anyone with the data address</div>
                 </div>
               </label>
@@ -3209,7 +3217,7 @@ onMounted(async () => {
 
         <!-- Vault Options -->
         <div class="space-y-3">
-          <label class="text-sm font-semibold">Storage</label>
+          <label class="text-sm font-semibold dark:text-gray-200">Storage</label>
           <div class="space-y-3">
             <div class="flex items-center">
               <RadioButton
@@ -3221,7 +3229,7 @@ onMounted(async () => {
               <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-database text-autonomi-blue-500"></i>
                 <div>
-                  <div class="font-medium">Add to Vault</div>
+                  <div class="font-medium dark:text-gray-200">Add to Vault</div>
                   <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault for easy access
                   </div>
                 </div>
@@ -3237,7 +3245,7 @@ onMounted(async () => {
               <label for="network-only" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-cloud text-gray-500"></i>
                 <div>
-                  <div class="font-medium">Network Only</div>
+                  <div class="font-medium dark:text-gray-200">Network Only</div>
                   <div class="text-xs text-gray-600 dark:text-gray-400">Store only on network and local vault
                   </div>
                 </div>
@@ -3305,14 +3313,18 @@ onMounted(async () => {
     </Popover>
 
     <!-- FILES VIEW MENU POPOVER -->
-    <Popover ref="refFilesViewMenu" class="syslog-menu">
-      <div class="flex flex-col gap-4">
+    <Popover ref="refFilesViewMenu" class="syslog-menu"
+             :pt="{
+               root: 'dark:bg-gray-800',
+               content: 'dark:bg-gray-800 dark:border-gray-700'
+             }">
+      <div class="flex flex-col gap-4 bg-white dark:bg-gray-800 rounded-lg">
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
                 v-for="item in menuFilesView"
                 :key="item.label"
-                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 dark:hover:bg-gray-700 cursor-pointer rounded-border rounded-2xl text-autonomi-text-secondary dark:text-gray-200"
                 @click="item.command"
             >
               <i :class="item.icon"/>
