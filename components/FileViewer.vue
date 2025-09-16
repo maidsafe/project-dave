@@ -2306,7 +2306,7 @@ onMounted(async () => {
           </div>
 
           <div
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 cursor-pointer transition-colors duration-200"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-[#252445] hover:bg-[#252445]/80 cursor-pointer transition-all duration-200 dark:bg-[#252445] dark:text-white dark:hover:bg-[#252445]/80 shadow-sm"
               @click="$event => { refUploadDropdown.toggle($event); }"
               v-tooltip.bottom="'Upload'"
           >
@@ -2315,7 +2315,7 @@ onMounted(async () => {
 
           <div
               v-if="activeTab === 0 || activeTab === 1"
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer transition-colors duration-200 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-[#252445] hover:bg-[#252445]/80 cursor-pointer transition-all duration-200 dark:bg-[#252445] dark:text-white dark:hover:bg-[#252445]/80 shadow-sm"
               v-tooltip.bottom="activeTab === 0 ? 'Refresh vault files' : 'Refresh local vault'"
               @click="activeTab === 0 ? fileStore.getAllFiles() : loadLocalFiles()"
           >
@@ -2323,7 +2323,7 @@ onMounted(async () => {
           </div>
 
           <div
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-gray-600 hover:bg-autonomi-gray-600/70 cursor-pointer transition-colors duration-200 dark:bg-white dark:text-autonomi-blue-600 dark:hover:bg-white/70"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-[#252445] hover:bg-[#252445]/80 cursor-pointer transition-all duration-200 dark:bg-[#252445] dark:text-white dark:hover:bg-[#252445]/80 shadow-sm"
               @click="$event => { refFilesViewMenu.toggle($event); }"
           >
             <i class="pi pi-bars"/>
@@ -3151,11 +3151,11 @@ onMounted(async () => {
         :style="{ width: '450px' }"
         :closable="true"
         :pt="{
-          root: 'dark:bg-gray-900',
-          header: 'dark:bg-gray-900 dark:border-gray-700',
+          root: 'dark:bg-[#000000] border-0',
+          header: 'dark:bg-[#000000] border-0',
           title: 'dark:text-white font-semibold',
-          content: 'dark:bg-gray-900',
-          footer: 'dark:bg-gray-900 dark:border-gray-700',
+          content: 'dark:bg-[#000000] border-0',
+          footer: 'dark:bg-[#000000] border-0',
           closeButton: 'dark:text-gray-400 dark:hover:text-white'
         }"
     >
@@ -3315,16 +3315,19 @@ onMounted(async () => {
     <!-- FILES VIEW MENU POPOVER -->
     <Popover ref="refFilesViewMenu" class="syslog-menu"
              :pt="{
-               root: 'dark:bg-gray-800',
-               content: 'dark:bg-gray-800 dark:border-gray-700'
+               root: { class: 'border-0 shadow-xl', style: 'background-color: #000000 !important; border: none !important;' },
+               content: { class: 'border-0 p-2', style: 'background-color: #000000 !important; border: none !important;' }
              }">
-      <div class="flex flex-col gap-4 bg-white dark:bg-gray-800 rounded-lg">
+      <div class="flex flex-col gap-4 bg-white dark:bg-[#000000] rounded-lg">
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
                 v-for="item in menuFilesView"
                 :key="item.label"
-                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 dark:hover:bg-gray-700 cursor-pointer rounded-border rounded-2xl text-autonomi-text-secondary dark:text-gray-200"
+                class="flex items-center gap-2 py-3 px-5 rounded-lg text-gray-700 dark:text-white"
+                :class="{
+                  'hover:bg-gray-100 dark:hover:bg-white/20 cursor-pointer transition-all duration-200': true
+                }"
                 @click="item.command"
             >
               <i :class="item.icon"/>
@@ -3338,16 +3341,20 @@ onMounted(async () => {
     </Popover>
 
     <!-- UPLOAD DROPDOWN POPOVER -->
-    <Popover ref="refUploadDropdown" class="syslog-menu">
-      <div class="flex flex-col gap-4">
+    <Popover ref="refUploadDropdown" class="syslog-menu"
+             :pt="{
+               root: { class: 'border-0 shadow-xl', style: 'background-color: #000000 !important; border: none !important;' },
+               content: { class: 'border-0 p-2', style: 'background-color: #000000 !important; border: none !important;' }
+             }">
+      <div class="flex flex-col gap-4 bg-white dark:bg-[#000000] rounded-lg">
         <div>
           <ul class="list-none p-0 m-0 flex flex-col min-w-[150px]">
             <li
                 v-for="item in menuUploadOptions"
                 :key="item.label"
-                class="flex items-center gap-2 py-3 px-5 rounded-border rounded-2xl"
+                class="flex items-center gap-2 py-3 px-5 rounded-lg text-gray-700 dark:text-white"
                 :class="{
-                  'hover:bg-autonomi-gray-100 cursor-pointer': !item.disabled,
+                  'hover:bg-gray-100 dark:hover:bg-white/20 cursor-pointer transition-all duration-200': !item.disabled,
                   'opacity-50 cursor-not-allowed': item.disabled
                 }"
                 @click="!item.disabled && item.command && item.command()"
@@ -3409,31 +3416,38 @@ onMounted(async () => {
         v-model:visible="isVisibleFileInfo"
         header="Drawer"
         position="right"
+        :pt="{
+          root: { class: 'bg-white dark:bg-[#464467] border-0' },
+          header: { class: 'bg-white dark:bg-[#464467] border-0' },
+          content: { class: 'bg-white dark:bg-[#464467]' },
+          closeButton: { class: 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-[#5a5a7d]' },
+          mask: { class: 'bg-black/50 dark:bg-black/70' }
+        }"
     >
       <template #header>
         <div class="flex items-center gap-3">
           <div
-              class="w-10 h-10 bg-autonomi-gray-500 rounded-full flex items-center justify-center"
+              class="w-10 h-10 bg-autonomi-gray-500 dark:bg-[#5a5a7d] rounded-full flex items-center justify-center"
           >
             <i class="pi pi-file text-white"/>
           </div>
-          <div class="text-lg font-semibold text-autonomi-blue-600">
+          <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
             Details
           </div>
         </div>
       </template>
-      <div class="p-5 flex-col flex text-sm font-semibold">
+      <div class="p-5 flex-col flex text-sm font-semibold text-gray-900 dark:text-gray-200">
         <div class="py-3">
-          <div>Name</div>
-          <div class="text-autonomi-text-primary">
+          <div class="text-lg text-autonomi-text-primary dark:text-gray-300">Name</div>
+          <div class="text-base text-gray-700 dark:text-gray-400">
             {{ selectedFileItem?.name }}
           </div>
         </div>
 
         <!-- Show type for local vault -->
         <div v-if="selectedFileItem?.type" class="py-3">
-          <div>Type</div>
-          <div class="text-autonomi-text-primary">
+          <div class="text-lg text-autonomi-text-primary dark:text-gray-300">Type</div>
+          <div class="text-base text-gray-700 dark:text-gray-400">
             <template v-if="selectedFileItem.type === 'public_archive'">
               Public Archive
             </template>
@@ -3454,14 +3468,14 @@ onMounted(async () => {
             v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
             class="py-3">
           <div class="flex items-center gap-2">
-            <span>Data Address</span>
+            <span class="text-lg text-autonomi-text-primary dark:text-gray-300">Data Address</span>
             <i
-                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                class="pi pi-clipboard text-xs cursor-pointer text-gray-600 dark:text-gray-400 hover:text-autonomi-blue-500 dark:hover:text-autonomi-blue-400"
                 @click="handleCopyDataAddress(selectedFileItem)"
                 v-tooltip.top="'Copy address'"
             />
           </div>
-          <div class="text-autonomi-text-primary font-mono text-xs break-all">
+          <div class="text-sm text-gray-700 dark:text-gray-400 font-mono break-all">
             <template v-if="selectedFileItem?.file_access?.Public">
               {{ selectedFileItem.file_access.Public }}
             </template>
@@ -3475,15 +3489,15 @@ onMounted(async () => {
         </div>
 
         <div class="py-3">
-          <div>Size</div>
-          <div class="text-autonomi-text-primary">
+          <div class="text-lg text-autonomi-text-primary dark:text-gray-300">Size</div>
+          <div class="text-base text-gray-700 dark:text-gray-400">
             {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : 'Unknown' }}
           </div>
         </div>
 
         <div class="py-3">
-          <div>Modified</div>
-          <div class="text-autonomi-text-primary">
+          <div class="text-lg text-autonomi-text-primary dark:text-gray-300">Modified</div>
+          <div class="text-base text-gray-700 dark:text-gray-400">
             {{
               selectedFileItem?.metadata?.modified
                   ? secondsToDate(
@@ -3495,8 +3509,8 @@ onMounted(async () => {
         </div>
 
         <div class="py-3">
-          <div>Created</div>
-          <div class="text-autonomi-text-primary">
+          <div class="text-lg text-autonomi-text-primary dark:text-gray-300">Created</div>
+          <div class="text-base text-gray-700 dark:text-gray-400">
             {{
               selectedFileItem?.metadata?.created
                   ? secondsToDate(
@@ -3525,5 +3539,54 @@ onMounted(async () => {
 :deep(.p-confirm-dialog .p-confirm-dialog-message) {
   margin: 1.5rem 0;
   word-wrap: break-word;
+}
+
+/* Force dark mode background for drawer */
+:deep(.dark .p-drawer .p-drawer-content) {
+  background-color: #1e1e2e !important;
+}
+
+:deep(.dark .p-drawer .p-drawer-header) {
+  background-color: #1e1e2e !important;
+  border-color: #374151 !important;
+}
+
+/* Force dark mode background for dialog (Upload Options Modal) */
+:deep(.dark .p-dialog .p-dialog-content) {
+  background-color: #000000 !important;
+  border: none !important;
+}
+
+:deep(.dark .p-dialog .p-dialog-header) {
+  background-color: #000000 !important;
+  border: none !important;
+  border-bottom: none !important;
+}
+
+:deep(.dark .p-dialog .p-dialog-footer) {
+  background-color: #000000 !important;
+  border: none !important;
+  border-top: none !important;
+}
+
+:deep(.dark .p-dialog) {
+  border: none !important;
+  background-color: #000000 !important;
+}
+
+/* Remove all borders from upload dropdown popover */
+:deep(.syslog-menu.p-popover) {
+  border: 0 !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1) !important;
+}
+
+:deep(.syslog-menu.p-popover .p-popover-content) {
+  border: 0 !important;
+  background-color: #000000 !important;
+}
+
+:deep(.syslog-menu.p-popover:before),
+:deep(.syslog-menu.p-popover:after) {
+  display: none !important;
 }
 </style>
