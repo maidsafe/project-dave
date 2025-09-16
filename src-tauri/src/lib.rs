@@ -30,7 +30,7 @@ pub enum PendingUploadData {
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
-        secret_key: VaultSecretKey,
+        secret_key: Option<VaultSecretKey>,
         add_to_vault: bool,
     },
     SingleFilePublic {
@@ -79,7 +79,7 @@ impl PendingUploads {
         chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
-        secret_key: VaultSecretKey,
+        secret_key: Option<VaultSecretKey>,
         add_to_vault: bool,
     ) {
         self.uploads.insert(
@@ -235,7 +235,10 @@ async fn start_upload(
     // No need to return ID since frontend already has it
 
     // Determine vault secret key based on options
-    let vault_secret_key = if add_to_vault {
+    // Parse vault key if:
+    // 1. Private upload (always needs key for encryption)
+    // 2. Public upload with add_to_vault=true
+    let vault_secret_key = if !vault_key_signature.is_empty() && add_to_vault {
         Some(
             autonomi::client::vault::key::vault_key_from_signature_hex(
                 vault_key_signature.trim_start_matches("0x"),
@@ -259,15 +262,10 @@ async fn start_upload(
 
     if is_single_file {
         if is_private {
-            // Private file upload - always requires vault key for encryption
-            let secret_key = vault_secret_key.ok_or_else(|| CommandError {
-                message: "Private uploads require a vault signature".to_string(),
-            })?;
-
             ant::files::start_private_single_file_upload(
                 app,
                 files.into_iter().next().unwrap(),
-                &secret_key,
+                vault_secret_key.as_ref(),
                 upload_id.clone(),
                 add_to_vault,
                 shared_client,
@@ -364,7 +362,7 @@ async fn confirm_upload_payment(
                     chunks,
                     receipt,
                     vault_update,
-                    &secret_key,
+                    secret_key.as_ref(),
                     upload_id,
                     add_to_vault,
                     shared_client,

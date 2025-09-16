@@ -266,10 +266,13 @@ const handlePayUpload = async () => {
         // Clean up stored quote data
         uploadQuotes.value.delete(modalUploadId.value);
 
-        // Trigger file refresh
-        setTimeout(() => {
-          fileStore.getAllFiles();
-        }, 500);
+        // Trigger file refresh only if files were added to vault
+        const upload = uploadsStore.uploads.find(u => u.id === modalUploadId.value);
+        if (upload?.addToVault) {
+          setTimeout(() => {
+            fileStore.getAllFiles();
+          }, 500);
+        }
       }
 
       showUploadModal.value = false;
@@ -864,12 +867,12 @@ const uploadFiles = async (files: Array<{
   try {
     // Get vault key signature if needed (for private uploads or when adding to vault)
     let vaultKeySignature = "";
-    if (isPrivate || addToVault) {
+    if (addToVault) {
       vaultKeySignature = await walletStore.getVaultKeySignature();
     }
 
     // Create upload entry in the store (but keep it pending until payment)
-    const frontendUploadId = uploadsStore.createUpload(files);
+    const frontendUploadId = uploadsStore.createUpload(files, addToVault);
     console.log(">>> Created upload with ID:", frontendUploadId);
     console.log(">>> Upload in store:", uploadsStore.uploads.find(u => u.id === frontendUploadId));
     console.log(">>> Active uploads after creation:", uploadsStore.activeUploads.length);
@@ -1994,14 +1997,17 @@ const setupEventListeners = async () => {
           console.log(">>> Cleaned up quote data for completed upload:", upload.id);
         }
 
-        // Auto-refresh files after upload completion
+        // Auto-refresh files after upload completion only if added to vault
         setTimeout(() => {
-          fileStore.getAllFiles();
-          uploadStore.resetUpload();
-          // Also refresh local vault if on that tab
-          if (activeTab.value === 1) {
-            loadLocalFiles();
+          // Only refresh vault if the files were added to vault
+          if (payload.add_to_vault) {
+            fileStore.getAllFiles();
+            // Also refresh local vault if on that tab
+            if (activeTab.value === 1) {
+              loadLocalFiles();
+            }
           }
+          uploadStore.resetUpload();
         }, 2000);
         break;
 

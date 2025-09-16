@@ -15,6 +15,7 @@ export interface UploadItem {
   completionMessage?: string;
   createdAt: Date;
   completedAt?: Date;
+  addToVault?: boolean;
 }
 
 // No longer need invoke since cancellation is frontend-only
@@ -41,7 +42,7 @@ export const useUploadsStore = defineStore('uploads', () => {
     return sortedUploads.value.filter(upload => upload.status === 'failed');
   });
 
-  const createUpload = (files: Array<{path: string, name: string}>) => {
+  const createUpload = (files: Array<{path: string, name: string}>, addToVault: boolean = true) => {
     const uploadId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const totalFiles = files.length;
     
@@ -62,7 +63,8 @@ export const useUploadsStore = defineStore('uploads', () => {
       progress: 0,
       filesProcessed: 0,
       bytesProcessed: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
+      addToVault
     };
 
     uploads.value.push(upload);

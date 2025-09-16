@@ -63,6 +63,7 @@ pub enum UploadProgress {
         upload_id: String,
         total_files: usize,
         total_bytes: u64,
+        add_to_vault: bool,
     },
     Failed {
         upload_id: String,
@@ -191,7 +192,7 @@ pub async fn collect_files_from_directory(
 pub async fn start_private_single_file_upload(
     app: AppHandle,
     file: File,
-    secret_key: &VaultSecretKey,
+    vault_secret_key: Option<&VaultSecretKey>,
     upload_id: String,
     add_to_vault: bool,
     shared_client: State<'_, SharedClient>,
@@ -239,7 +240,8 @@ pub async fn start_private_single_file_upload(
     let mut total_store_quote = store_quote;
     let mut vault_update = Default::default();
 
-    if add_to_vault {
+    if add_to_vault && vault_secret_key.is_some() {
+        let secret_key = vault_secret_key.as_ref().unwrap();
         println!(">>> Getting vault quote for add_to_vault...");
         // We'll need to create the vault data containing the file info
         let file_name = file.name.clone();
@@ -336,6 +338,7 @@ pub async fn start_private_single_file_upload(
                 upload_id: upload_id.clone(),
                 total_files: 1,
                 total_bytes: file_size,
+                add_to_vault,
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -354,7 +357,7 @@ pub async fn start_private_single_file_upload(
             chunks,
             total_store_quote,
             vault_update,
-            secret_key.clone(),
+            vault_secret_key.cloned(),
             add_to_vault,
         );
     }
@@ -370,7 +373,7 @@ pub async fn execute_private_single_file_upload(
     chunks: Vec<Chunk>,
     receipt: Receipt,
     vault_update: vault::VaultUpdate,
-    secret_key: &VaultSecretKey,
+    vault_secret_key: Option<&VaultSecretKey>,
     upload_id: String,
     add_to_vault: bool,
     shared_client: State<'_, SharedClient>,
@@ -405,8 +408,8 @@ pub async fn execute_private_single_file_upload(
     )
     .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-    // Spawn the actual upload work in background and return immediately
-    let secret_key = secret_key.clone();
+    // Clone vault_secret_key for async closure
+    let vault_secret_key = vault_secret_key.cloned();
 
     tokio::spawn(async move {
         let result = async {
@@ -417,32 +420,34 @@ pub async fn execute_private_single_file_upload(
 
             // Store file in vault if requested
             if add_to_vault {
-                let mut user_data = client
-                    .vault_get_user_data(&secret_key)
+                if let Some(secret_key) = vault_secret_key.as_ref() {
+                    let mut user_data = client
+                        .vault_get_user_data(&secret_key)
+                        .await
+                        .unwrap_or(UserData::new());
+
+                    // Add the single file to user data (not as archive)
+                    user_data
+                        .private_files
+                        .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
+
+                    // Serialize user data for vault update
+                    let vault_data = user_data
+                        .to_bytes()
+                        .map_err(|e| UploadError::Serialization(e.to_string()))?;
+
+                    // Use vault_update with the receipt (which already includes vault payment)
+                    vault::vault_update(
+                        &client,
+                        vault_data,
+                        &secret_key,
+                        receipt,
+                        vault_update.new_graph_entries,
+                        vault_update.new_scratchpad_derivations,
+                    )
                     .await
-                    .unwrap_or(UserData::new());
-
-                // Add the single file to user data (not as archive)
-                user_data
-                    .private_files
-                    .insert(DataMapChunk::from(datamap.clone()), file.name.clone());
-
-                // Serialize user data for vault update
-                let vault_data = user_data
-                    .to_bytes()
-                    .map_err(|e| UploadError::Serialization(e.to_string()))?;
-
-                // Use vault_update with the receipt (which already includes vault payment)
-                vault::vault_update(
-                    &client,
-                    vault_data,
-                    &secret_key,
-                    receipt,
-                    vault_update.new_graph_entries,
-                    vault_update.new_scratchpad_derivations,
-                )
-                .await
-                .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+                    .map_err(|err| UploadError::StoreQuote(err.to_string()))?;
+                }
             }
 
             // Store file locally
@@ -466,6 +471,7 @@ pub async fn execute_private_single_file_upload(
                         upload_id: upload_id.clone(),
                         total_files: 1,
                         total_bytes: file_size,
+                        add_to_vault,
                     },
                 ) {
                     // Failed to emit completion
@@ -651,6 +657,7 @@ pub async fn start_public_single_file_upload(
                 upload_id: upload_id.clone(),
                 total_files: 1,
                 total_bytes: file_size,
+                add_to_vault,
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -838,6 +845,7 @@ pub async fn execute_public_single_file_upload(
                         upload_id: upload_id.clone(),
                         total_files: 1,
                         total_bytes: file_size,
+                        add_to_vault,
                     },
                 ) {
                     // Failed to emit completion
@@ -1054,6 +1062,7 @@ pub async fn start_private_archive_upload(
                 upload_id: upload_id.clone(),
                 total_files: total_files,
                 total_bytes: total_size,
+                add_to_vault,
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -1230,6 +1239,7 @@ pub async fn execute_private_archive_upload(
                         upload_id: upload_id.clone(),
                         total_files: files.len(),
                         total_bytes: total_size,
+                        add_to_vault,
                     },
                 ) {
                     // Failed to emit completion
@@ -1476,6 +1486,7 @@ pub async fn start_public_archive_upload(
                 upload_id: upload_id.clone(),
                 total_files: total_files,
                 total_bytes: total_size,
+                add_to_vault,
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -1673,6 +1684,7 @@ pub async fn execute_public_archive_upload(
                         upload_id: upload_id.clone(),
                         total_files: files.len(),
                         total_bytes: total_size,
+                        add_to_vault,
                     },
                 ) {
                     // Failed to emit completion
