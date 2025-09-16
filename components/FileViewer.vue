@@ -741,8 +741,8 @@ const combinedFiles = computed(() => {
   const failedArchiveFiles = isRootDirectory ? failedArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
       .map(archive => {
-        const archiveAddress = 'Private' in archive.archive_access 
-            ? archive.archive_access.Private 
+        const archiveAddress = 'Private' in archive.archive_access
+            ? archive.archive_access.Private
             : archive.archive_access.Public;
         const isPrivate = 'Private' in archive.archive_access;
         return {
@@ -761,8 +761,8 @@ const combinedFiles = computed(() => {
   const loadingArchiveFiles = isRootDirectory ? loadingArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
       .map(archive => {
-        const archiveAddress = 'Private' in archive.archive_access 
-            ? archive.archive_access.Private 
+        const archiveAddress = 'Private' in archive.archive_access
+            ? archive.archive_access.Private
             : archive.archive_access.Public;
         const isPrivate = 'Private' in archive.archive_access;
         return {
@@ -1198,51 +1198,37 @@ const handleAddToVault = async (file: any) => {
             const walletStore = useWalletStore();
             const vaultKeySignature = await walletStore.getVaultKeySignature();
 
-            // Get file address and privacy - extract address from file_access structure
-            let fileAddress = '';
-            const isPrivate = file.type === 'private_file';
+            // Get file access object
+            let fileAccess = null;
 
-            // Extract the network address from the file structure
-            if (file?.file_access?.Public) {
-              // For public files, use the public data address
-              fileAddress = file.file_access.Public;
-            } else if (file?.file_access?.Private) {
-              // For private files, convert the private data map to hex
-              if (typeof file.file_access.Private === 'string') {
-                fileAddress = file.file_access.Private;
-              } else if (Array.isArray(file.file_access.Private)) {
-                fileAddress = '0x' + file.file_access.Private.map((byte: number) =>
-                    byte.toString(16).padStart(2, '0')
-                ).join('');
-              }
-            } else if (file?.access_data?.Public) {
-              // Alternative structure for public files
-              fileAddress = file.access_data.Public;
-            } else if (file?.access_data?.Private) {
-              // Alternative structure for private files
-              if (typeof file.access_data.Private === 'string') {
-                fileAddress = file.access_data.Private;
-              } else if (Array.isArray(file.access_data.Private)) {
-                fileAddress = '0x' + file.access_data.Private.map((byte: number) =>
-                    byte.toString(16).padStart(2, '0')
-                ).join('');
-              }
+            // Extract file access from various possible structures
+            if (file?.file_access) {
+              fileAccess = file.file_access;
+            } else if (file?.access_data) {
+              fileAccess = file.access_data;
             } else if (file?.address) {
-              // Fallback to direct address field
-              fileAddress = file.address;
+              // Fallback - construct from address and type
+              if (file.type === 'private_file') {
+                fileAccess = {Private: file.address};
+              } else {
+                fileAccess = {Public: file.address};
+              }
             }
 
             console.log('>>> Adding file to vault:', file);
+            console.log('File access:', fileAccess);
 
-            console.log('Adding individual file to vault:', {
-              fileName,
-              fileAddress,
-              isPrivate,
-              fileType: file.type
-            });
+            if (!fileAccess) {
+              throw new Error('File access not found');
+            }
 
-            if (!fileAddress) {
-              throw new Error('File address not found');
+            // For private files with byte arrays, convert to hex string
+            if (fileAccess.Private && Array.isArray(fileAccess.Private)) {
+              fileAccess = {
+                Private: '0x' + fileAccess.Private.map((byte: number) =>
+                    byte.toString(16).padStart(2, '0')
+                ).join('')
+              };
             }
 
             // Show notification that we're adding the file
@@ -1254,10 +1240,9 @@ const handleAddToVault = async (file: any) => {
             });
 
             await invoke('add_local_file_to_vault', {
-              vaultKeySignature,
-              fileAddress,
-              fileName,
-              isPrivate
+              vaultKeySignature: vaultKeySignature,
+              fileAccess: fileAccess,
+              fileName: fileName
             });
 
             // Hide the notification
@@ -1294,47 +1279,47 @@ const handleAddToVault = async (file: any) => {
           const walletStore = useWalletStore();
           const vaultKeySignature = await walletStore.getVaultKeySignature();
 
-          // Get archive address and privacy from archive object or from failed/loading archive
-          let archiveAddress;
-          let isPrivate;
+          // Get archive access object
+          let archiveAccess;
 
           if (file.archive) {
             // Regular archive folder
             if (file.archive.archive_access) {
-              // New structure
-              if ('Private' in file.archive.archive_access) {
-                archiveAddress = file.archive.archive_access.Private;
-                isPrivate = true;
-              } else {
-                archiveAddress = file.archive.archive_access.Public;
-                isPrivate = false;
-              }
+              // New structure - use directly
+              archiveAccess = file.archive.archive_access;
             } else {
-              // Old structure fallback
-              archiveAddress = file.archive.address;
-              isPrivate = file.archive.is_private;
+              // Old structure fallback - construct from address and is_private
+              if (file.archive.is_private) {
+                archiveAccess = {Private: file.archive.address};
+              } else {
+                archiveAccess = {Public: file.archive.address};
+              }
             }
           } else if (file.is_failed_archive || file.is_loading_archive) {
-            // Failed or loading archive - address is directly on the file object
-            archiveAddress = file.address;
-            isPrivate = file.is_private;
+            // Failed or loading archive - construct from file object
+            if (file.is_private) {
+              archiveAccess = {Private: file.address};
+            } else {
+              archiveAccess = {Public: file.address};
+            }
+          } else if (file.archive_access) {
+            // Try to use file's archive_access directly if available
+            archiveAccess = file.archive_access;
           }
 
           // Debug logging
           console.log('File object:', file);
           console.log('Archive data:', file.archive);
-          console.log('Archive address:', archiveAddress);
-          console.log('Is private:', isPrivate);
+          console.log('Archive access:', archiveAccess);
 
-          if (!archiveAddress) {
-            throw new Error('Archive address not found');
+          if (!archiveAccess) {
+            throw new Error('Archive access not found');
           }
 
           console.log('Calling add_local_archive_to_vault with:', {
             vaultKeySignature,
-            archiveAddress,
-            archiveName: fileName,
-            isPrivate
+            archiveAccess,
+            archiveName: fileName
           });
 
           // Show notification that we're adding the archive
@@ -1346,10 +1331,9 @@ const handleAddToVault = async (file: any) => {
           });
 
           await invoke('add_local_archive_to_vault', {
-            vaultKeySignature,
-            archiveAddress,
-            archiveName: fileName,
-            isPrivate
+            vaultKeySignature: vaultKeySignature,
+            archiveAccess: archiveAccess,
+            archiveName: fileName
           });
 
           // Hide the notification
@@ -2182,8 +2166,8 @@ const combinedLocalFiles = computed(() => {
   const failedArchiveFiles = isRootDirectory ? localFailedArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
       .map(archive => {
-        const archiveAddress = 'Private' in archive.archive_access 
-            ? archive.archive_access.Private 
+        const archiveAddress = 'Private' in archive.archive_access
+            ? archive.archive_access.Private
             : archive.archive_access.Public;
         const isPrivate = 'Private' in archive.archive_access;
         return {
@@ -2202,8 +2186,8 @@ const combinedLocalFiles = computed(() => {
   const loadingArchiveFiles = isRootDirectory ? localLoadingArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
       .map(archive => {
-        const archiveAddress = 'Private' in archive.archive_access 
-            ? archive.archive_access.Private 
+        const archiveAddress = 'Private' in archive.archive_access
+            ? archive.archive_access.Private
             : archive.archive_access.Public;
         const isPrivate = 'Private' in archive.archive_access;
         return {

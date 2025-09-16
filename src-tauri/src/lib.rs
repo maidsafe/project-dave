@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::ant::client::SharedClient;
-use crate::ant::files::File;
+use crate::ant::files::{File, FileAccess};
 use crate::ant::payments::{OrderID, OrderMessage, PaymentOrderManager};
 use crate::ant::vault::VaultUpdate;
 use ant::{
@@ -556,16 +556,14 @@ async fn remove_from_vault(
 #[tauri::command]
 async fn add_local_archive_to_vault(
     vault_key_signature: String,
-    archive_address: String,
+    archive_access: FileAccess,
     archive_name: String,
-    is_private: bool,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
     eprintln!("=== add_local_archive_to_vault COMMAND ===");
     eprintln!("vault_key_signature: {}", vault_key_signature);
-    eprintln!("archive_address: {}", archive_address);
+    eprintln!("archive_access: {:?}", archive_access);
     eprintln!("archive_name: {}", archive_name);
-    eprintln!("is_private: {}", is_private);
 
     let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
         vault_key_signature.trim_start_matches("0x"),
@@ -584,9 +582,8 @@ async fn add_local_archive_to_vault(
 
     ant::files::add_local_archive_to_vault(
         &secret_key,
-        &archive_address,
+        archive_access,
         &archive_name,
-        is_private,
         shared_client,
     )
     .await
@@ -601,16 +598,14 @@ async fn add_local_archive_to_vault(
 #[tauri::command]
 async fn add_local_file_to_vault(
     vault_key_signature: String,
-    file_address: String,
+    file_access: FileAccess,
     file_name: String,
-    is_private: bool,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
     eprintln!("=== add_local_file_to_vault COMMAND ===");
     eprintln!("vault_key_signature: {}", vault_key_signature);
-    eprintln!("file_address: {}", file_address);
+    eprintln!("file_access: {:?}", file_access);
     eprintln!("file_name: {}", file_name);
-    eprintln!("is_private: {}", is_private);
 
     let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
         vault_key_signature.trim_start_matches("0x"),
@@ -629,9 +624,8 @@ async fn add_local_file_to_vault(
 
     ant::files::add_local_file_to_vault(
         &secret_key,
-        &file_address,
+        file_access,
         &file_name,
-        is_private,
         shared_client,
     )
     .await
