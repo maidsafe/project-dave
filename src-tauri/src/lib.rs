@@ -622,19 +622,14 @@ async fn add_local_file_to_vault(
         }
     };
 
-    ant::files::add_local_file_to_vault(
-        &secret_key,
-        file_access,
-        &file_name,
-        shared_client,
-    )
-    .await
-    .map_err(|err| {
-        eprintln!("add_local_file_to_vault failed with error: {:?}", err);
-        CommandError {
-            message: err.to_string(),
-        }
-    })
+    ant::files::add_local_file_to_vault(&secret_key, file_access, &file_name, shared_client)
+        .await
+        .map_err(|err| {
+            eprintln!("add_local_file_to_vault failed with error: {:?}", err);
+            CommandError {
+                message: err.to_string(),
+            }
+        })
 }
 
 #[tauri::command]

@@ -1779,57 +1779,10 @@ pub enum FileType {
     Private,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum FileAccess {
     Public(DataAddress),
     Private(DataMapChunk),
-}
-
-// Custom serialization/deserialization to handle string conversion
-impl Serialize for FileAccess {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            FileAccess::Public(addr) => {
-                let mut map = serializer.serialize_map(Some(1))?;
-                use serde::ser::SerializeMap;
-                map.serialize_entry("Public", &addr.to_string())?;
-                map.end()
-            }
-            FileAccess::Private(chunk) => {
-                let mut map = serializer.serialize_map(Some(1))?;
-                use serde::ser::SerializeMap;
-                map.serialize_entry("Private", &chunk.to_hex())?;
-                map.end()
-            }
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for FileAccess {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum FileAccessHelper {
-            Public { Public: String },
-            Private { Private: String },
-        }
-
-        let helper = FileAccessHelper::deserialize(deserializer)?;
-        match helper {
-            FileAccessHelper::Public { Public: addr_str } => DataAddress::from_hex(&addr_str)
-                .map(FileAccess::Public)
-                .map_err(serde::de::Error::custom),
-            FileAccessHelper::Private { Private: chunk_str } => DataMapChunk::from_hex(&chunk_str)
-                .map(FileAccess::Private)
-                .map_err(serde::de::Error::custom),
-        }
-    }
 }
 
 pub async fn get_vault_structure(
