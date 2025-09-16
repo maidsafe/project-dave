@@ -42,6 +42,31 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
         return 'Private' in archive.archive_access;
     };
 
+    // Simple helper functions for address tracking
+    const getAddressKey = (address: string, isPrivate: boolean): string => {
+        return isPrivate ? `private:${address}` : `public:${address}`;
+    };
+
+    const addLoadingArchive = (name: string, address: string, isPrivate: boolean) => {
+        const key = getAddressKey(address, isPrivate);
+        console.log('>>> LOCAL: Adding loading archive:', name, address, isPrivate ? 'Private' : 'Public');
+        loadingArchiveAddresses.value.add(key);
+        loadingArchiveNames.value.set(key, name);
+    };
+
+    const removeLoadingArchive = (address: string, isPrivate: boolean) => {
+        const key = getAddressKey(address, isPrivate);
+        console.log('>>> LOCAL: Removing loading archive:', address, isPrivate ? 'Private' : 'Public');
+        loadingArchiveAddresses.value.delete(key);
+        loadingArchiveNames.value.delete(key);
+    };
+
+    const clearAllLoadingArchives = () => {
+        console.log('>>> LOCAL: Clearing all loading archives');
+        loadingArchiveAddresses.value.clear();
+        loadingArchiveNames.value.clear();
+    };
+
     // Class - reuse the same Folder class from files store
     class Folder {
         name: string;
@@ -104,7 +129,8 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
     const localFiles = ref<IFile[]>([]);
     const localStructure = ref<ILocalFileStructure | null>(null);
     const failedArchives = ref<IFailedArchive[]>([]);
-    const loadingArchives = ref<{ name: string, file_access: any, is_private: boolean }[]>([]);
+    const loadingArchiveAddresses = ref<Set<string>>(new Set());
+    const loadingArchiveNames = ref<Map<string, string>>(new Map()); // address -> name
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
     const pendingLocalStructure = ref(false);
@@ -117,6 +143,16 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
             return [];
         }
         return currentDirectory.value.children || [];
+    });
+
+    // Create loading archives list from simple tracking
+    const loadingArchives = computed(() => {
+        return Array.from(loadingArchiveAddresses.value).map(address => ({
+            name: loadingArchiveNames.value.get(address) || 'Unknown',
+            archive_access: address.startsWith('private:') 
+                ? { Private: address.substring(8) } 
+                : { Public: address.substring(7) }
+        }));
     });
 
     // Actions
@@ -297,7 +333,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
         localStructure.value = null;
         localFiles.value = [];
         failedArchives.value = [];
-        loadingArchives.value = [];
+        clearAllLoadingArchives();
         rootDirectory.value = null;
         currentDirectory.value = null;
         pendingLocalStructure.value = true;
@@ -334,13 +370,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
         try {
             const archiveAddress = getArchiveAddress(archive);
             // Add to loading list
-            if (!loadingArchives.value.find(a => extractAddressFromFileAccess(a.file_access) === archiveAddress)) {
-                loadingArchives.value.push({
-                    name: archive.name,
-                    file_access: archive.archive_access,
-                    is_private: isPrivateArchive(archive)
-                });
-            }
+            addLoadingArchive(archive.name, archiveAddress, isPrivateArchive(archive));
 
             let archiveContents;
             if (isPrivateArchive(archive)) {
@@ -354,7 +384,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
             }
 
             // Remove from loading list
-            loadingArchives.value = loadingArchives.value.filter(a => extractAddressFromFileAccess(a.file_access) !== archiveAddress);
+            removeLoadingArchive(archiveAddress, isPrivateArchive(archive));
 
             // Add files to archive and add to loaded archives
             archive.files = archiveContents;
@@ -371,16 +401,20 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
             const archiveAddress = getArchiveAddress(archive);
             // Remove from loading list
-            loadingArchives.value = loadingArchives.value.filter(a => extractAddressFromFileAccess(a.file_access) !== archiveAddress);
+            removeLoadingArchive(archiveAddress, isPrivateArchive(archive));
 
             // Add to failed archives
             const failedArchive = {
                 name: archive.name,
-                address: archiveAddress,
-                is_private: isPrivateArchive(archive)
+                archive_access: archive.archive_access
             };
 
-            if (!failedArchives.value.find(a => a.address === archiveAddress)) {
+            if (!failedArchives.value.find(a => {
+                const existingAddress = 'Private' in a.archive_access 
+                    ? a.archive_access.Private 
+                    : a.archive_access.Public;
+                return existingAddress === archiveAddress;
+            })) {
                 failedArchives.value.push(failedArchive);
                 if (localStructure.value) {
                     localStructure.value.failed_archives.push(failedArchive);
@@ -438,17 +472,9 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
             case "ArchiveLoading":
                 if (update.loading_archive) {
-                    // Add to loading archives list, avoiding duplicates
                     const loadingArchiveAddress = extractAddressFromFileAccess(update.loading_archive.file_access);
-                    const exists = loadingArchives.value.some(a =>
-                        a.name === update.loading_archive!.name && extractAddressFromFileAccess(a.file_access) === loadingArchiveAddress);
-                    if (!exists) {
-                        loadingArchives.value.push({
-                            name: update.loading_archive.name,
-                            file_access: update.loading_archive.file_access,
-                            is_private: update.loading_archive.is_private
-                        });
-                    }
+                    const isPrivate = update.loading_archive.is_private;
+                    addLoadingArchive(update.loading_archive.name, loadingArchiveAddress, isPrivate);
                 }
                 break;
 
@@ -456,9 +482,8 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                 if (update.archive) {
                     // Remove from loading list and get archive address
                     const archiveAddress = extractAddressFromFileAccess(update.archive.file_access);
-                    loadingArchives.value = loadingArchives.value.filter(
-                        a => extractAddressFromFileAccess(a.file_access) !== archiveAddress
-                    );
+                    const isPrivate = update.archive.is_private;
+                    removeLoadingArchive(archiveAddress, isPrivate);
 
                     // Transform the archive to use archive_access structure
                     const transformedArchive: ILocalArchive = {
@@ -494,18 +519,20 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
                 if (update.failed_archive) {
                     // Remove from loading list
                     const failedArchiveAddress = extractAddressFromFileAccess(update.failed_archive.file_access);
-                    loadingArchives.value = loadingArchives.value.filter(
-                        a => extractAddressFromFileAccess(a.file_access) !== failedArchiveAddress
-                    );
+                    const isPrivate = update.failed_archive.is_private;
+                    removeLoadingArchive(failedArchiveAddress, isPrivate);
 
                     // Add to failed archives list, avoiding duplicates
-                    const exists = failedArchives.value.some(a =>
-                        a.name === update.failed_archive!.name && a.address === failedArchiveAddress);
+                    const exists = failedArchives.value.some(a => {
+                        const existingAddress = 'Private' in a.archive_access 
+                            ? a.archive_access.Private 
+                            : a.archive_access.Public;
+                        return a.name === update.failed_archive!.name && existingAddress === failedArchiveAddress;
+                    });
                     if (!exists) {
                         const failedArchive = {
                             name: update.failed_archive.name,
-                            address: failedArchiveAddress,
-                            is_private: update.failed_archive.is_private
+                            archive_access: update.failed_archive.file_access
                         };
                         localStructure.value.failed_archives.push(failedArchive);
                         failedArchives.value.push(failedArchive);
@@ -518,7 +545,7 @@ export const useLocalFilesStore = defineStore("localFiles", () => {
 
             case "Complete":
                 // Clear any remaining loading archives and finish loading
-                loadingArchives.value = [];
+                clearAllLoadingArchives();
                 pendingLocalStructure.value = false;
                 console.log(">>> Local structure streaming completed");
                 break;

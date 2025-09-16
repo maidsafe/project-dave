@@ -7,6 +7,33 @@ export const useFileStore = defineStore("files", () => {
     // const autonomi = useAutonomiStore();
     const toast = useToast();
 
+    // Simple helper functions for address tracking
+    const getAddressKey = (address: string, isPrivate: boolean): string => {
+        return isPrivate ? `private:${address}` : `public:${address}`;
+    };
+
+    const addLoadingArchive = (name: string, address: string, isPrivate: boolean) => {
+        const key = getAddressKey(address, isPrivate);
+        console.log('>>> Adding loading archive:', name, address, isPrivate ? 'Private' : 'Public');
+        loadingArchiveAddresses.value.add(key);
+        loadingArchiveNames.value.set(key, name);
+        console.log('>>> Current loading addresses:', Array.from(loadingArchiveAddresses.value));
+    };
+
+    const removeLoadingArchive = (address: string, isPrivate: boolean) => {
+        const key = getAddressKey(address, isPrivate);
+        console.log('>>> Removing loading archive:', address, isPrivate ? 'Private' : 'Public');
+        loadingArchiveAddresses.value.delete(key);
+        loadingArchiveNames.value.delete(key);
+        console.log('>>> Current loading addresses:', Array.from(loadingArchiveAddresses.value));
+    };
+
+    const clearAllLoadingArchives = () => {
+        console.log('>>> Clearing all loading archives');
+        loadingArchiveAddresses.value.clear();
+        loadingArchiveNames.value.clear();
+    };
+
     // Class
     class Folder {
         name: string;
@@ -75,7 +102,8 @@ export const useFileStore = defineStore("files", () => {
     const files = ref<IFile[]>([]);
     const vaultStructure = ref<IVaultStructure | null>(null);
     const failedArchives = ref<IFailedArchive[]>([]);
-    const loadingArchives = ref<{ name: string, is_private: boolean }[]>([]);
+    const loadingArchiveAddresses = ref<Set<string>>(new Set());
+    const loadingArchiveNames = ref<Map<string, string>>(new Map()); // address -> name
     const rootDirectory = ref<IFolder | null>(null);
     const currentDirectory = ref<IFolder | null>(null);
     const pendingVaultStructure = ref(false);
@@ -89,6 +117,16 @@ export const useFileStore = defineStore("files", () => {
         }
 
         return Object.keys(currentDirectory.value);
+    });
+
+    // Create loading archives list from simple tracking
+    const loadingArchives = computed(() => {
+        return Array.from(loadingArchiveAddresses.value).map(address => ({
+            name: loadingArchiveNames.value.get(address) || 'Unknown',
+            archive_access: address.startsWith('private:') 
+                ? { Private: address.substring(8) } 
+                : { Public: address.substring(7) }
+        }));
     });
 
     // Actions
@@ -151,9 +189,17 @@ export const useFileStore = defineStore("files", () => {
                     while (rootDirectory.value!.getChild(archiveFolderName)) {
                         const existingChild = rootDirectory.value!.getChild(archiveFolderName);
                         // If it's the same archive (same address), don't create a duplicate
-                        if (existingChild && existingChild.archive && existingChild.archive.address === archive.address) {
-                            // Same archive, don't add counter - just skip creating a new folder
-                            return;
+                        if (existingChild && existingChild.archive) {
+                            const existingAddress = 'Private' in existingChild.archive.archive_access 
+                                ? existingChild.archive.archive_access.Private 
+                                : existingChild.archive.archive_access.Public;
+                            const currentAddress = 'Private' in archive.archive_access 
+                                ? archive.archive_access.Private 
+                                : archive.archive_access.Public;
+                            if (existingAddress === currentAddress) {
+                                // Same archive, don't add counter - just skip creating a new folder
+                                return;
+                            }
                         }
                         archiveFolderName = `${archive.name} (${counter})`;
                         counter++;
@@ -267,7 +313,7 @@ export const useFileStore = defineStore("files", () => {
         vaultStructure.value = null;
         files.value = [];
         failedArchives.value = [];
-        loadingArchives.value = [];
+        clearAllLoadingArchives();
         rootDirectory.value = null;
         currentDirectory.value = null;
         pendingVaultStructure.value = true;
@@ -351,27 +397,28 @@ export const useFileStore = defineStore("files", () => {
 
             case "ArchiveLoading":
                 if (update.loading_archive) {
-                    // Add to loading archives list, avoiding duplicates
-                    const exists = loadingArchives.value.some(a => a.name === update.loading_archive!.name && a.address === update.loading_archive!.address);
-                    if (!exists) {
-                        loadingArchives.value.push({
-                            name: update.loading_archive.name,
-                            address: update.loading_archive.address,
-                            is_private: update.loading_archive.is_private
-                        });
-                    }
+                    addLoadingArchive(
+                        update.loading_archive.name, 
+                        update.loading_archive.address, 
+                        update.loading_archive.is_private
+                    );
                 }
                 break;
 
             case "ArchiveLoaded":
                 if (update.archive) {
-                    // Remove from loading list by address (like local vault)
-                    loadingArchives.value = loadingArchives.value.filter(
-                        a => a.address !== update.archive!.address
-                    );
+                    // Remove from loading list
+                    removeLoadingArchive(update.archive.address, update.archive.is_private);
 
                     // Add the archive
-                    vaultStructure.value.archives.push(update.archive);
+                    const archive = {
+                        name: update.archive.name,
+                        archive_access: update.archive.is_private 
+                            ? { Private: update.archive.address }
+                            : { Public: update.archive.address },
+                        files: update.archive.files
+                    };
+                    vaultStructure.value.archives.push(archive);
 
                     // Add archive files to flattened array
                     update.archive.files.forEach((file: IFileMetadata) => {
@@ -398,15 +445,24 @@ export const useFileStore = defineStore("files", () => {
             case "ArchiveFailed":
                 if (update.failed_archive) {
                     // Remove from loading list
-                    loadingArchives.value = loadingArchives.value.filter(
-                        a => a.name !== update.failed_archive!.name && a.address !== update.failed_archive!.address
-                    );
+                    removeLoadingArchive(update.failed_archive.address, update.failed_archive.is_private);
 
                     // Add to failed archives list, avoiding duplicates
-                    const exists = failedArchives.value.some(a => a.name === update.failed_archive!.name && a.address === update.failed_archive!.address);
+                    const failedFileAccess = update.failed_archive.is_private 
+                        ? { Private: update.failed_archive.address }
+                        : { Public: update.failed_archive.address };
+                    
+                    const exists = failedArchives.value.some(a => {
+                        const aAddress = 'Private' in a.archive_access ? a.archive_access.Private : a.archive_access.Public;
+                        return aAddress === update.failed_archive.address;
+                    });
                     if (!exists) {
-                        vaultStructure.value.failed_archives.push(update.failed_archive);
-                        failedArchives.value.push(update.failed_archive);
+                        const failedArchive = {
+                            name: update.failed_archive.name,
+                            archive_access: failedFileAccess
+                        };
+                        vaultStructure.value.failed_archives.push(failedArchive);
+                        failedArchives.value.push(failedArchive);
                     }
 
                     // Rebuild directory to show failed archives
@@ -416,7 +472,7 @@ export const useFileStore = defineStore("files", () => {
 
             case "Complete":
                 // Clear any remaining loading archives and finish loading
-                loadingArchives.value = [];
+                clearAllLoadingArchives();
                 pendingVaultStructure.value = false;
                 console.log(">>> Vault structure streaming completed");
                 break;

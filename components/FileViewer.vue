@@ -740,31 +740,43 @@ const combinedFiles = computed(() => {
 
   const failedArchiveFiles = isRootDirectory ? failedArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-      .map(archive => ({
-        name: archive.name,
-        is_failed_archive: true,
-        is_private: archive.is_private,
-        is_loaded: false,
-        is_loading: false,
-        load_error: true,
-        path: `failed-archive://${archive.address}`,
-        address: archive.address,
-        metadata: {}
-      })) : [];
+      .map(archive => {
+        const archiveAddress = 'Private' in archive.archive_access 
+            ? archive.archive_access.Private 
+            : archive.archive_access.Public;
+        const isPrivate = 'Private' in archive.archive_access;
+        return {
+          name: archive.name,
+          is_failed_archive: true,
+          is_private: isPrivate,
+          is_loaded: false,
+          is_loading: false,
+          load_error: true,
+          path: `failed-archive://${archiveAddress}`,
+          address: archiveAddress,
+          metadata: {}
+        };
+      }) : [];
 
   const loadingArchiveFiles = isRootDirectory ? loadingArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-      .map(archive => ({
-        name: archive.name,
-        is_loading_archive: true,
-        is_private: archive.is_private,
-        is_loaded: false,
-        is_loading: true,
-        load_error: false,
-        path: `loading-archive://${archive.address}`,
-        address: archive.address,
-        metadata: {}
-      })) : [];
+      .map(archive => {
+        const archiveAddress = 'Private' in archive.archive_access 
+            ? archive.archive_access.Private 
+            : archive.archive_access.Public;
+        const isPrivate = 'Private' in archive.archive_access;
+        return {
+          name: archive.name,
+          is_loading_archive: true,
+          is_private: isPrivate,
+          is_loaded: false,
+          is_loading: true,
+          load_error: false,
+          path: `loading-archive://${archiveAddress}`,
+          address: archiveAddress,
+          metadata: {}
+        };
+      }) : [];
 
   return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
     // Sort by name, putting directories first, then files
@@ -2169,31 +2181,43 @@ const combinedLocalFiles = computed(() => {
 
   const failedArchiveFiles = isRootDirectory ? localFailedArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-      .map(archive => ({
-        name: archive.name,
-        is_failed_archive: true,
-        is_private: archive.is_private,
-        is_loaded: false,
-        is_loading: false,
-        load_error: true,
-        path: `failed-archive://${archive.address}`,
-        address: archive.address,
-        metadata: {}
-      })) : [];
+      .map(archive => {
+        const archiveAddress = 'Private' in archive.archive_access 
+            ? archive.archive_access.Private 
+            : archive.archive_access.Public;
+        const isPrivate = 'Private' in archive.archive_access;
+        return {
+          name: archive.name,
+          is_failed_archive: true,
+          is_private: isPrivate,
+          is_loaded: false,
+          is_loading: false,
+          load_error: true,
+          path: `failed-archive://${archiveAddress}`,
+          address: archiveAddress,
+          metadata: {}
+        };
+      }) : [];
 
   const loadingArchiveFiles = isRootDirectory ? localLoadingArchives.value
       .filter(archive => !query.value || archive.name.toLowerCase().includes(query.value.toLowerCase()))
-      .map(archive => ({
-        name: archive.name,
-        is_loading_archive: true,
-        is_private: archive.is_private,
-        is_loaded: false,
-        is_loading: true,
-        load_error: false,
-        path: `loading-archive://${archive.address}`,
-        address: archive.address,
-        metadata: {}
-      })) : [];
+      .map(archive => {
+        const archiveAddress = 'Private' in archive.archive_access 
+            ? archive.archive_access.Private 
+            : archive.archive_access.Public;
+        const isPrivate = 'Private' in archive.archive_access;
+        return {
+          name: archive.name,
+          is_loading_archive: true,
+          is_private: isPrivate,
+          is_loaded: false,
+          is_loading: true,
+          load_error: false,
+          path: `loading-archive://${archiveAddress}`,
+          address: archiveAddress,
+          metadata: {}
+        };
+      }) : [];
 
   return [...regularFiles, ...failedArchiveFiles, ...loadingArchiveFiles].sort((a, b) => {
     // Sort by name, putting directories first, then files
