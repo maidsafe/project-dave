@@ -3412,7 +3412,7 @@ onMounted(async () => {
       <div class="p-5 flex-col flex text-sm font-semibold">
         <div class="py-3">
           <div>Name</div>
-          <div class="text-autonomi-text-primary">
+          <div class="text-autonomi-text-primary break-words">
             {{ selectedFileItem?.name }}
           </div>
         </div>
