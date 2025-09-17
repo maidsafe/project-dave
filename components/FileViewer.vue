@@ -2943,7 +2943,7 @@ onMounted(async () => {
                     Completed
                   </h3>
                   <button
-                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded transition-colors"
                       @click="uploadsStore.clearCompleted()"
                   >
                     Clear All
@@ -2997,7 +2997,7 @@ onMounted(async () => {
                     Failed
                   </h3>
                   <button
-                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded transition-colors"
                       @click="uploadsStore.clearFailed()"
                   >
                     Clear All
@@ -3112,7 +3112,7 @@ onMounted(async () => {
                     Completed
                   </h3>
                   <button
-                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded transition-colors"
                       @click="downloadsStore.clearCompleted()"
                   >
                     Clear All
@@ -3174,7 +3174,7 @@ onMounted(async () => {
                     Failed
                   </h3>
                   <button
-                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded transition-colors"
+                      class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded transition-colors"
                       @click="downloadsStore.clearFailed()"
                   >
                     Clear All
