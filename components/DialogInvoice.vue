@@ -65,7 +65,7 @@ const handleCancel = () => {
 };
 
 const canClose = computed(() => {
-  return !props.steps?.some(step => step.status === 'processing');
+  return true;
 });
 
 const showQuoteData = computed(() => {
@@ -104,14 +104,14 @@ const formatANT = (attoAmount: string): string => {
   try {
     // Convert string to BigInt
     const atto = BigInt(attoAmount);
-    
+
     // 1 ANT = 10^18 ATTO
     const ATTO_PER_ANT = BigInt(1_000_000_000_000_000_000n);
-    
+
     // Divide to get ANT amount
     const antAmount = atto / ATTO_PER_ANT;
     const remainder = atto % ATTO_PER_ANT;
-    
+
     // Format with decimal places if there's a remainder
     if (remainder === BigInt(0)) {
       return antAmount.toString();
@@ -186,11 +186,10 @@ watchEffect(() => {
       header="Upload Progress"
       :style="{width: '32rem'}"
       position="center"
-      :closable="canClose"
       :draggable="false"
       pt:root:class="!border-0"
       pt:mask:class="backdrop-blur-sm"
-      @hide="emit('close-modal')"
+      :closable="false"
   >
     <template #header>
       <div class="flex items-center justify-between w-full">
