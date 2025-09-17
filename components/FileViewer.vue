@@ -1023,16 +1023,16 @@ const handleCopySecretKey = async (file: any) => {
       // For vault files, Private contains the secret key/datamap
       // Convert to hex string if it's an array
       if (Array.isArray(file.file_access.Private)) {
-        secretKey = '0x' + file.file_access.Private.map((byte: number) =>
+        secretKey = file.file_access.Private.map((byte: number) =>
             byte.toString(16).padStart(2, '0')
         ).join('');
       } else {
-        secretKey = file.file_access.Private;
+        secretKey = file.file_access.Private.startsWith('0x') ? file.file_access.Private.slice(2) : file.file_access.Private;
       }
     } else if (file?.access_data?.Private) {
       // Alternative structure
       if (Array.isArray(file.access_data.Private)) {
-        secretKey = '0x' + file.access_data.Private.map((byte: number) =>
+        secretKey = file.access_data.Private.map((byte: number) =>
             byte.toString(16).padStart(2, '0')
         ).join('');
       } else {
@@ -2222,12 +2222,12 @@ const combinedLocalFiles = computed(() => {
 const derivedFileType = computed(() => {
   const file = selectedFileItem.value;
   if (!file) return null;
-  
+
   // If file already has type (local vault), return it
   if (file.type) {
     return file.type;
   }
-  
+
   // Derive type from access structures for vault files
   if (file.archive_access?.Private) {
     return 'private_archive';
@@ -2238,7 +2238,38 @@ const derivedFileType = computed(() => {
   } else if (file.file_access?.Public) {
     return 'public_file';
   }
-  
+
+  return null;
+});
+
+// Computed property to extract data map hex for private files and archives
+const dataMapHex = computed(() => {
+  const file = selectedFileItem.value;
+  if (!file) return null;
+
+  let dataMap = null;
+
+  // Check for private file access
+  if (file.file_access?.Private) {
+    dataMap = file.file_access.Private;
+  } else if (file.access_data?.Private) {
+    dataMap = file.access_data.Private;
+  } else if (file.archive_access?.Private) {
+    dataMap = file.archive_access.Private;
+  }
+
+  if (!dataMap) return null;
+
+  // Convert to hex string if it's an array
+  if (Array.isArray(dataMap)) {
+    return dataMap.map((byte: number) =>
+        byte.toString(16).padStart(2, '0')
+    ).join('');
+  } else if (typeof dataMap === 'string') {
+    // Remove 0x prefix if present
+    return dataMap.startsWith('0x') ? dataMap.slice(2) : dataMap;
+  }
+
   return null;
 });
 
@@ -3457,6 +3488,21 @@ onMounted(async () => {
             <template v-else-if="derivedFileType === 'private_file'">
               Private File
             </template>
+          </div>
+        </div>
+
+        <!-- Show data map hex for private files and archives -->
+        <div v-if="dataMapHex" class="py-3">
+          <div class="flex items-center gap-2">
+            <span>Data Map (HEX)</span>
+            <i
+                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                @click="handleCopySecretKey(selectedFileItem)"
+                v-tooltip.top="'Copy data map'"
+            />
+          </div>
+          <div class="text-autonomi-text-primary font-mono text-xs break-all">
+            {{ dataMapHex }}
           </div>
         </div>
 
