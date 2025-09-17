@@ -7,14 +7,42 @@ import InputIcon from "primevue/inputicon";
 import {useWalletStore} from "~/stores/wallet";
 import {useUserStore} from "~/stores/user";
 import {storeToRefs} from "pinia";
+import {formatAntBalance, formatEthBalance, formatBalanceWithLoading} from "~/utils/balance";
 
 const value1 = ref("");
 const searching = ref(false);
 const walletStore = useWalletStore();
-const {wallet} = storeToRefs(walletStore);
+const {wallet, ethBalance, antBalance, balancesLoading} = storeToRefs(walletStore);
 const userStore = useUserStore();
 
 const {isDark} = useTheme()
+
+// Computed
+const address = computed(() => wallet.value.address);
+const account = computed(() => {
+  if (!address.value) return '';
+  return `${address.value.slice(0, 6)}...${address.value.slice(38, 42)}`;
+});
+
+const formattedAntBalance = computed(() =>
+    formatBalanceWithLoading(antBalance.value, balancesLoading.value, formatAntBalance)
+);
+
+const formattedEthBalance = computed(() =>
+    formatBalanceWithLoading(ethBalance.value, balancesLoading.value, formatEthBalance)
+);
+
+// Copy address functionality
+const copyAddress = async () => {
+  if (!address.value) return;
+
+  try {
+    await navigator.clipboard.writeText(address.value);
+    // You could add a toast notification here if desired
+  } catch (error) {
+    console.error('Failed to copy address:', error);
+  }
+};
 
 // Refs
 const refTokenDropdown = ref();
@@ -116,6 +144,33 @@ onBeforeUnmount(() => {
         <!-- SETTINGS / DETAILS -->
         <div class="ml-auto hidden lg:flex items-center">
           <div class="flex items-center gap-3">
+            <!-- WALLET BALANCE DISPLAY -->
+            <div
+                :class="`transition-all duration-500 overflow-hidden whitespace-nowrap px-2 ${
+                  wallet.isConnected ? 'w-auto' : 'w-0'
+                }`"
+            >
+              <template v-if="wallet.isConnected && address">
+                <div>
+                  <div
+                      class="flex items-center gap-2 text-sm font-semibold text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
+                    {{ account }}
+                    <button
+                        @click="copyAddress"
+                        class="w-4 h-4 flex items-center justify-center rounded bg-autonomi-gray-200 dark:bg-autonomi-blue-800 hover:bg-autonomi-gray-300 dark:hover:bg-autonomi-blue-700 transition-colors"
+                        v-tooltip.bottom="'Copy full address'"
+                    >
+                      <i class="pi pi-copy text-xs text-autonomi-text-primary dark:text-white"></i>
+                    </button>
+                  </div>
+                  <div class="text-sm text-autonomi-text-primary">
+                    {{ formattedAntBalance }} | {{ formattedEthBalance }}
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- WALLET CONNECT BUTTON -->
             <div
                 v-tooltip.bottom="
                 wallet.isConnected ? 'Disconnect Mobile Wallet' : 'Connect Mobile Wallet'
@@ -137,21 +192,6 @@ onBeforeUnmount(() => {
                 />
               </svg>
             </div>
-            <template v-if="address">
-              <div
-                  :class="`${
-                  wallet.isConnected ? 'w-[150px]' : 'w-0'
-                } transition-all duration-500 overflow-hidden whitespace-nowrap`"
-              >
-                <div class="text-sm font-semibold text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
-                  {{ `${address.slice(0, 6)}...${address.slice(38, 42)}` }}
-                </div>
-                <div class="text-sm text-autonomi-text-primary">
-                  ANT (unknown)
-                </div>
-              </div>
-            </template>
-
 
             <ThemeToggle/>
           </div>
@@ -200,12 +240,18 @@ onBeforeUnmount(() => {
                 </div>
                 <div>
                   <div
-                      class="text-sm font-semibold text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark"
-                  >
+                      class="flex items-center gap-2 text-sm font-semibold text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
                     {{ account }}
+                    <button
+                        @click="copyAddress"
+                        class="w-4 h-4 flex items-center justify-center rounded bg-autonomi-gray-200 dark:bg-autonomi-blue-700 hover:bg-autonomi-gray-300 dark:hover:bg-autonomi-blue-600 transition-colors"
+                        v-tooltip.bottom="'Copy full address'"
+                    >
+                      <i class="pi pi-copy text-xs text-autonomi-text-primary dark:text-white"></i>
+                    </button>
                   </div>
                   <div class="text-sm text-autonomi-text-primary">
-                    Balance $0.00
+                    {{ formattedAntBalance }} | {{ formattedEthBalance }}
                   </div>
                 </div>
               </div>

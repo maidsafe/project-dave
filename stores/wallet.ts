@@ -1,6 +1,6 @@
 import {useAppKit, useAppKitAccount, useDisconnect} from "@reown/appkit/vue";
-import {readContract, signMessage, waitForTransactionReceipt, writeContract} from "@wagmi/core";
-import {keccak256, concat, toHex, toBytes, hashMessage} from "viem";
+import {readContract, signMessage, waitForTransactionReceipt, writeContract, getBalance} from "@wagmi/core";
+import {keccak256, concat, toHex, toBytes, hashMessage, formatUnits} from "viem";
 import tokenAbi from "~/assets/abi/PaymentToken.json";
 import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import {wagmiAdapter} from "~/config";
@@ -120,6 +120,9 @@ export const useWalletStore = defineStore("wallet", () => {
     const callbackConnectWallet = ref<Function | null>(null);
     const callbackDisconnectWallet = ref<Function | null>(null);
     const cachedVaultKeySignature = ref<string>();
+    const ethBalance = ref<string>('0');
+    const antBalance = ref<string>('0');
+    const balancesLoading = ref(false);
 
     const wallet = useAppKitAccount();
     const {open} = useAppKit();
@@ -346,6 +349,83 @@ export const useWalletStore = defineStore("wallet", () => {
         return !!cachedVaultKeySignature.value;
     };
 
+    const fetchEthBalance = async (): Promise<string> => {
+        if (!wallet.value.address) {
+            return '0';
+        }
+
+        try {
+            const balance = await getBalance(wagmiAdapter.wagmiConfig, {
+                address: wallet.value.address,
+            });
+
+            return formatUnits(balance.value, balance.decimals);
+        } catch (error) {
+            console.error("Error fetching ETH balance:", error);
+            return '0';
+        }
+    };
+
+    const fetchAntBalance = async (): Promise<string> => {
+        if (!wallet.value.address) {
+            return '0';
+        }
+
+        try {
+            const balance = await readContract(wagmiAdapter.wagmiConfig, {
+                abi: tokenAbi,
+                address: tokenContractAddress,
+                functionName: "balanceOf",
+                args: [wallet.value.address]
+            });
+
+            const decimals = await readContract(wagmiAdapter.wagmiConfig, {
+                abi: tokenAbi,
+                address: tokenContractAddress,
+                functionName: "decimals",
+                args: []
+            });
+
+            return formatUnits(BigInt(balance), Number(decimals));
+        } catch (error) {
+            console.error("Error fetching ANT balance:", error);
+            return '0';
+        }
+    };
+
+    const refreshBalances = async (): Promise<void> => {
+        if (!wallet.value.address) {
+            ethBalance.value = '0';
+            antBalance.value = '0';
+            return;
+        }
+
+        try {
+            balancesLoading.value = true;
+            const [ethBal, antBal] = await Promise.all([
+                fetchEthBalance(),
+                fetchAntBalance()
+            ]);
+
+            ethBalance.value = ethBal;
+            antBalance.value = antBal;
+        } catch (error) {
+            console.error("Error refreshing balances:", error);
+        } finally {
+            balancesLoading.value = false;
+        }
+    };
+
+    // Watch for wallet address changes and refresh balances
+    watch(() => wallet.value.address, (newAddress) => {
+        if (newAddress) {
+            refreshBalances();
+        } else {
+            ethBalance.value = '0';
+            antBalance.value = '0';
+        }
+    }, { immediate: true });
+
     // Return
     return {
         // State
@@ -355,6 +435,9 @@ export const useWalletStore = defineStore("wallet", () => {
         openConnectWallet,
         openDisconnectWallet,
         wallet,
+        ethBalance,
+        antBalance,
+        balancesLoading,
         // Actions
         callbackConnectWallet,
         connectWallet,
@@ -368,6 +451,9 @@ export const useWalletStore = defineStore("wallet", () => {
         getVaultKeySignature,
         sign,
         hasVaultSignature,
+        fetchEthBalance,
+        fetchAntBalance,
+        refreshBalances,
     };
 });
 
