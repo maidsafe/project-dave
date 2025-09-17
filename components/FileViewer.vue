@@ -1276,7 +1276,7 @@ const handleAddToVault = async (file: any) => {
               details: `Adding "${fileName}" to your vault...`,
               enabledCancel: false
             });
-            
+
             await invoke('add_local_file_to_vault', {
               vaultKeySignature: vaultKeySignature,
               fileAccess: fileAccess,
@@ -2034,13 +2034,11 @@ const setupEventListeners = async () => {
 
         // Auto-refresh files after upload completion only if added to vault
         setTimeout(() => {
+          loadLocalFiles();
+
           // Only refresh vault if the files were added to vault
           if (payload.add_to_vault) {
             fileStore.getAllFiles();
-            // Also refresh local vault if on that tab
-            if (activeTab.value === 1) {
-              loadLocalFiles();
-            }
           }
           uploadStore.resetUpload();
         }, 2000);
@@ -3503,8 +3501,8 @@ onMounted(async () => {
           <div
               class="w-10 h-10 bg-autonomi-gray-500 rounded-full flex items-center justify-center"
           >
-            <i 
-              :class="selectedFileItem?.isArchive ? 'pi pi-box text-white' : 'pi pi-file text-white'"
+            <i
+                :class="selectedFileItem?.isArchive ? 'pi pi-box text-white' : 'pi pi-file text-white'"
             />
           </div>
           <div class="text-lg font-semibold text-autonomi-blue-600 dark:text-autonomi-text-primary-dark">
