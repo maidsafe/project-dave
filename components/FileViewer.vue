@@ -2218,6 +2218,30 @@ const combinedLocalFiles = computed(() => {
   });
 });
 
+// Computed property to derive file type for vault files from file_access/archive_access
+const derivedFileType = computed(() => {
+  const file = selectedFileItem.value;
+  if (!file) return null;
+  
+  // If file already has type (local vault), return it
+  if (file.type) {
+    return file.type;
+  }
+  
+  // Derive type from access structures for vault files
+  if (file.archive_access?.Private) {
+    return 'private_archive';
+  } else if (file.archive_access?.Public) {
+    return 'public_archive';
+  } else if (file.file_access?.Private) {
+    return 'private_file';
+  } else if (file.file_access?.Public) {
+    return 'public_file';
+  }
+  
+  return null;
+});
+
 // Handle local directory/file navigation (similar to vault files)
 const handleLocalChangeDirectory = (target: any) => {
   if (!target?.children) {
@@ -3417,20 +3441,20 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Show type for local vault -->
-        <div v-if="selectedFileItem?.type" class="py-3">
+        <!-- Show type for all files (local vault and vault) -->
+        <div v-if="derivedFileType" class="py-3">
           <div>Type</div>
           <div class="text-autonomi-text-primary">
-            <template v-if="selectedFileItem.type === 'public_archive'">
+            <template v-if="derivedFileType === 'public_archive'">
               Public Archive
             </template>
-            <template v-else-if="selectedFileItem.type === 'private_archive'">
+            <template v-else-if="derivedFileType === 'private_archive'">
               Private Archive
             </template>
-            <template v-else-if="selectedFileItem.type === 'public_file'">
+            <template v-else-if="derivedFileType === 'public_file'">
               Public File
             </template>
-            <template v-else-if="selectedFileItem.type === 'private_file'">
+            <template v-else-if="derivedFileType === 'private_file'">
               Private File
             </template>
           </div>
