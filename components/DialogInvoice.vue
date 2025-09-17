@@ -100,6 +100,39 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
+const formatANT = (attoAmount: string): string => {
+  try {
+    // Convert string to BigInt
+    const atto = BigInt(attoAmount);
+    
+    // 1 ANT = 10^18 ATTO
+    const ATTO_PER_ANT = BigInt(1_000_000_000_000_000_000n);
+    
+    // Divide to get ANT amount
+    const antAmount = atto / ATTO_PER_ANT;
+    const remainder = atto % ATTO_PER_ANT;
+    
+    // Format with decimal places if there's a remainder
+    if (remainder === BigInt(0)) {
+      return antAmount.toString();
+    } else {
+      // Calculate decimal places (up to 18 decimals)
+      const decimalStr = remainder.toString().padStart(18, '0');
+      // Remove trailing zeros
+      const trimmed = decimalStr.replace(/0+$/, '');
+      if (trimmed.length === 0) {
+        return antAmount.toString();
+      }
+      // Show more decimal places - up to 12 for better precision
+      const displayDecimals = trimmed.substring(0, 12);
+      return `${antAmount}.${displayDecimals}`;
+    }
+  } catch (error) {
+    console.error('Error formatting ANT amount:', error);
+    return '0';
+  }
+};
+
 // Timer for payment expiration
 const remainingTime = ref("00:00:00");
 let interval: any;
@@ -267,9 +300,14 @@ watchEffect(() => {
           <div class="space-y-3">
             <div class="flex justify-between text-sm">
               <span class="font-semibold text-gray-900 dark:text-autonomi-text-primary-dark">Total Cost:</span>
-              <span class="font-bold text-blue-600 dark:text-blue-400">
-                {{ quoteData?.totalCostFormatted || '0 ATTO' }}
-              </span>
+              <div class="text-right">
+                <div class="font-bold text-blue-600 dark:text-blue-400">
+                  {{ formatANT(quoteData?.totalCostNano || '0') }} ANT
+                </div>
+                <div class="text-xs text-gray-600 dark:text-gray-400">
+                  {{ quoteData?.totalCostFormatted || '0 ATTO' }}
+                </div>
+              </div>
             </div>
           </div>
         </div>

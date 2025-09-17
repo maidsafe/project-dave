@@ -10,6 +10,39 @@ const {payment} = defineProps<{
 const remainingTime = ref("00:00:00");
 let interval: any;
 
+const formatANT = (attoAmount: string): string => {
+  try {
+    // Convert string to BigInt
+    const atto = BigInt(attoAmount);
+    
+    // 1 ANT = 10^18 ATTO
+    const ATTO_PER_ANT = BigInt(1_000_000_000_000_000_000n);
+    
+    // Divide to get ANT amount
+    const antAmount = atto / ATTO_PER_ANT;
+    const remainder = atto % ATTO_PER_ANT;
+    
+    // Format with decimal places if there's a remainder
+    if (remainder === BigInt(0)) {
+      return antAmount.toString();
+    } else {
+      // Calculate decimal places (up to 18 decimals)
+      const decimalStr = remainder.toString().padStart(18, '0');
+      // Remove trailing zeros
+      const trimmed = decimalStr.replace(/0+$/, '');
+      if (trimmed.length === 0) {
+        return antAmount.toString();
+      }
+      // Show more decimal places - up to 12 for better precision
+      const displayDecimals = trimmed.substring(0, 12);
+      return `${antAmount}.${displayDecimals}`;
+    }
+  } catch (error) {
+    console.error('Error formatting ANT amount:', error);
+    return '0';
+  }
+};
+
 // Start the countdown
 const startCountdown = () => {
   remainingTime.value = paymentStore.calculateRemainingTime(payment.expires);
@@ -45,8 +78,8 @@ onUnmounted(() => {
           Payment ID: {{ payment.order.id }}
         </div>
         <div>
-          Total amount:
-          {{ paymentStore.calculateTotalAmount(payment.order.payments) }} ATTO
+          <div>Total amount: {{ formatANT(paymentStore.calculateTotalAmount(payment.order.payments)) }} ANT</div>
+          <div class="text-xs text-gray-500">{{ paymentStore.calculateTotalAmount(payment.order.payments) }} ATTO</div>
         </div>
         <div
             v-if="
