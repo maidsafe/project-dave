@@ -486,6 +486,28 @@ const menuFiles = computed(() => {
         },
       });
     } else if (file?.isArchive) {
+      // Archive folder itself - add info option for archives
+      items.push({
+        label: 'Info',
+        icon: 'pi pi-info-circle',
+        command: () => {
+          isVisibleFileInfo.value = true;
+          refFilesMenu.value.hide();
+        },
+      });
+
+      // Show data address for public archives
+      if (file?.archive?.archive_access?.Public || file?.archive_access?.Public) {
+        items.push({
+          label: 'Data Address',
+          icon: 'pi pi-clipboard',
+          command: () => {
+            handleCopyDataAddress(file);
+            refFilesMenu.value.hide();
+          },
+        });
+      }
+
       // Archive folder itself - remove the archive
       items.push({
         label: 'Remove Archive from Vault',
@@ -513,6 +535,28 @@ const menuFiles = computed(() => {
   // Add upload to vault option for local vault only
   if (activeTab.value === 1 && !file?.is_loading_archive) {
     if (file?.isArchive || file?.is_failed_archive) {
+      // Add info option for local archives
+      items.push({
+        label: 'Info',
+        icon: 'pi pi-info-circle',
+        command: () => {
+          isVisibleFileInfo.value = true;
+          refFilesMenu.value.hide();
+        },
+      });
+
+      // Show data address for public local archives
+      if (file?.archive?.archive_access?.Public || file?.archive_access?.Public) {
+        items.push({
+          label: 'Data Address',
+          icon: 'pi pi-clipboard',
+          command: () => {
+            handleCopyDataAddress(file);
+            refFilesMenu.value.hide();
+          },
+        });
+      }
+
       // Local archive or failed archive - upload archive to vault
       items.push({
         label: 'Add Archive to Vault',
@@ -2219,6 +2263,16 @@ const derivedFileType = computed(() => {
     return file.type;
   }
 
+  // Check if this is an archive first
+  if (file.isArchive) {
+    // For archive folders, check their archive_access
+    if (file.archive_access?.Private || file.archive?.archive_access?.Private) {
+      return 'private_archive';
+    } else if (file.archive_access?.Public || file.archive?.archive_access?.Public) {
+      return 'public_archive';
+    }
+  }
+
   // Derive type from access structures for vault files
   if (file.archive_access?.Private) {
     return 'private_archive';
@@ -2247,6 +2301,8 @@ const dataMapHex = computed(() => {
     dataMap = file.access_data.Private;
   } else if (file.archive_access?.Private) {
     dataMap = file.archive_access.Private;
+  } else if (file.archive?.archive_access?.Private) {
+    dataMap = file.archive.archive_access.Private;
   }
 
   if (!dataMap) return null;
@@ -3447,7 +3503,9 @@ onMounted(async () => {
           <div
               class="w-10 h-10 bg-autonomi-gray-500 rounded-full flex items-center justify-center"
           >
-            <i class="pi pi-file text-white"/>
+            <i 
+              :class="selectedFileItem?.isArchive ? 'pi pi-box text-white' : 'pi pi-file text-white'"
+            />
           </div>
           <div class="text-lg font-semibold text-autonomi-blue-600 dark:text-autonomi-text-primary-dark">
             Details
@@ -3481,6 +3539,14 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- Show file count for archives -->
+        <div v-if="selectedFileItem?.isArchive && selectedFileItem?.archive?.files" class="py-3">
+          <div>Files in Archive</div>
+          <div class="text-autonomi-text-primary">
+            {{ selectedFileItem.archive.files.length }} files
+          </div>
+        </div>
+
         <!-- Show data map hex for private files and archives -->
         <div v-if="dataMapHex" class="py-3">
           <div class="flex items-center gap-2">
@@ -3496,9 +3562,9 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Show data address for public files -->
+        <!-- Show data address for public files and archives -->
         <div
-            v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
+            v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || selectedFileItem?.archive_access?.Public || selectedFileItem?.archive?.archive_access?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
             class="py-3">
           <div class="flex items-center gap-2">
             <span>Data Address</span>
@@ -3514,6 +3580,12 @@ onMounted(async () => {
             </template>
             <template v-else-if="selectedFileItem?.access_data?.Public">
               {{ selectedFileItem.access_data.Public }}
+            </template>
+            <template v-else-if="selectedFileItem?.archive_access?.Public">
+              {{ selectedFileItem.archive_access.Public }}
+            </template>
+            <template v-else-if="selectedFileItem?.archive?.archive_access?.Public">
+              {{ selectedFileItem.archive.archive_access.Public }}
             </template>
             <template v-else-if="selectedFileItem?.address">
               {{ selectedFileItem.address }}
