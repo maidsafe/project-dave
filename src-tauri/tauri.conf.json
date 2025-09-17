@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "project-dave",
+        "title": "Dave",
         "height": 1000,
         "width": 1200,
         "minHeight": 600,
