@@ -1,12 +1,13 @@
 import {useAppKit, useAppKitAccount, useDisconnect} from "@reown/appkit/vue";
-import {readContract, signMessage, waitForTransactionReceipt, writeContract} from "@wagmi/core";
+import {readContract, signMessage, waitForTransactionReceipt, writeContract, getBalance} from "@wagmi/core";
+import {keccak256, concat, toHex, toBytes, hashMessage, formatUnits} from "viem";
 import tokenAbi from "~/assets/abi/PaymentToken.json";
 import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import {wagmiAdapter} from "~/config";
 import debounce from "~/utils/debounce";
 
-const tokenContractAddress = "0xBE1802c27C324a28aeBcd7eeC7D734246C807194";
-const paymentVaultContractAddress = "0x993C7739f50899A997fEF20860554b8a28113634";
+const tokenContractAddress = "0xa78d8321B20c4Ef90eCd72f2588AA985A4BDb684";
+const paymentVaultContractAddress = "0xB1b5219f8Aaa18037A2506626Dd0406a46f70BcC";
 const VAULT_SECRET_KEY_SEED = "Massive Array of Internet Disks Secure Access For Everyone";
 
 let isSetWalletModalListener = false;
@@ -18,19 +19,19 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
         const hideModalElements = debounce(() => {
             try {
                 const mobileTabHeader = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-header');
-                
+
                 const copyLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('wui-link');
-                
+
                 const mobileDownloadLinks = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('w3m-mobile-download-links')?.shadowRoot?.querySelector('wui-cta-button');
-                
+
                 const getStartedLink = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-guide');
 
                 const buttonWalletConnect = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-login-list')?.shadowRoot?.querySelector('w3m-connector-list')?.shadowRoot?.querySelector('w3m-connect-walletconnect-widget');
 
-                const modalHeaderText =  walletModalShadow.querySelector('w3m-header')?.shadowRoot?.querySelector('wui-text');
+                const modalHeaderText = walletModalShadow.querySelector('w3m-header')?.shadowRoot?.querySelector('wui-text');
 
                 const buttonAllWallets = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connect-view')?.shadowRoot?.querySelector('w3m-wallet-login-list')?.shadowRoot?.querySelector('w3m-all-wallets-widget')?.shadowRoot?.querySelector('wui-list-wallet')?.shadowRoot?.querySelector('button')?.querySelector('wui-text');
-            
+
                 const buttonGetAWallet = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-what-is-a-wallet-view')?.shadowRoot?.querySelector('wui-button');
 
                 const scanQrCodeText = walletModalShadow.querySelector('w3m-router')?.shadowRoot?.querySelector('w3m-connecting-wc-view')?.shadowRoot?.querySelector('w3m-connecting-wc-qrcode')?.shadowRoot?.querySelector('wui-text');
@@ -39,7 +40,7 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
 
                 if (modalHeaderText) {
 
-                    const connectWalletRegex  = /Connect\s+Wallet/i;
+                    const connectWalletRegex = /Connect\s+Wallet/i;
                     const isConnectWallet = connectWalletRegex.test(modalHeaderText.innerHTML); // Connect Wallet is the header
                     const placeholderElement = modalHeaderText.parentElement?.querySelector('.autonomi-header');
 
@@ -48,7 +49,7 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
                             // Add the updated connect mobile wallet element if it doesn't exist
                             modalHeaderText.parentElement?.insertAdjacentHTML('beforeend', '<span class="autonomi-header" style="font-size: 14px; font-weight: 600; color: #ffffff;">Connect Mobile Wallet</span>');
                         }
-                        
+
                         modalHeaderText.style.position = 'absolute';
                         modalHeaderText.style.left = '-9999px';
                     } else {
@@ -92,8 +93,7 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
                 if (scanQrCodeText) {
                     scanQrCodeText.innerHTML = `<span style="display: block; text-align: center;">Download ${walletName} on your mobile device then scan this QR code.</span>`
                 }
-            }
-            catch (error) {
+            } catch (error) {
                 // TODO: Handle error
             }
         }, 75)
@@ -104,9 +104,8 @@ const handleObserveHideModalElements = (walletModal: HTMLElement) => {
             })
         })
 
-        observer.observe(walletModalShadow, { attributes: true, childList: true, subtree: true });
-    }
-    catch (error) {
+        observer.observe(walletModalShadow, {attributes: true, childList: true, subtree: true});
+    } catch (error) {
     }
 }
 
@@ -115,14 +114,18 @@ export const useWalletStore = defineStore("wallet", () => {
     // State
     const pendingConnectWallet = ref(false);
     const pendingDisconnectWallet = ref(false);
+    const pendingMessageSignature = ref(false);
     const openConnectWallet = ref(false);
     const openDisconnectWallet = ref(false);
     const callbackConnectWallet = ref<Function | null>(null);
     const callbackDisconnectWallet = ref<Function | null>(null);
-    const cachedVaultKey = ref<string>();
+    const cachedVaultKeySignature = ref<string>();
+    const ethBalance = ref<string>('0');
+    const antBalance = ref<string>('0');
+    const balancesLoading = ref(false);
 
     const wallet = useAppKitAccount();
-    const { open } = useAppKit();
+    const {open} = useAppKit();
     const {disconnect} = useDisconnect();
 
     const connectWallet = async () => {
@@ -130,7 +133,7 @@ export const useWalletStore = defineStore("wallet", () => {
             pendingConnectWallet.value = true;
 
             const connectResponse = await open();
-            
+
             // Get wallet modal reference
             const walletModal = document.querySelector('w3m-modal') as HTMLElement | null;
 
@@ -139,7 +142,7 @@ export const useWalletStore = defineStore("wallet", () => {
                 walletModal && handleObserveHideModalElements(walletModal)
                 isSetWalletModalListener = true
             }
-            
+
             return {
                 success: true,
             };
@@ -158,6 +161,9 @@ export const useWalletStore = defineStore("wallet", () => {
             pendingDisconnectWallet.value = true;
 
             await disconnect();
+
+            // Clear cached vault key signature on disconnect
+            cachedVaultKeySignature.value = undefined;
 
             console.log("Disconnected wallet");
 
@@ -198,7 +204,7 @@ export const useWalletStore = defineStore("wallet", () => {
         openDisconnectWallet.value = true;
     };
 
-    const payForQuotes = async (payments: [[string, string, string]]): Promise<string[]> => {
+    const payForQuotes = async (payments: [string, string, string][]): Promise<string[]> => {
         const MAX_PAYMENTS_PER_TRANSACTION = 256;
 
         try {
@@ -231,6 +237,8 @@ export const useWalletStore = defineStore("wallet", () => {
                     functionName: "payForQuotes",
                     args: [input]
                 });
+
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
                 // wait for transaction
                 let _receipt = await waitForTransactionReceipt(wagmiAdapter.wagmiConfig, {hash: txHash});
@@ -285,30 +293,151 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const getVaultKeySignature = async (): Promise<string> => {
-        if (!cachedVaultKey.value) {
-            cachedVaultKey.value = await sign(VAULT_SECRET_KEY_SEED);
+        // Check for development environment variable first
+        const config = useRuntimeConfig();
+        const devVaultSignature = config.public.devVaultSignature;
+
+        console.log("DEBUG: Runtime config devVaultSignature:", devVaultSignature);
+        console.log("DEBUG: devVaultSignature type:", typeof devVaultSignature);
+        console.log("DEBUG: devVaultSignature length:", devVaultSignature?.length);
+
+        if (devVaultSignature) {
+            console.log("Using development vault key signature from ENV");
+            return devVaultSignature;
         }
 
-        return cachedVaultKey.value;
+        if (!cachedVaultKeySignature.value) {
+            const hex = toHex(VAULT_SECRET_KEY_SEED);
+            const ethSignedMessageHash = toEthSignedMessageHash(hex);
+            pendingMessageSignature.value = true;
+            try {
+                const signature = await sign(keccak256(ethSignedMessageHash));
+                cachedVaultKeySignature.value = signature.slice(0, -2); // Remove recovery ID
+            } finally {
+                pendingMessageSignature.value = false;
+            }
+        }
+
+        console.log("Cached vault key signature:", cachedVaultKeySignature.value);
+
+        return cachedVaultKeySignature.value;
     }
 
-    const sign = async (message: string): Promise<string> => {
+    const sign = async (hex: `0x${string}`): Promise<string> => {
+        console.log("Signing message:", hex);
+
         try {
-            return await signMessage(wagmiAdapter.wagmiConfig, {message});
+            return await signMessage(wagmiAdapter.wagmiConfig, {
+                message: {raw: hex},
+            });
         } catch (error) {
             console.error("Error signing message:", error);
             throw new Error("Failed to sign message");
         }
     };
 
+    const hasVaultSignature = (): boolean => {
+        // Check for development environment variable first
+        const config = useRuntimeConfig();
+        const devVaultSignature = config.public.devVaultSignature;
+        
+        if (devVaultSignature) {
+            return true;
+        }
+        
+        // Check for cached signature
+        return !!cachedVaultKeySignature.value;
+    };
+
+    const fetchEthBalance = async (): Promise<string> => {
+        if (!wallet.value.address) {
+            return '0';
+        }
+
+        try {
+            const balance = await getBalance(wagmiAdapter.wagmiConfig, {
+                address: wallet.value.address,
+            });
+
+            return formatUnits(balance.value, balance.decimals);
+        } catch (error) {
+            console.error("Error fetching ETH balance:", error);
+            return '0';
+        }
+    };
+
+    const fetchAntBalance = async (): Promise<string> => {
+        if (!wallet.value.address) {
+            return '0';
+        }
+
+        try {
+            const balance = await readContract(wagmiAdapter.wagmiConfig, {
+                abi: tokenAbi,
+                address: tokenContractAddress,
+                functionName: "balanceOf",
+                args: [wallet.value.address]
+            });
+
+            const decimals = await readContract(wagmiAdapter.wagmiConfig, {
+                abi: tokenAbi,
+                address: tokenContractAddress,
+                functionName: "decimals",
+                args: []
+            });
+
+            return formatUnits(BigInt(balance), Number(decimals));
+        } catch (error) {
+            console.error("Error fetching ANT balance:", error);
+            return '0';
+        }
+    };
+
+    const refreshBalances = async (): Promise<void> => {
+        if (!wallet.value.address) {
+            ethBalance.value = '0';
+            antBalance.value = '0';
+            return;
+        }
+
+        try {
+            balancesLoading.value = true;
+            const [ethBal, antBal] = await Promise.all([
+                fetchEthBalance(),
+                fetchAntBalance()
+            ]);
+
+            ethBalance.value = ethBal;
+            antBalance.value = antBal;
+        } catch (error) {
+            console.error("Error refreshing balances:", error);
+        } finally {
+            balancesLoading.value = false;
+        }
+    };
+
+    // Watch for wallet address changes and refresh balances
+    watch(() => wallet.value.address, (newAddress) => {
+        if (newAddress) {
+            refreshBalances();
+        } else {
+            ethBalance.value = '0';
+            antBalance.value = '0';
+        }
+    }, { immediate: true });
+
     // Return
     return {
         // State
         pendingConnectWallet,
         pendingDisconnectWallet,
+        pendingMessageSignature,
         openConnectWallet,
         openDisconnectWallet,
         wallet,
+        ethBalance,
+        antBalance,
+        balancesLoading,
         // Actions
         callbackConnectWallet,
         connectWallet,
@@ -321,5 +450,22 @@ export const useWalletStore = defineStore("wallet", () => {
         approveTokens,
         getVaultKeySignature,
         sign,
+        hasVaultSignature,
+        fetchEthBalance,
+        fetchAntBalance,
+        refreshBalances,
     };
 });
+
+function toEthSignedMessageHash(message) {
+    // First hash the input message (must be bytes or hex string)
+    const messageHash = keccak256(message); // This gives a hex string
+
+    const prefix = '\x19Ethereum Signed Message:\n32';
+    const prefixBytes = toBytes(prefix);              // Converts to Uint8Array
+    const messageHashBytes = toBytes(messageHash);    // Converts hash hex to bytes
+
+    const ethMessage = concat([prefixBytes, messageHashBytes]);
+
+    return keccak256(ethMessage);
+}

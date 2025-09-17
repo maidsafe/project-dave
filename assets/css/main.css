@@ -10,3 +10,60 @@
     @tailwind components;
     @tailwind utilities;
 }
+
+:root {
+    --p-tabview-tab-active-border-color: #26264d;
+}
+
+.p-tabview-panels, .p-tabview-tablist {
+    background: transparent;
+}
+
+.p-tabview-panels {
+    @apply px-0;
+}
+
+.dark .p-tabview-tab-header {
+    @apply text-autonomi-text-primary-dark border-autonomi-blue-800;
+}
+
+.p-tabview-tablist {
+    margin-left: 6rem;
+    margin-right: 6rem;
+}
+
+.dark .p-tabview-tablist {
+    @apply border-autonomi-blue-800;
+}
+
+.p-tabview-ink-bar {
+    height: 2px;
+}
+
+.dark .p-tabview-ink-bar {
+    background-color: red;
+}
+
+/* Disable overscroll/bounce behavior */
+html, body {
+    overscroll-behavior: none;
+    height: 100%;
+}
+
+#__nuxt {
+    height: 100%;
+}
+
+/* Disable overscroll for scrollable areas */
+.overscroll-none {
+    overscroll-behavior: none;
+}
+
+/* Basic TabView height management */
+.p-tabview-panels {
+    min-height: 0;
+}
+
+.dark .p-dialog, .dark .p-popover, .dark .p-drawer, .dark .p-toast-message {
+    @apply bg-autonomi-blue-700 text-autonomi-text-primary-dark border-autonomi-blue-700;
+}

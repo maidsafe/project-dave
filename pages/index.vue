@@ -57,6 +57,9 @@ const handleGetStarted = () => {
         <div class="mt-10">Data: {{ wallet }}</div>
       </div> -->
     </div>
-    <FileViewer v-else />
+    <FileViewer v-else 
+      @show-notify="$emit('show-notify', $event)"
+      @hide-notify="$emit('hide-notify')"
+    />
   </div>
 </template>

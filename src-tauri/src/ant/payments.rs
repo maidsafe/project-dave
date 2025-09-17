@@ -41,7 +41,9 @@ impl PaymentOrder {
     }
 
     pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap()
+        let json = serde_json::to_string(self).unwrap();
+        tracing::debug!("PaymentOrder JSON: {}", json);
+        json
     }
 }
 
@@ -72,5 +74,9 @@ impl PaymentOrderManager {
         let order = orders.get_mut(&id).expect("Order not found");
 
         let _ = order.confirmation_sender.send(message).await;
+    }
+
+    pub async fn confirm_payment(&self, id: OrderID) {
+        self.send_order_message(id, OrderMessage::Completed).await;
     }
 }

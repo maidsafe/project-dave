@@ -1,11 +1,17 @@
-import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { arbitrumSepolia, type AppKitNetwork } from '@reown/appkit/networks';
+import {WagmiAdapter} from "@reown/appkit-adapter-wagmi";
+import {arbitrum} from "@reown/appkit/networks";
+import {injected} from "wagmi/connectors";
 
-export const projectId = 'c57e0bb001a4dc96b54b9ced656a3cb8';
+const connector = injected({
+    shimDisconnect: true,
+});
 
-export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [arbitrumSepolia];
+export const networks = [arbitrum];
+
+export const projectId = "c57e0bb001a4dc96b54b9ced656a3cb8";
 
 export const wagmiAdapter = new WagmiAdapter({
-  networks,
-  projectId,
-});
+    networks,
+    projectId,
+    connectors: [connector],
+})
