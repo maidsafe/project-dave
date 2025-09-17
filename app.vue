@@ -21,7 +21,7 @@ createAppKit({
   },
 });
 
-const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary gap-3 transition-all duration-300 cursor-pointer dark:hover:text-white`;
+const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary dark:text-autonomi-text-primary-dark gap-3 transition-all duration-300 cursor-pointer dark:hover:text-white`;
 
 // State
 const walletStore = useWalletStore();

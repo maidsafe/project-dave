@@ -364,7 +364,7 @@ onMounted(async () => {
                   class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
                   placeholder="Port number"
               />
-              <span class="text-autonomi-text-secondary font-semibold"
+              <span class="text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark font-semibold"
               >to 3999</span
               >
             </div>
@@ -391,7 +391,7 @@ onMounted(async () => {
             </p>
 
             <div class="flex items-center gap-2 font-semibold mt-4">
-              <span class="text-autonomi-text-secondary font-semibold"
+              <span class="text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark font-semibold"
               >100 to</span
               >
               <InputText
@@ -436,7 +436,7 @@ onMounted(async () => {
                   class="w-[70px] font-semibold bg-autonomi-gray-500 border-none text-autonomi-text-primary text-center"
                   placeholder="Port number"
               />
-              <span class="text-autonomi-text-secondary font-semibold"
+              <span class="text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark font-semibold"
               >to 9099</span
               >
             </div>
@@ -545,7 +545,7 @@ onMounted(async () => {
                 <li
                     v-for="item in menuSyslog"
                     :key="item.label"
-                    class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                    class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 dark:hover:bg-autonomi-blue-600 cursor-pointer rounded-border rounded-2xl"
                     @click="item.command"
                 >
                   <i :class="item.icon"/>
@@ -591,9 +591,9 @@ onMounted(async () => {
           <button
               v-for="link in supportLinks"
               @click="() => open(link.link)"
-              class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 dark:bg-white/90 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3 cursor-pointer"
+              class="text-autonomi-text-primary font-semibold flex flex-col items-center justify-center border-autonomi-text-primary/50 border rounded-lg h-24 bg-white/30 dark:bg-autonomi-blue-700 text-center gap-2 hover:bg-white transition-all duration-300 hover:border-autonomi-text-primary px-3 cursor-pointer"
           >
-            <i :class="`${link.icon} text-autonomi-blue-600 mr-1`"/>
+            <i :class="`${link.icon} text-autonomi-blue-600 dark:text-autonomi-text-primary-dark mr-1`"/>
             {{ link.name }}
           </button>
         </div>

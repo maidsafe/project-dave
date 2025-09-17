@@ -23,12 +23,17 @@
     @apply px-0;
 }
 
-.p-tabview-tab-header {
+.dark .p-tabview-tab-header {
+    @apply text-autonomi-text-primary-dark border-autonomi-blue-800;
 }
 
 .p-tabview-tablist {
     margin-left: 6rem;
     margin-right: 6rem;
+}
+
+.dark .p-tabview-tablist {
+    @apply border-autonomi-blue-800;
 }
 
 .p-tabview-ink-bar {
@@ -57,4 +62,8 @@ html, body {
 /* Basic TabView height management */
 .p-tabview-panels {
     min-height: 0;
+}
+
+.dark .p-dialog, .dark .p-popover, .dark .p-drawer, .dark .p-toast-message {
+    @apply bg-autonomi-blue-700 text-autonomi-text-primary-dark border-autonomi-blue-700;
 }

@@ -1,8 +1,8 @@
 <script lang="ts" setup>
-import { ref, onMounted } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
-import { useToast } from 'primevue/usetoast';
+import {ref, onMounted} from 'vue';
+import {invoke} from '@tauri-apps/api/core';
+import {open} from '@tauri-apps/plugin-dialog';
+import {useToast} from 'primevue/usetoast';
 
 const toast = useToast();
 
@@ -38,11 +38,11 @@ const chooseDirectory = async () => {
       multiple: false,
       title: 'Choose Download Directory'
     });
-    
+
     if (selected && selected !== downloadDirectory.value) {
       const previousValue = downloadDirectory.value;
       downloadDirectory.value = selected as string;
-      
+
       // Auto-save the new directory
       try {
         isSaving.value = true;
@@ -51,12 +51,12 @@ const chooseDirectory = async () => {
           ...currentAppData,
           download_path: downloadDirectory.value
         };
-        
+
         await invoke('app_data_store', {
           appData: updatedAppData
         });
-        
-        
+
+
         toast.add({
           severity: 'success',
           summary: 'Success',
@@ -104,7 +104,7 @@ onMounted(() => {
     </p>
 
     <div v-if="isLoading" class="flex items-center justify-center py-20">
-      <ProgressSpinner />
+      <ProgressSpinner/>
     </div>
 
     <div v-else class="bg-white dark:bg-white/10 rounded-lg p-6 shadow-sm">
@@ -117,29 +117,29 @@ onMounted(() => {
           <p class="text-sm text-autonomi-text-primary mb-4">
             Choose where your downloaded files will be saved.
           </p>
-          
+
           <div class="flex gap-3 items-center">
             <div class="flex-1">
-              <InputText 
-                v-model="downloadDirectory" 
-                :disabled="true"
-                placeholder="No directory selected"
-                class="w-full"
+              <InputText
+                  v-model="downloadDirectory"
+                  :disabled="true"
+                  placeholder="No directory selected"
+                  class="w-full"
               />
             </div>
             <CommonButton
-              variant="secondary"
-              size="medium"
-              @click="chooseDirectory"
-              :disabled="isSaving"
-              :loading="isSaving"
+                variant="secondary"
+                size="medium"
+                @click="chooseDirectory"
+                :disabled="isSaving"
+                :loading="isSaving"
             >
               Browse...
             </CommonButton>
           </div>
-          
+
           <div v-if="downloadDirectory" class="mt-2">
-            <p class="text-sm text-autonomi-text-secondary">
+            <p class="text-sm text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
               Current: {{ downloadDirectory }}
             </p>
           </div>

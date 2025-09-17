@@ -171,7 +171,7 @@ watchEffect(() => {
       <!-- Progress Steps -->
       <div v-if="steps && steps.length > 0" class="space-y-3">
         <div v-for="step in steps" :key="step.key"
-             class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-autonomi-gray-700">
+             class="flex items-center gap-3 p-3 rounded-lg">
           <!-- Status Icon -->
           <div class="flex-shrink-0">
             <div v-if="step.status === 'completed'"
@@ -233,7 +233,7 @@ watchEffect(() => {
       <!-- Quote Data (when payment is requested) -->
       <div v-if="showQuoteData && !error" class="space-y-4">
         <!-- Upload Summary -->
-        <div class="bg-gray-50 dark:bg-autonomi-gray-800 rounded-lg p-4">
+        <div class="bg-gray-50 dark:bg-autonomi-blue-600 rounded-lg p-4">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-autonomi-text-primary-dark mb-3">
             Upload Summary
           </h4>
@@ -260,7 +260,7 @@ watchEffect(() => {
         </div>
 
         <!-- Storage Cost / Payment Request -->
-        <div class="bg-gray-50 dark:bg-autonomi-gray-800 rounded-lg p-4">
+        <div class="bg-gray-50 dark:bg-autonomi-blue-600 rounded-lg p-4">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-autonomi-text-primary-dark mb-3">
             Payment Request
           </h4>

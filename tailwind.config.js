@@ -5,9 +5,16 @@ const autonomiColors = {
         300: "#FF3355",
     },
     blue: {
-        200: "#A9A9F2",
-        600: "#26264C",
-        800: "#11113B",
+        50: "#F3F3FB", // very light tint
+        100: "#D7D7F7",
+        200: "#A9A9F2", // given
+        300: "#7D7DEB",
+        400: "#5555E0",
+        500: "#3A3AC8",
+        600: "#26264C", // given (a dark desaturated indigo)
+        700: "#1A1A45",
+        800: "#11113B", // given
+        900: "#0A0A2D",
     },
     gray: {
         50: "#F8F8FA",

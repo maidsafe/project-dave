@@ -120,7 +120,7 @@ onBeforeUnmount(() => {
                 v-tooltip.bottom="
                 wallet.isConnected ? 'Disconnect Mobile Wallet' : 'Connect Mobile Wallet'
               "
-                class="w-10 h-10 rounded-full bg-autonomi-blue-800 flex items-center justify-center cursor-pointer"
+                class="w-10 h-10 rounded-full bg-autonomi-blue-700 flex items-center justify-center cursor-pointer"
                 @click="handleClickWallet"
             >
               <svg
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
               >
-                <rect width="21.16" height="21.16" fill="#26264C"/>
+                <rect width="21.16" height="21.16"/>
                 <path
                     d="M16.752 6.1712H15.8703V5.28953C15.8703 4.58803 15.5917 3.91527 15.0956 3.41923C14.5996 2.9232 13.9268 2.64453 13.2253 2.64453H4.40867C3.70717 2.64453 3.03441 2.9232 2.53837 3.41923C2.04234 3.91527 1.76367 4.58803 1.76367 5.28953V15.8695C1.76367 16.571 2.04234 17.2438 2.53837 17.7398C3.03441 18.2359 3.70717 18.5145 4.40867 18.5145H16.752C17.4535 18.5145 18.1263 18.2359 18.6223 17.7398C19.1183 17.2438 19.397 16.571 19.397 15.8695V8.8162C19.397 8.1147 19.1183 7.44193 18.6223 6.9459C18.1263 6.44987 17.4535 6.1712 16.752 6.1712ZM4.40867 4.40786H13.2253C13.4592 4.40786 13.6834 4.50075 13.8488 4.6661C14.0141 4.83144 14.107 5.0557 14.107 5.28953V6.1712H4.40867C4.17484 6.1712 3.95058 6.07831 3.78524 5.91296C3.61989 5.74762 3.527 5.52336 3.527 5.28953C3.527 5.0557 3.61989 4.83144 3.78524 4.6661C3.95058 4.50075 4.17484 4.40786 4.40867 4.40786ZM17.6337 13.2245H16.752C16.5182 13.2245 16.2939 13.1316 16.1286 12.9663C15.9632 12.801 15.8703 12.5767 15.8703 12.3429C15.8703 12.109 15.9632 11.8848 16.1286 11.7194C16.2939 11.5541 16.5182 11.4612 16.752 11.4612H17.6337V13.2245ZM17.6337 9.69786H16.752C16.0505 9.69786 15.3777 9.97653 14.8817 10.4726C14.3857 10.9686 14.107 11.6414 14.107 12.3429C14.107 13.0444 14.3857 13.7171 14.8817 14.2132C15.3777 14.7092 16.0505 14.9879 16.752 14.9879H17.6337V15.8695C17.6337 16.1034 17.5408 16.3276 17.3754 16.493C17.2101 16.6583 16.9858 16.7512 16.752 16.7512H4.40867C4.17484 16.7512 3.95058 16.6583 3.78524 16.493C3.61989 16.3276 3.527 16.1034 3.527 15.8695V7.78465C3.81026 7.88429 4.10841 7.93498 4.40867 7.93453H16.752C16.9858 7.93453 17.2101 8.02742 17.3754 8.19277C17.5408 8.35811 17.6337 8.58237 17.6337 8.8162V9.69786Z"
                     fill="white"
@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
                   wallet.isConnected ? 'w-[150px]' : 'w-0'
                 } transition-all duration-500 overflow-hidden whitespace-nowrap`"
               >
-                <div class="text-sm font-semibold text-autonomi-text-secondary">
+                <div class="text-sm font-semibold text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
                   {{ `${address.slice(0, 6)}...${address.slice(38, 42)}` }}
                 </div>
                 <div class="text-sm text-autonomi-text-primary">
@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div>
                   <div
-                      class="text-sm font-semibold text-autonomi-text-secondary"
+                      class="text-sm font-semibold text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark"
                   >
                     {{ account }}
                   </div>

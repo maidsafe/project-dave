@@ -2304,7 +2304,7 @@ onMounted(async () => {
           </div>
 
           <div
-              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 cursor-pointer transition-colors duration-200"
+              class="w-10 h-10 rounded-full text-white flex items-center justify-center bg-autonomi-blue-600 hover:bg-autonomi-blue-700 dark:bg-autonomi-blue-700 cursor-pointer transition-colors duration-200"
               @click="$event => { refUploadDropdown.toggle($event); }"
               v-tooltip.bottom="'Upload'"
           >
@@ -2343,14 +2343,14 @@ onMounted(async () => {
             >
               Vault
             </div>
-            <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"/>
+            <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70 dark:text-autonomi-text-primary-dark/70"/>
 
             <template v-for="(crumb, index) in breadcrumbs" :key="index">
               <div
                   :class="`cursor-pointer transition-all duration-300 ${
                   index === breadcrumbs.length - 1
-                    ? 'text-autonomi-text-secondary'
-                    : 'text-autonomi-text-primary/70'
+                    ? 'text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark'
+                    : 'text-autonomi-text-primary/70 dark:text-autonomi-text-primary-dark/70'
                 }`"
                   @click="handleClickBreadcrumb(crumb)"
               >
@@ -2358,7 +2358,7 @@ onMounted(async () => {
               </div>
               <i
                   v-if="index !== breadcrumbs.length - 1"
-                  class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"
+                  class="text-xs pi pi-arrow-right text-autonomi-text-primary/70 dark:text-autonomi-text-primary-dark/70"
               />
             </template>
           </div>
@@ -2387,14 +2387,14 @@ onMounted(async () => {
                 <div
                     v-for="file in combinedFiles"
                     :key="file.path || file.name"
-                    class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
+                    class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-autonomi-blue-700 dark:text-autonomi-text-primary-dark"
                     @click="!file.is_loading_archive ? handleChangeDirectory(file) : null"
                     :class="{
                   'cursor-pointer': (!file.path || file.is_failed_archive) && !file.is_loading_archive,
                   'opacity-75': file.is_loading || file.is_loading_archive,
                   'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
                   'bg-blue-50 dark:bg-blue-900/20': file.is_loading_archive,
-                  'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive || file.is_loading_archive)
+                  'hover:bg-white dark:hover:bg-white/10': !(file.load_error || file.is_failed_archive || file.is_loading_archive)
                 }"
                 >
                   <!-- Folder/File Name -->
@@ -2506,7 +2506,7 @@ onMounted(async () => {
                 <div
                     v-for="file in combinedFiles"
                     :key="file.path || file.name"
-                    class="aspect-square w-full text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-3 border flex flex-col"
+                    class="aspect-square w-full text-autonomi-text-primary dark:text-autonomi-text-secondary-dark hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:hover:bg-white/10 dark:hover:text-autonomi-text-primary-dark dark:border-autonomi-blue-800 transition-all duration-500 p-3 border flex flex-col"
                     :class="{
                       'cursor-pointer': !file.is_loading_archive,
                       'cursor-default opacity-75': file.is_loading_archive,
@@ -2567,19 +2567,19 @@ onMounted(async () => {
               class="mx-[6rem] flex gap-4 items-center text-sm font-semibold flex-wrap my-4"
           >
             <div
-                class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-primary-dark"
+                class="cursor-pointer transition-all duration-300 text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark"
                 @click="handleLocalBreadcrumbClick(localRootDirectory)"
             >
               Local Vault
             </div>
-            <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"/>
+            <i class="text-xs pi pi-arrow-right text-autonomi-text-primary/70 dark:text-autonomi-text-primary-dark/70"/>
 
             <template v-for="(crumb, index) in localBreadcrumbs" :key="index">
               <div
                   :class="`cursor-pointer transition-all duration-300 ${
                   index === localBreadcrumbs.length - 1
-                    ? 'text-autonomi-text-secondary'
-                    : 'text-autonomi-text-primary/70'
+                    ? 'text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark'
+                    : 'text-autonomi-text-primary/70 dark:text-autonomi-text-primary-dark/70'
                 }`"
                   @click="handleLocalBreadcrumbClick(crumb)"
               >
@@ -2587,7 +2587,7 @@ onMounted(async () => {
               </div>
               <i
                   v-if="index !== localBreadcrumbs.length - 1"
-                  class="text-xs pi pi-arrow-right text-autonomi-text-primary/70"
+                  class="text-xs pi pi-arrow-right text-autonomi-text-primary/70 dark:text-autonomi-text-primary-dark/70"
               />
             </template>
           </div>
@@ -2616,14 +2616,14 @@ onMounted(async () => {
                 <div
                     v-for="file in combinedLocalFiles"
                     :key="file.path || file.name"
-                    class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-[#5b5d87] dark:bg-[#444565] dark:text-autonomi-text-primary-dark"
+                    class="grid grid-cols-subgrid col-span-12 h-11 items-center odd:bg-autonomi-gray-100 dark:odd:bg-autonomi-blue-700 dark:text-autonomi-text-primary-dark"
                     @click="!file.is_loading_archive ? handleLocalChangeDirectory(file) : null"
                     :class="{
                       'cursor-pointer': (!file.path || file.is_failed_archive) && !file.is_loading_archive,
                       'opacity-75': file.is_loading || file.is_loading_archive,
                       'opacity-75 bg-red-100 dark:bg-red-900/20 hover:bg-red-200': file.load_error || file.is_failed_archive,
                       'bg-blue-50 dark:bg-blue-900/20': file.is_loading_archive,
-                      'hover:bg-white dark:hover:bg-[#8587c5]': !(file.load_error || file.is_failed_archive || file.is_loading_archive)
+                      'hover:bg-white dark:hover:bg-white/10': !(file.load_error || file.is_failed_archive || file.is_loading_archive)
                     }"
                 >
                   <!-- Folder/File Name -->
@@ -2723,7 +2723,7 @@ onMounted(async () => {
                 <div
                     v-for="file in combinedLocalFiles"
                     :key="file.path || file.name"
-                    class="aspect-square w-full text-autonomi-text-primary hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:bg-[#444565] dark:hover:bg-black/40 dark:hover:text-autonomi-text-primary-dark transition-all duration-500 p-3 border flex flex-col"
+                    class="aspect-square w-full text-autonomi-text-primary dark:text-autonomi-text-secondary-dark hover:bg-white rounded-lg hover:text-autonomi-text-secondary dark:hover:bg-white/10 dark:hover:text-autonomi-text-primary-dark dark:border-autonomi-blue-800 transition-all duration-500 p-3 border flex flex-col"
                     :class="{
                       'cursor-pointer': !file.is_loading_archive,
                       'cursor-default opacity-75': file.is_loading_archive,
@@ -3151,14 +3151,14 @@ onMounted(async () => {
     >
       <div class="flex flex-col gap-6 p-1">
         <!-- File Info -->
-        <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+        <div class="bg-gray-50 dark:bg-autonomi-blue-600 rounded-lg p-4">
           <div class="flex items-center gap-3">
             <i :class="uploadOptionsData.isFolder ? 'pi pi-folder' : 'pi pi-file'" class="text-autonomi-blue-500"></i>
             <div>
               <div class="font-semibold text-sm">
                 {{ uploadOptionsData.isFolder ? 'Folder' : (uploadOptionsData.files.length === 1 ? 'File' : 'Files') }}
               </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">
+              <div class="text-sm text-gray-600 dark:text-autonomi-secondary-dark">
                 {{
                   uploadOptionsData.isFolder ? uploadOptionsData.files[0]?.name :
                       (uploadOptionsData.files.length === 1 ? uploadOptionsData.files[0]?.name : `${uploadOptionsData.files.length} files`)
@@ -3220,7 +3220,8 @@ onMounted(async () => {
                 <i class="pi pi-database text-autonomi-blue-500"></i>
                 <div>
                   <div class="font-medium">Add to Vault</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault for easy access
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal network vault for easy
+                    access
                   </div>
                 </div>
               </label>
@@ -3287,7 +3288,7 @@ onMounted(async () => {
                 :key="item.label"
                 class="flex items-center gap-2 py-3 px-5 rounded-border rounded-2xl"
                 :class="{
-                'hover:bg-autonomi-gray-100 cursor-pointer': !item.disabled,
+                'hover:bg-autonomi-gray-100 dark:hover:bg-autonomi-blue-600 cursor-pointer': !item.disabled,
                 'opacity-50 cursor-not-allowed': item.disabled
               }"
                 @click="!item.disabled && item.command && item.command()"
@@ -3310,7 +3311,7 @@ onMounted(async () => {
             <li
                 v-for="item in menuFilesView"
                 :key="item.label"
-                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 dark:hover:bg-autonomi-blue-600 cursor-pointer rounded-border rounded-2xl"
                 @click="item.command"
             >
               <i :class="item.icon"/>
@@ -3333,7 +3334,7 @@ onMounted(async () => {
                 :key="item.label"
                 class="flex items-center gap-2 py-3 px-5 rounded-border rounded-2xl"
                 :class="{
-                  'hover:bg-autonomi-gray-100 cursor-pointer': !item.disabled,
+                  'hover:bg-autonomi-gray-100 dark:hover:bg-autonomi-blue-600 cursor-pointer': !item.disabled,
                   'opacity-50 cursor-not-allowed': item.disabled
                 }"
                 @click="!item.disabled && item.command && item.command()"
@@ -3356,7 +3357,7 @@ onMounted(async () => {
             <li
                 v-for="item in menuUploads"
                 :key="item.label"
-                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 dark:hover:bg-autonomi-blue-600 cursor-pointer rounded-border rounded-2xl"
                 @click="item.command"
             >
               <i :class="item.icon"/>
@@ -3377,7 +3378,7 @@ onMounted(async () => {
             <li
                 v-for="item in menuDownloads"
                 :key="item.label"
-                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 cursor-pointer rounded-border rounded-2xl"
+                class="flex items-center gap-2 py-3 px-5 hover:bg-autonomi-gray-100 dark:hover:bg-autonomi-blue-600 cursor-pointer rounded-border rounded-2xl"
                 @click="item.command"
             >
               <i :class="item.icon"/>
@@ -3403,7 +3404,7 @@ onMounted(async () => {
           >
             <i class="pi pi-file text-white"/>
           </div>
-          <div class="text-lg font-semibold text-autonomi-blue-600">
+          <div class="text-lg font-semibold text-autonomi-blue-600 dark:text-autonomi-text-primary-dark">
             Details
           </div>
         </div>
