@@ -1,89 +1,51 @@
-# Project Dave
+# Dave
 
-Project Dave is a web application built with Rust, Tauri, Vue.js, and Nuxt.js that demonstrates the core functionality of the Autonomi network. It provides a user-friendly interface for interacting with the Autonomi network to upload data, and view and download uploaded data.
+Dave is a client app for managing your Vault on the Autonomi network.
 
-## Getting Started
+## Features
 
-### Prerequisites
+- **File Uploading**: Upload files and folders publicly or privately to Autonomi.
+- **Vault Management**: Manage your local and network Vault.
+- **Web3 Wallet Integration**: Secure access and payments via Web3 wallet.
 
-- Node.js 16.x or later
-- npm package manager
-- Rust 1.70.0 or later
-- rustc (Rust compiler)
-- cargo (Rust package manager)
+## Installation
 
-### Installation
+Download the latest version from the [releases page](https://github.com/maidsafe/project-dave/releases):
 
-1. Clone the repository: `git clone https://github.com/maidsafe/project-dave.git`
+- Windows (.msi installer)
+- macOS (.dmg)
+- Linux (.AppImage or .deb)
 
-2. Navigate into the top level of the repo: `cd project-dave`
+## Using Dave with Your Wallet
 
-3. Install Node.js dependencies: `npm install`
+Dave uses Web3 wallets for secure Vault access and upload payments on the Arbitrum One network.
 
-## Development Server
+### Setting Up Your Wallet
 
-Start the application for development `npm run tauri dev`
+1. **Install a Web3 Wallet**: Dave supports mobile wallets through WalletConnect
+    - Popular options include MetaMask Mobile, Rainbow, or Trust Wallet
 
-## Contributing
+2. **Connect in Dave**:
+    - Click the wallet button in Dave
+    - Scan the QR code with your mobile wallet
+    - Approve the connection
 
-We welcome contributions! Here's how you can help:
+3. **Fund Your Wallet**: You'll need ETH and Autonomi tokens on Arbitrum One for upload payments
 
-1. Fork the repository
-2. Create your feature branch (git checkout -b feat/amazing-feature)
-3. Commit your changes (git commit -m 'adds amazing feature'). <br>Please ensure that your commit messages clearly describe the changes you have made and use the [Conventional Commits](https://www.conventionalcommits.org/) specification.
-4. Push to the branch (git push origin feat/amazing-feature)
-5. Open a Pull Request to the `development` branch instead of the `main` branch
+### Basic Usage
 
-You can also visit the [Autonomi Website](https://autonomi.com/) if you would like to learn more and please join our
-online community through our [Discord server](https://discord.com/invite/autonomi) or [forum](https://forum.autonomi.community/).
+#### Uploading Files
 
-## Development Guidelines
+1. Click the plus (+) button on the Files page
+2. Select files or folders from your computer
+3. Choose upload type:
+    - **Private**: Encrypted files with data map kept locally (can be shared via datamap hex)
+    - **Public**: Encrypted files with data map uploaded publicly for sharing via data address
+4. Sign with your wallet when prompted
+5. Confirm payment if required
 
-1. Follow the existing code style and conventions
-2. Write meaningful commit messages
-3. Add tests for new features
-4. Update documentation as needed
+## Support
 
-## Project Structure
-
-```
-project-dave
-├─ README.md
-├─ app.vue
-├─ assets
-│  ├─ abi
-│  └─ css
-├─ components
-│  ├─ Common
-│  ├─ Icon
-├─ config
-├─ lib
-├─ nuxt.config.ts
-├─ package-lock.json
-├─ package.json
-├─ pages
-├─ plugins
-├─ public
-├─ src-tauri
-│  ├─ Cargo.lock
-│  ├─ Cargo.toml
-│  ├─ capabilities
-│  ├─ gen
-│  │  └─ schemas
-│  ├─ icons
-│  │  ├─ android
-│  │  └─ ios
-│  ├─ src
-│  │  ├─ ant
-│  ├─ target
-│  └─ tauri.conf.json
-├─ stores
-├─ types
-├─ utils
-└─ vite.config.ts
-```
-
-## License
-
-This repository is licensed under the General Public License (GPL), version
-3 ([LICENSE](http://www.gnu.org/licenses/gpl-3.0.en.html)).
+- Learn more at [autonomi.com](https://autonomi.com/)
+- Join our [Discord](https://discord.com/invite/autonomi)
+- Visit the [Forum](https://forum.autonomi.community/)
