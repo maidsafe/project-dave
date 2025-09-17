@@ -1225,15 +1225,6 @@ const handleAddToVault = async (file: any) => {
               throw new Error('File access not found');
             }
 
-            // For private files with byte arrays, convert to hex string
-            if (fileAccess.Private && Array.isArray(fileAccess.Private)) {
-              fileAccess = {
-                Private: '0x' + fileAccess.Private.map((byte: number) =>
-                    byte.toString(16).padStart(2, '0')
-                ).join('')
-              };
-            }
-
             // Show notification that we're adding the file
             emit('show-notify', {
               notifyType: 'info',
@@ -1241,7 +1232,7 @@ const handleAddToVault = async (file: any) => {
               details: `Adding "${fileName}" to your vault...`,
               enabledCancel: false
             });
-
+            
             await invoke('add_local_file_to_vault', {
               vaultKeySignature: vaultKeySignature,
               fileAccess: fileAccess,
