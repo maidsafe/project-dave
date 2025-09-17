@@ -3274,9 +3274,8 @@ onMounted(async () => {
               <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-database text-autonomi-blue-500"></i>
                 <div>
-                  <div class="font-medium">Add to Vault</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal network vault for easy
-                    access
+                  <div class="font-medium">Add to Personal Vault</div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault on the network
                   </div>
                 </div>
               </label>
