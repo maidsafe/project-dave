@@ -97,7 +97,7 @@ onMounted(async () => {
   <div class="h-screen flex flex-col bg-autonomi-gray-50 dark:bg-autonomi-blue-600 relative overflow-hidden">
     <div
         v-if="!removeSplashScreen"
-        class="absolute w-full h-full bg-white top-0 left-0 z-50 transition-all duration-1000"
+        class="absolute w-full h-full bg-white dark:bg-autonomi-blue-600 top-0 left-0 z-50 transition-all duration-1000"
         :class="{
         'opacity-100': !isFadeOut,
         'opacity-0': isFadeOut,
