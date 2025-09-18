@@ -298,9 +298,9 @@ watchEffect(() => {
           </h4>
           <div class="space-y-3">
             <div class="flex justify-between text-sm">
-              <span class="font-semibold text-gray-900 dark:text-autonomi-text-primary-dark">Total Cost:</span>
+              <span class="text-gray-600 dark:text-gray-400">Total Cost:</span>
               <div class="text-right">
-                <div class="font-bold text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
+                <div class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
                   {{ formatANT(quoteData?.totalCostNano || '0') }} ANT
                 </div>
                 <div class="text-xs text-gray-600 dark:text-gray-400">
