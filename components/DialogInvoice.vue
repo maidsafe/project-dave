@@ -300,13 +300,16 @@ watchEffect(() => {
             <div class="flex justify-between text-sm">
               <span class="font-semibold text-gray-900 dark:text-autonomi-text-primary-dark">Total Cost:</span>
               <div class="text-right">
-                <div class="font-bold text-blue-600 dark:text-blue-400">
+                <div class="font-bold text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
                   {{ formatANT(quoteData?.totalCostNano || '0') }} ANT
                 </div>
                 <div class="text-xs text-gray-600 dark:text-gray-400">
                   {{ quoteData?.totalCostFormatted || '0 ATTO' }}
                 </div>
               </div>
+            </div>
+            <div class="flex justify-center text-center text-xs text-gray-600 dark:text-gray-400">
+              <span>Gas costs (ETH) aren't shown here, check your wallet app for these fees</span>
             </div>
           </div>
         </div>
