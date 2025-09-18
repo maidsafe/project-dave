@@ -132,8 +132,6 @@ jobs:
           tag_name: app-v${{ steps.get_version.outputs.VERSION }}
           name: Dave v${{ steps.get_version.outputs.VERSION }}
           body: |
-            🚀 **Dave Desktop Application v${{ steps.get_version.outputs.VERSION }}**
-            
             Download Dave for your platform:
             
             ## 🍎 macOS
@@ -145,9 +143,6 @@ jobs:
             
             ## 🪟 Windows
             - **x64 Executable**: [`project-dave_${{ steps.get_version.outputs.VERSION }}_windows-x86_64-pc-windows-msvc.exe`](https://github.com/${{ github.repository }}/releases/download/app-v${{ steps.get_version.outputs.VERSION }}/project-dave_${{ steps.get_version.outputs.VERSION }}_windows-x86_64-pc-windows-msvc.exe)
-            
-            ---
-            *This is a draft release created automatically when a PR was merged to ${{ github.ref_name }}.*
           draft: true
           prerelease: false
           files: |
