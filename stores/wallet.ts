@@ -123,6 +123,7 @@ export const useWalletStore = defineStore("wallet", () => {
     const ethBalance = ref<string>('0');
     const antBalance = ref<string>('0');
     const balancesLoading = ref(false);
+    const balanceRefreshInterval = ref<NodeJS.Timeout | null>(null);
 
     const wallet = useAppKitAccount();
     const {open} = useAppKit();
@@ -246,6 +247,9 @@ export const useWalletStore = defineStore("wallet", () => {
                 txHashes.push(txHash);
             }
 
+            // Refresh balances after payment
+            refreshBalances();
+
             return txHashes;
         } catch (error) {
             console.error("Error paying for quotes:", error);
@@ -340,11 +344,11 @@ export const useWalletStore = defineStore("wallet", () => {
         // Check for development environment variable first
         const config = useRuntimeConfig();
         const devVaultSignature = config.public.devVaultSignature;
-        
+
         if (devVaultSignature) {
             return true;
         }
-        
+
         // Check for cached signature
         return !!cachedVaultKeySignature.value;
     };
@@ -393,7 +397,7 @@ export const useWalletStore = defineStore("wallet", () => {
         }
     };
 
-    const refreshBalances = async (): Promise<void> => {
+    const refreshBalances = async (showLoading: boolean = false): Promise<void> => {
         if (!wallet.value.address) {
             ethBalance.value = '0';
             antBalance.value = '0';
@@ -401,7 +405,9 @@ export const useWalletStore = defineStore("wallet", () => {
         }
 
         try {
-            balancesLoading.value = true;
+            if (showLoading) {
+                balancesLoading.value = true;
+            }
             const [ethBal, antBal] = await Promise.all([
                 fetchEthBalance(),
                 fetchAntBalance()
@@ -412,19 +418,34 @@ export const useWalletStore = defineStore("wallet", () => {
         } catch (error) {
             console.error("Error refreshing balances:", error);
         } finally {
-            balancesLoading.value = false;
+            if (showLoading) {
+                balancesLoading.value = false;
+            }
         }
     };
 
     // Watch for wallet address changes and refresh balances
-    watch(() => wallet.value.address, (newAddress) => {
+    watch(() => wallet.value.address, (newAddress, oldAddress) => {
         if (newAddress) {
-            refreshBalances();
+            // Show loading only on initial connection (when oldAddress was null)
+            refreshBalances(!oldAddress);
+            // Set up interval to refresh balances every minute
+            if (balanceRefreshInterval.value) {
+                clearInterval(balanceRefreshInterval.value);
+            }
+            balanceRefreshInterval.value = setInterval(() => {
+                refreshBalances(false); // No loading indicator for periodic refreshes
+            }, 60000); // 60 seconds
         } else {
             ethBalance.value = '0';
             antBalance.value = '0';
+            // Clear interval when wallet disconnects
+            if (balanceRefreshInterval.value) {
+                clearInterval(balanceRefreshInterval.value);
+                balanceRefreshInterval.value = null;
+            }
         }
-    }, { immediate: true });
+    }, {immediate: true});
 
     // Return
     return {
