@@ -192,7 +192,7 @@ watchEffect(() => {
       :closable="false"
   >
     <template #header>
-      <div class="flex items-center justify-between w-full">
+      <div class="flex items-center justify-between w-full my-3">
         <div class="flex items-center gap-3">
           <IconLogo alt="Autonomi" class="h-6 filter dark:filter-none"/>
         </div>
@@ -320,7 +320,7 @@ watchEffect(() => {
     </div>
 
     <template #footer>
-      <div class="flex justify-end items-center gap-3 py-3">
+      <div class="flex justify-end items-center gap-3 mt-5">
         <Button
             label="Cancel"
             severity="secondary"
