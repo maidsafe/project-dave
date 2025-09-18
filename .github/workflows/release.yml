@@ -15,7 +15,11 @@ jobs:
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
             target: 'x86_64-apple-darwin'
-            os_name: 'macos'
+            os_name: 'macos-intel'
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            target: 'aarch64-apple-darwin'
+            os_name: 'macos-silicon'
           - platform: 'ubuntu-22.04'
             args: ''
             target: 'x86_64-unknown-linux-gnu'
@@ -49,10 +53,40 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Import Apple Developer Certificate
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Verify Certificate
+        if: matrix.platform == 'macos-latest'
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          echo "Certificate imported."
+
       - name: Build Tauri app
         run: npm run tauri build -- ${{ matrix.args }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload artifacts (macOS)
         if: matrix.platform == 'macos-latest'
@@ -61,7 +95,6 @@ jobs:
           name: ${{ matrix.os_name }}-${{ matrix.target }}
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
 
       - name: Upload artifacts (Linux)
         if: startsWith(matrix.platform, 'ubuntu')
@@ -109,8 +142,11 @@ jobs:
           # Create release directory
           mkdir -p release-assets
           
-          # macOS DMG
-          find artifacts/macos-x86_64-apple-darwin -name "*.dmg" -exec cp {} release-assets/project-dave_${VERSION}_macos-x86_64-apple-darwin.dmg \;
+          # macOS Intel DMG
+          find artifacts/macos-intel-x86_64-apple-darwin -name "*.dmg" -exec cp {} release-assets/project-dave_${VERSION}_macos-x86_64-apple-darwin.dmg \;
+          
+          # macOS Silicon DMG
+          find artifacts/macos-silicon-aarch64-apple-darwin -name "*.dmg" -exec cp {} release-assets/project-dave_${VERSION}_macos-aarch64-apple-darwin.dmg \;
           
           # Linux AppImage
           find artifacts/linux-x86_64-unknown-linux-gnu -name "*.AppImage" -exec cp {} release-assets/project-dave_${VERSION}_linux-x86_64-unknown-linux-gnu.AppImage \;
@@ -136,6 +172,7 @@ jobs:
             
             ## 🍎 macOS
             - **Intel**: [`project-dave_${{ steps.get_version.outputs.VERSION }}_macos-x86_64-apple-darwin.dmg`](https://github.com/${{ github.repository }}/releases/download/app-v${{ steps.get_version.outputs.VERSION }}/project-dave_${{ steps.get_version.outputs.VERSION }}_macos-x86_64-apple-darwin.dmg)
+            - **Apple Silicon**: [`project-dave_${{ steps.get_version.outputs.VERSION }}_macos-aarch64-apple-darwin.dmg`](https://github.com/${{ github.repository }}/releases/download/app-v${{ steps.get_version.outputs.VERSION }}/project-dave_${{ steps.get_version.outputs.VERSION }}_macos-aarch64-apple-darwin.dmg)
             
             ## 🐧 Linux
             - **x64 AppImage**: [`project-dave_${{ steps.get_version.outputs.VERSION }}_linux-x86_64-unknown-linux-gnu.AppImage`](https://github.com/${{ github.repository }}/releases/download/app-v${{ steps.get_version.outputs.VERSION }}/project-dave_${{ steps.get_version.outputs.VERSION }}_linux-x86_64-unknown-linux-gnu.AppImage)
