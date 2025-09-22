@@ -95,6 +95,9 @@ const showLoadVaultButton = ref(false);
 const pendingVaultRemoval = ref(false);
 const vaultRemovalItem = ref<{ name: string, isArchive: boolean } | null>(null);
 
+// Collapsible state for datamap hex
+const isDataMapCollapsed = ref(true);
+
 // Upload modal functionality
 const initializeUploadSteps = () => {
   uploadSteps.value = [
@@ -2318,6 +2321,17 @@ const dataMapHex = computed(() => {
   return null;
 });
 
+const dataMapHexPreview = computed(() => {
+  const fullHex = dataMapHex.value;
+  if (!fullHex) return null;
+  
+  // Show first 20 characters and last 20 characters with ellipsis in between
+  if (fullHex.length > 50) {
+    return `${fullHex.slice(0, 20)}...${fullHex.slice(-20)}`;
+  }
+  return fullHex;
+});
+
 // Handle local directory/file navigation (similar to vault files)
 const handleLocalChangeDirectory = (target: any) => {
   if (!target?.children) {
@@ -3554,9 +3568,20 @@ onMounted(async () => {
                 @click="handleCopySecretKey(selectedFileItem)"
                 v-tooltip.top="'Copy data map'"
             />
+            <i
+                :class="isDataMapCollapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
+                class="text-xs cursor-pointer hover:text-autonomi-blue-500 ml-auto"
+                @click="isDataMapCollapsed = !isDataMapCollapsed"
+                v-tooltip.top="isDataMapCollapsed ? 'Expand' : 'Collapse'"
+            />
           </div>
-          <div class="text-autonomi-text-primary font-mono text-xs break-all">
-            {{ dataMapHex }}
+          <div class="text-autonomi-text-primary font-mono text-xs break-all transition-all duration-200 overflow-hidden">
+            <div v-if="isDataMapCollapsed" class="py-1">
+              {{ dataMapHexPreview }}
+            </div>
+            <div v-else class="py-1 max-h-64 overflow-y-auto">
+              {{ dataMapHex }}
+            </div>
           </div>
         </div>
 
