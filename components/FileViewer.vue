@@ -2324,7 +2324,7 @@ const dataMapHex = computed(() => {
 const dataMapHexPreview = computed(() => {
   const fullHex = dataMapHex.value;
   if (!fullHex) return null;
-  
+
   // Show first 20 characters and last 20 characters with ellipsis in between
   if (fullHex.length > 50) {
     return `${fullHex.slice(0, 20)}...${fullHex.slice(-20)}`;
@@ -3509,6 +3509,7 @@ onMounted(async () => {
         v-model:visible="isVisibleFileInfo"
         header="Drawer"
         position="right"
+        class="file-details-drawer"
     >
       <template #header>
         <div class="flex items-center gap-3">
@@ -3524,130 +3525,142 @@ onMounted(async () => {
           </div>
         </div>
       </template>
-      <div class="p-5 flex-col flex text-sm font-semibold">
-        <div class="py-3">
-          <div>Name</div>
-          <div class="text-autonomi-text-primary break-words">
-            {{ selectedFileItem?.name }}
-          </div>
-        </div>
-
-        <!-- Show type for all files (local vault and vault) -->
-        <div v-if="derivedFileType" class="py-3">
-          <div>Type</div>
-          <div class="text-autonomi-text-primary">
-            <template v-if="derivedFileType === 'public_archive'">
-              Public Archive
-            </template>
-            <template v-else-if="derivedFileType === 'private_archive'">
-              Private Archive
-            </template>
-            <template v-else-if="derivedFileType === 'public_file'">
-              Public File
-            </template>
-            <template v-else-if="derivedFileType === 'private_file'">
-              Private File
-            </template>
-          </div>
-        </div>
-
-        <!-- Show file count for archives -->
-        <div v-if="selectedFileItem?.isArchive && selectedFileItem?.archive?.files" class="py-3">
-          <div>Files in Archive</div>
-          <div class="text-autonomi-text-primary">
-            {{ selectedFileItem.archive.files.length }} files
-          </div>
-        </div>
-
-        <!-- Show data map hex for private files and archives -->
-        <div v-if="dataMapHex" class="py-3">
-          <div class="flex items-center gap-2">
-            <span>Data Map (HEX)</span>
-            <i
-                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
-                @click="handleCopySecretKey(selectedFileItem)"
-                v-tooltip.top="'Copy data map'"
-            />
-            <i
-                :class="isDataMapCollapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
-                class="text-xs cursor-pointer hover:text-autonomi-blue-500 ml-auto"
-                @click="isDataMapCollapsed = !isDataMapCollapsed"
-                v-tooltip.top="isDataMapCollapsed ? 'Expand' : 'Collapse'"
-            />
-          </div>
-          <div class="text-autonomi-text-primary font-mono text-xs break-all transition-all duration-200 overflow-hidden">
-            <div v-if="isDataMapCollapsed" class="py-1">
-              {{ dataMapHexPreview }}
-            </div>
-            <div v-else class="py-1 max-h-64 overflow-y-auto">
-              {{ dataMapHex }}
+      <div class="flex flex-col h-full">
+        <div class="flex-1 overflow-y-auto p-5 flex-col flex text-sm font-semibold">
+          <div class="py-3">
+            <div>Name</div>
+            <div class="text-autonomi-text-primary break-words">
+              {{ selectedFileItem?.name }}
             </div>
           </div>
+
+          <!-- Show type for all files (local vault and vault) -->
+          <div v-if="derivedFileType" class="py-3">
+            <div>Type</div>
+            <div class="text-autonomi-text-primary">
+              <template v-if="derivedFileType === 'public_archive'">
+                Public Archive
+              </template>
+              <template v-else-if="derivedFileType === 'private_archive'">
+                Private Archive
+              </template>
+              <template v-else-if="derivedFileType === 'public_file'">
+                Public File
+              </template>
+              <template v-else-if="derivedFileType === 'private_file'">
+                Private File
+              </template>
+            </div>
+          </div>
+
+          <!-- Show file count for archives -->
+          <div v-if="selectedFileItem?.isArchive && selectedFileItem?.archive?.files" class="py-3">
+            <div>Files in Archive</div>
+            <div class="text-autonomi-text-primary">
+              {{ selectedFileItem.archive.files.length }} files
+            </div>
+          </div>
+
+          <!-- Show data map hex for private files and archives -->
+          <div v-if="dataMapHex" class="py-3">
+            <div class="flex items-center gap-2">
+              <span>Data Map (HEX)</span>
+              <i
+                  class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                  @click="handleCopySecretKey(selectedFileItem)"
+                  v-tooltip.top="'Copy data map'"
+              />
+              <i
+                  :class="isDataMapCollapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
+                  class="text-xs cursor-pointer hover:text-autonomi-blue-500 ml-auto"
+                  @click="isDataMapCollapsed = !isDataMapCollapsed"
+                  v-tooltip.top="isDataMapCollapsed ? 'Expand' : 'Collapse'"
+              />
+            </div>
+            <div
+                class="text-autonomi-text-primary font-mono text-xs break-all transition-all duration-200 overflow-hidden">
+              <div v-if="isDataMapCollapsed" class="py-1">
+                {{ dataMapHexPreview }}
+              </div>
+              <div v-else class="py-1 max-h-64 overflow-y-auto">
+                {{ dataMapHex }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Show data address for public files and archives -->
+          <div
+              v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || selectedFileItem?.archive_access?.Public || selectedFileItem?.archive?.archive_access?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
+              class="py-3">
+            <div class="flex items-center gap-2">
+              <span>Data Address</span>
+              <i
+                  class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                  @click="handleCopyDataAddress(selectedFileItem)"
+                  v-tooltip.top="'Copy address'"
+              />
+            </div>
+            <div class="text-autonomi-text-primary font-mono text-xs break-all">
+              <template v-if="selectedFileItem?.file_access?.Public">
+                {{ selectedFileItem.file_access.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.access_data?.Public">
+                {{ selectedFileItem.access_data.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.archive_access?.Public">
+                {{ selectedFileItem.archive_access.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.archive?.archive_access?.Public">
+                {{ selectedFileItem.archive.archive_access.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.address">
+                {{ selectedFileItem.address }}
+              </template>
+            </div>
+          </div>
+
+          <div class="py-3">
+            <div>Size</div>
+            <div class="text-autonomi-text-primary">
+              {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : 'Unknown' }}
+            </div>
+          </div>
+
+          <div class="py-3">
+            <div>Modified</div>
+            <div class="text-autonomi-text-primary">
+              {{
+                selectedFileItem?.metadata?.modified
+                    ? secondsToDate(
+                        selectedFileItem.metadata.modified,
+                    ).toLocaleString()
+                    : 'Unknown'
+              }}
+            </div>
+          </div>
+
+          <div class="py-3">
+            <div>Created</div>
+            <div class="text-autonomi-text-primary">
+              {{
+                selectedFileItem?.metadata?.created
+                    ? secondsToDate(
+                        selectedFileItem.metadata.created,
+                    ).toLocaleString()
+                    : 'Unknown'
+              }}
+            </div>
+          </div>
         </div>
 
-        <!-- Show data address for public files and archives -->
-        <div
-            v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || selectedFileItem?.archive_access?.Public || selectedFileItem?.archive?.archive_access?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
-            class="py-3">
-          <div class="flex items-center gap-2">
-            <span>Data Address</span>
-            <i
-                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
-                @click="handleCopyDataAddress(selectedFileItem)"
-                v-tooltip.top="'Copy address'"
-            />
-          </div>
-          <div class="text-autonomi-text-primary font-mono text-xs break-all">
-            <template v-if="selectedFileItem?.file_access?.Public">
-              {{ selectedFileItem.file_access.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.access_data?.Public">
-              {{ selectedFileItem.access_data.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.archive_access?.Public">
-              {{ selectedFileItem.archive_access.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.archive?.archive_access?.Public">
-              {{ selectedFileItem.archive.archive_access.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.address">
-              {{ selectedFileItem.address }}
-            </template>
-          </div>
-        </div>
-
-        <div class="py-3">
-          <div>Size</div>
-          <div class="text-autonomi-text-primary">
-            {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : 'Unknown' }}
-          </div>
-        </div>
-
-        <div class="py-3">
-          <div>Modified</div>
-          <div class="text-autonomi-text-primary">
-            {{
-              selectedFileItem?.metadata?.modified
-                  ? secondsToDate(
-                      selectedFileItem.metadata.modified,
-                  ).toLocaleString()
-                  : 'Unknown'
-            }}
-          </div>
-        </div>
-
-        <div class="py-3">
-          <div>Created</div>
-          <div class="text-autonomi-text-primary">
-            {{
-              selectedFileItem?.metadata?.created
-                  ? secondsToDate(
-                      selectedFileItem.metadata.created,
-                  ).toLocaleString()
-                  : 'Unknown'
-            }}
-          </div>
-        </div>
+        <Button
+            v-if="selectedFileItem && !selectedFileItem.isArchive"
+            label="Download"
+            icon="pi pi-download"
+            class="w-full"
+            @click="handleDownloadFile(selectedFileItem)"
+            :disabled="!selectedFileItem || selectedFileItem.isArchive || pendingVaultRemoval"
+        />
       </div>
     </Drawer>
   </div>
@@ -3667,5 +3680,13 @@ onMounted(async () => {
 :deep(.p-confirm-dialog .p-confirm-dialog-message) {
   margin: 1.5rem 0;
   word-wrap: break-word;
+}
+
+/* File details drawer styling */
+:deep(.file-details-drawer .p-drawer-content) {
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 </style>
