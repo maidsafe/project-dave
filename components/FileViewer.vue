@@ -3284,7 +3284,17 @@ onMounted(async () => {
 
         <!-- Privacy Options -->
         <div class="space-y-3">
-          <label class="text-sm font-semibold">Privacy</label>
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold">Privacy</label>
+            <i
+                class="pi pi-info-circle text-sm text-gray-500 cursor-help"
+                v-tooltip="{
+                value: 'Private files require a data map to access them. Public files can be accessed by anyone who has the data address.',
+                showDelay: 300,
+                hideDelay: 300
+              }"
+            />
+          </div>
           <div class="space-y-3">
             <div class="flex items-center">
               <RadioButton
@@ -3295,10 +3305,18 @@ onMounted(async () => {
               />
               <label for="private" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-lock text-autonomi-blue-500"></i>
-                <div>
+                <div class="flex-1">
                   <div class="font-medium">Private</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Only accessible with the data map</div>
                 </div>
+                <i
+                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                    v-tooltip="{
+                    value: 'Files will be uploaded to the network, but they will only be accessible with the data map file.\n\nThis data map file will be stored locally on your device.',
+                    showDelay: 300,
+                    hideDelay: 300,
+                    autoHide: false
+                  }"
+                />
               </label>
             </div>
             <div class="flex items-center">
@@ -3310,10 +3328,18 @@ onMounted(async () => {
               />
               <label for="public" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-globe text-green-500"></i>
-                <div>
+                <div class="flex-1">
                   <div class="font-medium">Public</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Accessible to anyone with the data address</div>
                 </div>
+                <i
+                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                    v-tooltip="{
+                    value: 'Files will be uploaded to the network and will be accessible to anyone with the data address.',
+                    showDelay: 300,
+                    hideDelay: 300,
+                    autoHide: false
+                  }"
+                />
               </label>
             </div>
           </div>
@@ -3321,7 +3347,9 @@ onMounted(async () => {
 
         <!-- Vault Options -->
         <div class="space-y-3">
-          <label class="text-sm font-semibold">Storage</label>
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold">Storage</label>
+          </div>
           <div class="space-y-3">
             <div class="flex items-center">
               <RadioButton
@@ -3332,11 +3360,18 @@ onMounted(async () => {
               />
               <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-database text-autonomi-blue-500"></i>
-                <div>
+                <div class="flex-1">
                   <div class="font-medium">Add to Personal Vault</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault on the network
-                  </div>
                 </div>
+                <i
+                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                    v-tooltip="{
+                    value: 'Store a reference to your files in your personal vault.\n\nYour personal vault lives on the network and provides easy access to all your files from anywhere.',
+                    showDelay: 300,
+                    hideDelay: 300,
+                    autoHide: false
+                  }"
+                />
               </label>
             </div>
             <div class="flex items-center">
@@ -3347,12 +3382,19 @@ onMounted(async () => {
                   :value="false"
               />
               <label for="network-only" class="ml-2 flex items-center gap-2 cursor-pointer">
-                <i class="pi pi-cloud text-gray-500"></i>
-                <div>
+                <i class="pi pi-cloud text-green-500"></i>
+                <div class="flex-1">
                   <div class="font-medium">Network Only</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store only on network and local vault
-                  </div>
                 </div>
+                <i
+                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                    v-tooltip="{
+                    value: 'Files will be uploaded to the network and a reference to them will be stored in your local vault.\n\nYour local vault is only accessible on this device.',
+                    showDelay: 300,
+                    hideDelay: 300,
+                    autoHide: false
+                  }"
+                />
               </label>
             </div>
           </div>
