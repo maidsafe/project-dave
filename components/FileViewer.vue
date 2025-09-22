@@ -102,7 +102,7 @@ const initializeUploadSteps = () => {
       key: 'quoting',
       label: 'Getting Quote',
       status: 'pending',
-      message: 'Calculating storage costs...'
+      message: 'Calculating storage costs... This might take a while.'
     },
     {
       key: 'payment-request',
@@ -940,7 +940,7 @@ const uploadFiles = async (files: Array<{
     console.log(">>> FILEVIEWER STARTING UPLOAD WITH NEW SYSTEM");
 
     // Update step to show quoting in progress
-    updateStepStatus('quoting', 'processing', 'Getting storage cost estimate...');
+    updateStepStatus('quoting', 'processing', 'Getting storage cost estimate... This might take a while.');
 
     // Generate archive name
     let archiveName: string;
