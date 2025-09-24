@@ -499,6 +499,16 @@ const menuFiles = computed(() => {
         },
       });
 
+      // Add download option for archives
+      items.push({
+        label: 'Download',
+        icon: 'pi pi-download',
+        command: () => {
+          handleDownloadArchive(file);
+          refFilesMenu.value.hide();
+        },
+      });
+
       // Show data address for public archives
       if (file?.archive?.archive_access?.Public || file?.archive_access?.Public) {
         items.push({
@@ -556,6 +566,16 @@ const menuFiles = computed(() => {
         icon: 'pi pi-info-circle',
         command: () => {
           isVisibleFileInfo.value = true;
+          refFilesMenu.value.hide();
+        },
+      });
+
+      // Add download option for local archives
+      items.push({
+        label: 'Download',
+        icon: 'pi pi-download',
+        command: () => {
+          handleDownloadArchive(file);
           refFilesMenu.value.hide();
         },
       });
@@ -1700,6 +1720,111 @@ const handleDownloadFile = async (fileToDownload?: any) => {
     }
   } catch (error: any) {
     console.log('>>> Error in FileViewer.vue >> handleDownloadFile: ', error);
+  }
+};
+
+const handleDownloadArchive = async (archiveToDownload?: any) => {
+  try {
+    const archive = archiveToDownload || selectedFileItem.value;
+    const archiveName = archive.name || archive.archive?.name || 'downloaded_archive';
+
+    // Extract archive access from various possible locations
+    let archiveAccess = null;
+    if (archive.archive_access) {
+      archiveAccess = archive.archive_access;
+    } else if (archive.archive?.archive_access) {
+      archiveAccess = archive.archive.archive_access;
+    } else if (archive.access_data) {
+      archiveAccess = archive.access_data;
+    }
+
+    if (!archiveAccess) {
+      throw new Error('No archive access data available');
+    }
+
+    const downloadId = downloadsStore.createDownload({
+      ...archive,
+      name: archiveName,
+      isArchive: true
+    });
+
+    downloadsStore.updateDownload(downloadId, {status: 'downloading'});
+
+    try {
+      // Get custom download path from settings, fallback to default
+      const appData = await invoke('app_data') as any;
+      const downloadsPath = appData.download_path || await downloadDir();
+      console.log('Archive downloads path:', downloadsPath);
+      
+      // Create a unique folder name for the archive
+      const uniquePath = await invoke('get_unique_download_path', {
+        downloadsPath,
+        filename: archiveName
+      }) as string;
+      console.log('Unique archive path:', uniquePath);
+
+      console.log('Downloading archive with access:', archiveAccess);
+
+      if (archiveAccess.Private) {
+        console.log('Downloading private archive with data_map_chunk:', archiveAccess.Private);
+        await invoke('download_private_file', {
+          dataMapChunk: archiveAccess.Private,
+          toDest: uniquePath,
+        });
+      } else if (archiveAccess.Public) {
+        console.log('Downloading public archive with addr:', archiveAccess.Public);
+        await invoke('download_public_file', {
+          addr: archiveAccess.Public,
+          toDest: uniquePath,
+        });
+      } else {
+        throw new Error('Archive access data is missing both Private and Public properties');
+      }
+
+      downloadsStore.updateDownload(downloadId, {
+        status: 'completed',
+        downloadPath: uniquePath,
+        progress: 100,
+        completedAt: new Date()
+      });
+
+      const finalArchiveName = uniquePath.split('/').pop() || archiveName;
+
+      // Show a toast notification with action button
+      console.log('>>> Adding download success toast for archive:', finalArchiveName, 'at path:', uniquePath);
+
+      toast.add({
+        severity: 'success',
+        summary: 'Download Complete',
+        detail: `Archive "${finalArchiveName}" has been downloaded successfully.`,
+        life: 10000,
+        group: 'download-success',
+        data: {
+          filePath: uniquePath
+        }
+      });
+    } catch (error: any) {
+      console.log('>>> Download archive error:', error);
+      downloadsStore.updateDownload(downloadId, {
+        status: 'failed',
+        error: error.message || 'Download failed',
+        completedAt: new Date()
+      });
+      toast.add({
+        severity: 'error',
+        summary: 'Download Failed',
+        detail: error.message || 'Failed to download archive.',
+        life: 3000,
+      });
+    }
+  } catch (error: any) {
+    console.log('>>> Error in FileViewer.vue >> handleDownloadArchive: ', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Download Error',
+      detail: error.message || 'Failed to start archive download.',
+      life: 3000,
+    });
   }
 };
 
@@ -3744,12 +3869,12 @@ onMounted(async () => {
         </div>
 
         <Button
-            v-if="selectedFileItem && !selectedFileItem.isArchive"
+            v-if="selectedFileItem"
             label="Download"
             icon="pi pi-download"
             class="w-full"
-            @click="handleDownloadFile(selectedFileItem)"
-            :disabled="!selectedFileItem || selectedFileItem.isArchive || pendingVaultRemoval"
+            @click="selectedFileItem.isArchive ? handleDownloadArchive(selectedFileItem) : handleDownloadFile(selectedFileItem)"
+            :disabled="!selectedFileItem || pendingVaultRemoval"
         />
       </div>
     </Drawer>
