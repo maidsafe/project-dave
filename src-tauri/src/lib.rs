@@ -636,7 +636,7 @@ async fn download_private_file(
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
-    ant::files::download_private_file(&data_map_chunk, to_dest, shared_client)
+    ant::files::download_private(&data_map_chunk, to_dest, shared_client)
         .await
         .map_err(|err| CommandError {
             message: err.to_string(),
@@ -649,7 +649,7 @@ async fn download_public_file(
     to_dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), CommandError> {
-    ant::files::download_public_file(&addr, to_dest, shared_client)
+    ant::files::download_public(&addr, to_dest, shared_client)
         .await
         .map_err(|err| CommandError {
             message: err.to_string(),

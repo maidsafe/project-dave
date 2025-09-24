@@ -95,7 +95,6 @@ const downloadFile = async () => {
           byte => parseInt(byte, 16)
       );
 
-      // The backend expects dataMapChunk to be passed directly as the array
       await invoke("download_private_file", {
         dataMapChunk: dataMapBytes,
         toDest: destinationPath
@@ -112,7 +111,7 @@ const downloadFile = async () => {
     toast.add({
       severity: "success",
       summary: "Success",
-      detail: "File downloaded successfully",
+      detail: "Download completed successfully",
       life: 3000
     });
   } catch (error) {

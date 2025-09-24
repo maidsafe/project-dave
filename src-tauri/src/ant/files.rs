@@ -110,6 +110,10 @@ pub enum DownloadError {
     Connect(#[from] autonomi::client::ConnectError),
     #[error("Could not download file: {0:?}")]
     Download(#[from] autonomi::client::files::DownloadError),
+    #[error("Could not get data: {0:?}")]
+    Get(#[from] autonomi::client::GetError),
+    #[error("Could not analyze address: {0:?}")]
+    Analysis(#[from] autonomi::client::analyze::AnalysisError),
 }
 
 pub async fn read_file_to_bytes(file_path: PathBuf) -> Result<Bytes, UploadError> {
@@ -2194,48 +2198,136 @@ pub async fn get_files_from_vault(
     Ok(files)
 }
 
-pub async fn download_private_file(
-    data_map: &DataMapChunk,
-    to_dest: PathBuf,
-    shared_client: State<'_, SharedClient>,
-) -> Result<(), DownloadError> {
-    let client = shared_client.get_client().await?;
-    let result = client.file_download(data_map, to_dest.clone()).await;
-
-    // If download failed, clean up any zero-byte file that might have been created
-    if result.is_err() && to_dest.exists() {
-        if let Ok(metadata) = std::fs::metadata(&to_dest) {
-            if metadata.len() == 0 {
-                let _ = std::fs::remove_file(&to_dest);
-            }
-        }
+// Utility: Ensure parent directories exist
+fn ensure_parent_dir(path: &PathBuf) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
     }
+}
 
-    result?;
+async fn download_private_file(
+    data_map: &DataMapChunk,
+    dest: PathBuf,
+    client: &autonomi::Client,
+) -> Result<(), DownloadError> {
+    ensure_parent_dir(&dest);
+    client.file_download(data_map, dest).await?;
     Ok(())
 }
 
-pub async fn download_public_file(
-    addr: &DataAddress,
-    to_dest: PathBuf,
+async fn download_private_archive(
+    data_map: &DataMapChunk,
+    dest: PathBuf,
+    client: &autonomi::Client,
+) -> Result<(), DownloadError> {
+    let archive = client.archive_get(data_map).await?;
+    let _ = std::fs::create_dir_all(&dest);
+
+    for (file_path, (file_data_map, _)) in archive.map() {
+        let full_path = dest.join(file_path);
+        ensure_parent_dir(&full_path);
+        client.file_download(file_data_map, full_path).await?;
+    }
+    Ok(())
+}
+
+pub async fn download_private(
+    data_map: &DataMapChunk,
+    dest: PathBuf,
     shared_client: State<'_, SharedClient>,
 ) -> Result<(), DownloadError> {
-    println!("Downloading public file: {}", addr);
-
     let client = shared_client.get_client().await?;
-    let result = client.file_download_public(addr, to_dest.clone()).await;
+    let hex_addr = data_map.to_hex();
 
-    // If download failed, clean up any zero-byte file that might have been created
-    if result.is_err() && to_dest.exists() {
-        if let Ok(metadata) = std::fs::metadata(&to_dest) {
-            if metadata.len() == 0 {
-                let _ = std::fs::remove_file(&to_dest);
-            }
+    match client.analyze_address(&hex_addr, true).await {
+        Ok(autonomi::client::analyze::Analysis::RawDataMap { .. })
+        | Ok(autonomi::client::analyze::Analysis::DataMap { .. }) => {
+            download_private_file(data_map, dest, &client).await
+        }
+        Ok(autonomi::client::analyze::Analysis::PrivateArchive { .. }) => {
+            download_private_archive(data_map, dest, &client).await
+        }
+        Ok(_) => Err(DownloadError::Download(
+            autonomi::client::files::DownloadError::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Unsupported private data type",
+            )),
+        )),
+        Err(e) => Err(DownloadError::Analysis(e)),
+    }
+}
+
+async fn download_public_file(
+    addr: &DataAddress,
+    dest: PathBuf,
+    client: &autonomi::Client,
+) -> Result<(), DownloadError> {
+    ensure_parent_dir(&dest);
+
+    // Try streaming first, fallback to direct data if needed
+    match client.file_download_public(addr, dest.clone()).await {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            let data = client.data_get_public(addr).await?;
+            std::fs::write(&dest, data).map_err(|e| {
+                DownloadError::Download(autonomi::client::files::DownloadError::IoError(e))
+            })
         }
     }
+}
 
-    result?;
+async fn download_public_archive(
+    addr: &DataAddress,
+    dest: PathBuf,
+    client: &autonomi::Client,
+) -> Result<(), DownloadError> {
+    use autonomi::files::PublicArchive;
+
+    let data = client.data_get_public(addr).await?;
+    let archive = PublicArchive::from_bytes(data).map_err(|e| {
+        DownloadError::Download(autonomi::client::files::DownloadError::IoError(
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Archive parse error: {e}"),
+            ),
+        ))
+    })?;
+
+    let _ = std::fs::create_dir_all(&dest);
+
+    for (file_path, (file_addr, _)) in archive.map() {
+        let full_path = dest.join(file_path);
+        ensure_parent_dir(&full_path);
+        client.file_download_public(file_addr, full_path).await?;
+    }
+
     Ok(())
+}
+
+pub async fn download_public(
+    addr: &DataAddress,
+    dest: PathBuf,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), DownloadError> {
+    let client = shared_client.get_client().await?;
+    let hex_addr = addr.to_hex();
+
+    match client.analyze_address(&hex_addr, false).await {
+        Ok(autonomi::client::analyze::Analysis::RawDataMap { .. })
+        | Ok(autonomi::client::analyze::Analysis::DataMap { .. }) => {
+            download_public_file(addr, dest, &client).await
+        }
+        Ok(autonomi::client::analyze::Analysis::PublicArchive { .. }) => {
+            download_public_archive(addr, dest, &client).await
+        }
+        Ok(_) => Err(DownloadError::Download(
+            autonomi::client::files::DownloadError::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Unsupported public data type",
+            )),
+        )),
+        Err(e) => Err(DownloadError::Analysis(e)),
+    }
 }
 
 pub async fn get_single_file_data(
