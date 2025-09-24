@@ -122,6 +122,11 @@ onMounted(async () => {
               My Vault
             </NuxtLink>
 
+            <NuxtLink :class="`${classesLinks}`" to="/downloader">
+              <i class="pi pi-download text-xl"/>
+              Downloader
+            </NuxtLink>
+
             <NuxtLink :class="`${classesLinks}`" to="/settings">
               <IconSettings class="w-6 h-6"/>
               Settings
