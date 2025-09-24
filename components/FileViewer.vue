@@ -1028,6 +1028,12 @@ const handleCopyDataAddress = async (file: any) => {
     } else if (file?.access_data?.Public) {
       // Alternative structure
       dataAddress = file.access_data.Public;
+    } else if (file?.archive_access?.Public) {
+      // For archives with archive_access
+      dataAddress = file.archive_access.Public;
+    } else if (file?.archive?.archive_access?.Public) {
+      // For archive items with nested archive_access
+      dataAddress = file.archive.archive_access.Public;
     } else if (file?.address) {
       // Fallback for local vault (may be deprecated)
       dataAddress = file.address;
@@ -1084,6 +1090,24 @@ const handleCopySecretKey = async (file: any) => {
         ).join('');
       } else {
         secretKey = file.access_data.Private;
+      }
+    } else if (file?.archive_access?.Private) {
+      // For archives with archive_access
+      if (Array.isArray(file.archive_access.Private)) {
+        secretKey = file.archive_access.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        secretKey = file.archive_access.Private;
+      }
+    } else if (file?.archive?.archive_access?.Private) {
+      // For archive items with nested archive_access
+      if (Array.isArray(file.archive.archive_access.Private)) {
+        secretKey = file.archive.archive_access.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        secretKey = file.archive.archive_access.Private;
       }
     } else if (file?.address && (file?.type === 'private_file' || file?.type === 'private_archive')) {
       // Fallback for local private files (may be deprecated)
