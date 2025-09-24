@@ -511,6 +511,18 @@ const menuFiles = computed(() => {
         });
       }
 
+      // Show data map hex for private archives
+      if (file?.archive?.archive_access?.Private || file?.archive_access?.Private) {
+        items.push({
+          label: 'Data Map (HEX)',
+          icon: 'pi pi-clipboard',
+          command: () => {
+            handleCopySecretKey(file);
+            refFilesMenu.value.hide();
+          },
+        });
+      }
+
       // Archive folder itself - remove the archive
       items.push({
         label: 'Remove Archive from Vault',
@@ -555,6 +567,18 @@ const menuFiles = computed(() => {
           icon: 'pi pi-clipboard',
           command: () => {
             handleCopyDataAddress(file);
+            refFilesMenu.value.hide();
+          },
+        });
+      }
+
+      // Show data map hex for private local archives
+      if (file?.archive?.archive_access?.Private || file?.archive_access?.Private) {
+        items.push({
+          label: 'Data Map (HEX)',
+          icon: 'pi pi-clipboard',
+          command: () => {
+            handleCopySecretKey(file);
             refFilesMenu.value.hide();
           },
         });
@@ -1120,7 +1144,7 @@ const handleCopySecretKey = async (file: any) => {
       toast.add({
         severity: 'success',
         summary: 'Copied',
-        detail: 'Data access copied to clipboard',
+        detail: 'Data map copied to clipboard',
         life: 2000,
       });
     } else {
