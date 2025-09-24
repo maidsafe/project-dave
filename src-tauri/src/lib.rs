@@ -631,6 +631,87 @@ async fn add_local_file_to_vault(
 }
 
 #[tauri::command]
+async fn add_to_vault_with_analysis(
+    vault_key_signature: String,
+    file_access: FileAccess,
+    file_name: String,
+    shared_client: State<'_, SharedClient>,
+) -> Result<(), CommandError> {
+    eprintln!("=== add_to_vault_with_analysis COMMAND ===");
+    eprintln!("vault_key_signature: {}", vault_key_signature);
+    eprintln!("file_access: {:?}", file_access);
+    eprintln!("file_name: {}", file_name);
+
+    let secret_key = match autonomi::client::vault::key::vault_key_from_signature_hex(
+        vault_key_signature.trim_start_matches("0x"),
+    ) {
+        Ok(key) => {
+            eprintln!("Successfully parsed vault key");
+            key
+        }
+        Err(e) => {
+            eprintln!("Failed to parse vault key: {:?}", e);
+            return Err(CommandError {
+                message: format!("Invalid vault key signature: {:?}", e),
+            });
+        }
+    };
+
+    let client = shared_client.get_client().await.map_err(|err| CommandError {
+        message: err.to_string(),
+    })?;
+
+    // Analyze the data type to determine if it's a file or archive
+    let result = match &file_access {
+        FileAccess::Public(addr) => {
+            let hex_addr = addr.to_hex();
+            
+            match client.analyze_address(&hex_addr, false).await {
+                Ok(autonomi::client::analyze::Analysis::PublicArchive { .. }) => {
+                    eprintln!("Detected public archive, adding as archive");
+                    ant::files::add_local_archive_to_vault(
+                        &secret_key,
+                        FileAccess::Public(*addr),
+                        &file_name,
+                        shared_client,
+                    ).await
+                }
+                _ => {
+                    eprintln!("Detected public file, adding as file");
+                    ant::files::add_local_file_to_vault(&secret_key, file_access, &file_name, shared_client).await
+                }
+            }
+        }
+        FileAccess::Private(data_map) => {
+            let hex_addr = data_map.to_hex();
+            
+            match client.analyze_address(&hex_addr, true).await {
+                Ok(autonomi::client::analyze::Analysis::PrivateArchive { .. }) => {
+                    eprintln!("Detected private archive, adding as archive");
+                    ant::files::add_local_archive_to_vault(
+                        &secret_key,
+                        FileAccess::Private(data_map.clone()),
+                        &file_name,
+                        shared_client,
+                    ).await
+                }
+                _ => {
+                    eprintln!("Detected private file, adding as file");
+                    ant::files::add_local_file_to_vault(&secret_key, file_access, &file_name, shared_client).await
+                }
+            }
+        }
+    };
+
+    result.map_err(|err| {
+        eprintln!("add_to_vault_with_analysis failed with error: {:?}", err);
+        CommandError {
+            message: err.to_string(),
+        }
+    })
+}
+
+#[tauri::command]
 async fn download_private_file(
     data_map_chunk: DataMapChunk,
     to_dest: PathBuf,
@@ -896,6 +977,7 @@ pub async fn run() {
             load_local_public_archive,
             add_local_archive_to_vault,
             add_local_file_to_vault,
+            add_to_vault_with_analysis,
             delete_local_public_file,
             delete_local_private_file,
             delete_local_public_archive,

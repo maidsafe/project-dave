@@ -185,8 +185,8 @@ const addDirectlyToVault = async () => {
       fileAccess = {Private: dataMapBytes};
     }
 
-    // Add the file to vault using the Tauri command
-    await invoke("add_local_file_to_vault", {
+    // Add the file to vault using the new analysis-based Tauri command
+    await invoke("add_to_vault_with_analysis", {
       vaultKeySignature: vaultKeySignature,
       fileAccess: fileAccess,
       fileName: fileName
@@ -198,7 +198,7 @@ const addDirectlyToVault = async () => {
     toast.add({
       severity: "success",
       summary: "Added to Vault",
-      detail: `File "${fileName}" has been added to your vault.`,
+      detail: `"${fileName}" has been added to your vault.`,
       life: 3000
     });
 
@@ -214,7 +214,7 @@ const addDirectlyToVault = async () => {
     toast.add({
       severity: "error",
       summary: "Failed to add to vault",
-      detail: error instanceof Error ? error.message : "Failed to add file to vault",
+      detail: error instanceof Error ? error.message : "Failed to add to vault",
       life: 5000
     });
   } finally {
