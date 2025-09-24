@@ -123,7 +123,7 @@ onMounted(async () => {
             </NuxtLink>
 
             <NuxtLink :class="`${classesLinks}`" to="/downloader">
-              <i class="pi pi-download text-xl"/>
+              <i class="pi pi-download text-xl" style="color: #f35;"/>
               Downloader
             </NuxtLink>
 
