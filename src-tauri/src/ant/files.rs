@@ -1,3 +1,5 @@
+use crate::ant::app_data;
+use crate::ant::cached_payments::PaymentCache;
 use crate::ant::client::SharedClient;
 use crate::ant::{local_storage, vault};
 use autonomi::chunk::DataMapChunk;
@@ -15,9 +17,26 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, State};
 use thiserror::Error as ThisError;
 use tokio::fs;
+
+static PAYMENT_CACHE: OnceLock<Result<PaymentCache, String>> = OnceLock::new();
+
+pub fn get_payment_cache() -> Result<&'static PaymentCache, &'static str> {
+    PAYMENT_CACHE
+        .get_or_init(|| {
+            app_data::data_dir()
+                .ok_or_else(|| "Could not get app data directory".to_string())
+                .and_then(|dir| {
+                    PaymentCache::new(&dir)
+                        .map_err(|e| format!("Failed to create payment cache: {}", e))
+                })
+        })
+        .as_ref()
+        .map_err(|_| "Payment cache not available")
+}
 
 #[derive(Deserialize, Clone)]
 pub struct File {
@@ -217,6 +236,51 @@ pub async fn start_private_single_file_upload(
         .await
         .map_err(|_| UploadError::Read(file.path.clone()))?
         .len();
+
+    // Check for cached payment first
+    if let Ok(cache) = get_payment_cache() {
+        println!(">>> Checking for cached payment for file: {:?}", file.path);
+        if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
+            println!(">>> Found cached payment, reusing it for upload");
+            
+            // Read and encrypt file to get chunks and datamap for upload
+            let bytes = read_file_to_bytes(file.path.clone()).await?;
+            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
+                UploadError::Encryption(err.to_string())
+            })?;
+            
+            // Emit quote event with zero cost since we're using cached payment
+            app.emit(
+                "upload-quote",
+                serde_json::json!({
+                    "upload_id": upload_id.clone(),
+                    "total_files": 1,
+                    "total_size": file_size,
+                    "total_cost_nano": "0",
+                    "total_cost_formatted": "0 ATTO",
+                    "payment_required": false,
+                    "payments": Vec::<serde_json::Value>::new(),
+                    "raw_payments": Vec::<serde_json::Value>::new()
+                }),
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            
+            // Execute upload immediately with cached receipt
+            return execute_private_single_file_upload(
+                app,
+                file,
+                DataMapChunk::from(datamap),
+                chunks,
+                cached_receipt,
+                Default::default(),
+                vault_secret_key,
+                upload_id,
+                add_to_vault,
+                shared_client,
+            )
+            .await;
+        }
+    }
 
     // Read and encrypt file to get chunks for quote
     println!(">>> Reading and encrypting file: {:?}", file.path);
@@ -419,6 +483,7 @@ pub async fn execute_private_single_file_upload(
 
     tokio::spawn(async move {
         let result = async {
+            
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)
                 .await
@@ -524,6 +589,51 @@ pub async fn start_public_single_file_upload(
         .await
         .map_err(|_| UploadError::Read(file.path.clone()))?
         .len();
+
+    // Check for cached payment first
+    if let Ok(cache) = get_payment_cache() {
+        println!(">>> Checking for cached payment for public file: {:?}", file.path);
+        if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
+            println!(">>> Found cached payment, reusing it for public upload");
+            
+            // Read and encrypt file to get chunks and datamap for upload
+            let bytes = read_file_to_bytes(file.path.clone()).await?;
+            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
+                UploadError::Encryption(err.to_string())
+            })?;
+            
+            // Emit quote event with zero cost since we're using cached payment
+            app.emit(
+                "upload-quote",
+                serde_json::json!({
+                    "upload_id": upload_id.clone(),
+                    "total_files": 1,
+                    "total_size": file_size,
+                    "total_cost_nano": "0",
+                    "total_cost_formatted": "0 ATTO",
+                    "payment_required": false,
+                    "payments": Vec::<serde_json::Value>::new(),
+                    "raw_payments": Vec::<serde_json::Value>::new()
+                }),
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            
+            // Execute upload immediately with cached receipt
+            return execute_public_single_file_upload(
+                app,
+                file,
+                DataMapChunk::from(datamap),
+                chunks,
+                cached_receipt,
+                Default::default(),
+                upload_id,
+                add_to_vault,
+                vault_secret_key,
+                shared_client,
+            )
+            .await;
+        }
+    }
 
     // Read and encrypt file to get chunks for quote (same as private files)
     println!(">>> Reading and encrypting public file: {:?}", file.path);
@@ -749,6 +859,7 @@ pub async fn execute_public_single_file_upload(
     // Spawn the actual upload work in background
     tokio::spawn(async move {
         let result = async {
+            
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)
                 .await
@@ -902,6 +1013,93 @@ pub async fn start_private_archive_upload(
     // Calculate total size and collect files
     let total_size = calculate_total_size(&files).await?;
     let total_files = files.len();
+
+    // Check for cached payment first
+    if let Ok(cache) = get_payment_cache() {
+        println!(">>> Checking for cached payment for private archive: {}", archive_name);
+        if let Ok(Some(cached_receipt)) = cache.load_archive_payment(&files, &archive_name) {
+            println!(">>> Found cached payment, reusing it for private archive upload");
+            
+            // Still need to create the archive and encrypt to get chunks and datamap for upload
+            let mut private_archive = PrivateArchive::new();
+            let mut all_chunks = Vec::new();
+
+            for file in &files {
+                let path_metadata = fs::metadata(&file.path)
+                    .await
+                    .map_err(|_| UploadError::Read(file.path.clone()))?;
+
+                if path_metadata.is_dir() {
+                    // Handle directory
+                    let collected_files = collect_files_from_directory(file.path.clone()).await?;
+                    for (relative_path, absolute_path) in collected_files {
+                        let bytes = read_file_to_bytes(absolute_path).await?;
+                        let file_size = bytes.len() as u64;
+                        let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                            .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+                        all_chunks.extend(chunks);
+
+                        let metadata = Metadata::new_with_size(file_size);
+                        private_archive.add_file(relative_path, DataMapChunk::from(datamap), metadata);
+                    }
+                } else {
+                    // Handle single file
+                    let bytes = read_file_to_bytes(file.path.clone()).await?;
+                    let file_size = bytes.len() as u64;
+                    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                        .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+                    all_chunks.extend(chunks);
+
+                    let metadata = Metadata::new_with_size(file_size);
+                    private_archive.add_file(file.path.clone(), DataMapChunk::from(datamap), metadata);
+                }
+            }
+
+            // Serialize and encrypt the archive itself
+            let archive_bytes = private_archive
+                .to_bytes()
+                .map_err(|err| UploadError::Encryption(err.to_string()))?;
+            let (archive_datamap, archive_chunks) = autonomi::self_encryption::encrypt(archive_bytes)
+                .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+            all_chunks.extend(archive_chunks);
+            let archive_datamap_chunk = DataMapChunk::from(archive_datamap.clone());
+            
+            // Emit quote event with zero cost since we're using cached payment
+            app.emit(
+                "upload-quote",
+                serde_json::json!({
+                    "upload_id": upload_id.clone(),
+                    "total_files": total_files,
+                    "total_size": total_size,
+                    "total_cost_nano": "0",
+                    "total_cost_formatted": "0 ATTO",
+                    "payment_required": false,
+                    "payments": Vec::<serde_json::Value>::new(),
+                    "raw_payments": Vec::<serde_json::Value>::new()
+                }),
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            
+            // Execute upload immediately with cached receipt
+            return execute_private_archive_upload(
+                app,
+                files,
+                archive_name,
+                archive_datamap_chunk,
+                all_chunks,
+                cached_receipt,
+                Default::default(),
+                upload_id,
+                add_to_vault,
+                vault_secret_key,
+                shared_client,
+            )
+            .await;
+        }
+    }
 
     // Create archive and encrypt to get chunks for quote
     let mut private_archive = PrivateArchive::new();
@@ -1158,6 +1356,7 @@ pub async fn execute_private_archive_upload(
     // Spawn the actual upload work in background
     tokio::spawn(async move {
         let result = async {
+            
             // Upload all file chunks to network
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)
@@ -1303,6 +1502,97 @@ pub async fn start_public_archive_upload(
     // Calculate total size and collect files
     let total_size = calculate_total_size(&files).await?;
     let total_files = files.len();
+
+    // Check for cached payment first
+    if let Ok(cache) = get_payment_cache() {
+        println!(">>> Checking for cached payment for public archive: {}", archive_name);
+        if let Ok(Some(cached_receipt)) = cache.load_archive_payment(&files, &archive_name) {
+            println!(">>> Found cached payment, reusing it for public archive upload");
+            
+            // Still need to create the archive and encrypt to get chunks and datamap for upload
+            let mut public_archive = PublicArchive::new();
+            let mut all_chunks = Vec::new();
+            let mut file_datamaps = Vec::new();
+
+            for file in &files {
+                let path_metadata = fs::metadata(&file.path)
+                    .await
+                    .map_err(|_| UploadError::Read(file.path.clone()))?;
+
+                if path_metadata.is_dir() {
+                    // Handle directory
+                    let collected_files = collect_files_from_directory(file.path.clone()).await?;
+                    for (relative_path, absolute_path) in collected_files {
+                        let bytes = read_file_to_bytes(absolute_path).await?;
+                        let file_size = bytes.len() as u64;
+                        let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                            .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+                        all_chunks.extend(chunks);
+                        file_datamaps.push(DataMapChunk::from(datamap.clone()));
+
+                        let metadata = Metadata::new_with_size(file_size);
+                        public_archive.add_file(relative_path, DataAddress::new(*datamap.name()), metadata);
+                    }
+                } else {
+                    // Handle single file
+                    let bytes = read_file_to_bytes(file.path.clone()).await?;
+                    let file_size = bytes.len() as u64;
+                    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
+                        .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+                    all_chunks.extend(chunks);
+                    file_datamaps.push(DataMapChunk::from(datamap.clone()));
+
+                    let metadata = Metadata::new_with_size(file_size);
+                    public_archive.add_file(file.path.clone(), DataAddress::new(*datamap.name()), metadata);
+                }
+            }
+
+            // Serialize and encrypt the archive itself
+            let archive_bytes = public_archive
+                .to_bytes()
+                .map_err(|err| UploadError::Encryption(err.to_string()))?;
+            let (archive_datamap, archive_chunks) = autonomi::self_encryption::encrypt(archive_bytes)
+                .map_err(|err| UploadError::Encryption(err.to_string()))?;
+
+            all_chunks.extend(archive_chunks);
+            let archive_datamap_chunk = DataMapChunk::from(archive_datamap.clone());
+            
+            // Emit quote event with zero cost since we're using cached payment
+            app.emit(
+                "upload-quote",
+                serde_json::json!({
+                    "upload_id": upload_id.clone(),
+                    "total_files": total_files,
+                    "total_size": total_size,
+                    "total_cost_nano": "0",
+                    "total_cost_formatted": "0 ATTO",
+                    "payment_required": false,
+                    "payments": Vec::<serde_json::Value>::new(),
+                    "raw_payments": Vec::<serde_json::Value>::new()
+                }),
+            )
+            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
+            
+            // Execute upload immediately with cached receipt
+            return execute_public_archive_upload(
+                app,
+                files,
+                archive_name,
+                archive_datamap_chunk,
+                file_datamaps,
+                all_chunks,
+                cached_receipt,
+                Default::default(),
+                upload_id,
+                add_to_vault,
+                vault_secret_key,
+                shared_client,
+            )
+            .await;
+        }
+    }
 
     // Create public archive - all files should be uploaded publicly
     let mut public_archive = PublicArchive::new(); // Structure is same, but we upload files publicly
@@ -1591,6 +1881,7 @@ pub async fn execute_public_archive_upload(
     // Spawn the actual upload work in background
     tokio::spawn(async move {
         let result = async {
+            
             // Upload all file chunks to network
             client
                 .chunk_batch_upload(chunks.iter().collect(), &receipt)

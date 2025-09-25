@@ -155,3 +155,8 @@ fn filepath() -> Option<PathBuf> {
 
     Some(filepath)
 }
+
+pub fn data_dir() -> Option<PathBuf> {
+    directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
+        .map(|dirs| dirs.data_dir().to_owned())
+}

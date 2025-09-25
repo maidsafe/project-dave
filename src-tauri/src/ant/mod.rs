@@ -1,4 +1,5 @@
 pub mod app_data;
+pub mod cached_payments;
 pub mod client;
 pub mod files;
 pub mod local_storage;

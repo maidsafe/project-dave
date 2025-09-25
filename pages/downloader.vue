@@ -263,7 +263,7 @@ const reset = () => {
         <!-- Custom File Name Section -->
         <div>
           <label class="block text-sm font-medium text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-2">
-            File Name <span class="text-red-500">*</span>
+            File or Folder Name <span class="text-red-500">*</span>
           </label>
           <InputText
               v-model="customFileName"

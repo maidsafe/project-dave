@@ -355,6 +355,15 @@ async fn confirm_upload_payment(
                 add_to_vault,
             } => {
                 let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                
+                // Cache the payment receipt immediately after creation
+                if let Ok(cache) = ant::files::get_payment_cache() {
+                    if let Err(e) = cache.save_payment(&file.path, &receipt) {
+                        println!(">>> Failed to cache payment receipt: {}", e);
+                    } else {
+                        println!(">>> Successfully cached payment receipt for file: {:?}", file.path);
+                    }
+                }
 
                 ant::files::execute_private_single_file_upload(
                     app,
@@ -383,6 +392,15 @@ async fn confirm_upload_payment(
                 vault_secret_key,
             } => {
                 let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                
+                // Cache the payment receipt immediately after creation
+                if let Ok(cache) = ant::files::get_payment_cache() {
+                    if let Err(e) = cache.save_payment(&file.path, &receipt) {
+                        println!(">>> Failed to cache payment receipt: {}", e);
+                    } else {
+                        println!(">>> Successfully cached payment receipt for file: {:?}", file.path);
+                    }
+                }
 
                 ant::files::execute_public_single_file_upload(
                     app,
@@ -413,6 +431,15 @@ async fn confirm_upload_payment(
                 vault_secret_key,
             } => {
                 let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                
+                // Cache the payment receipt immediately after creation
+                if let Ok(cache) = ant::files::get_payment_cache() {
+                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &receipt) {
+                        println!(">>> Failed to cache archive payment receipt: {}", e);
+                    } else {
+                        println!(">>> Successfully cached archive payment receipt for: {}", archive_name);
+                    }
+                }
 
                 ant::files::execute_public_archive_upload(
                     app,
@@ -444,6 +471,15 @@ async fn confirm_upload_payment(
                 vault_secret_key,
             } => {
                 let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                
+                // Cache the payment receipt immediately after creation
+                if let Ok(cache) = ant::files::get_payment_cache() {
+                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &receipt) {
+                        println!(">>> Failed to cache archive payment receipt: {}", e);
+                    } else {
+                        println!(">>> Successfully cached archive payment receipt for: {}", archive_name);
+                    }
+                }
 
                 ant::files::execute_private_archive_upload(
                     app,
@@ -949,6 +985,22 @@ async fn get_unique_download_path(downloads_path: String, filename: String) -> R
     Err(())
 }
 
+#[tauri::command]
+fn clear_payment_cache() -> Result<(), String> {
+    use crate::ant::{app_data, cached_payments::PaymentCache};
+    
+    let data_dir = app_data::data_dir()
+        .ok_or_else(|| "Could not get app data directory".to_string())?;
+    
+    let cache = PaymentCache::new(&data_dir)
+        .map_err(|e| format!("Failed to create payment cache: {}", e))?;
+    
+    cache.clear_cache()
+        .map_err(|e| format!("Failed to clear payment cache: {}", e))?;
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
@@ -986,6 +1038,7 @@ pub async fn run() {
             get_local_private_file_access,
             app_data,
             app_data_store,
+            clear_payment_cache,
             show_item_in_file_manager,
         ])
         .run(tauri::generate_context!())
