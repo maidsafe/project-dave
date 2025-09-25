@@ -64,6 +64,7 @@ pub enum UploadProgress {
         total_files: usize,
         total_bytes: u64,
         add_to_vault: bool,
+        file_access: Option<FileAccess>,
     },
     Failed {
         upload_id: String,
@@ -343,6 +344,7 @@ pub async fn start_private_single_file_upload(
                 total_files: 1,
                 total_bytes: file_size,
                 add_to_vault,
+                file_access: Some(FileAccess::Private(DataMapChunk::from(datamap))),
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -476,6 +478,7 @@ pub async fn execute_private_single_file_upload(
                         total_files: 1,
                         total_bytes: file_size,
                         add_to_vault,
+                        file_access: Some(FileAccess::Private(datamap)),
                     },
                 ) {
                     // Failed to emit completion
@@ -662,6 +665,9 @@ pub async fn start_public_single_file_upload(
                 total_files: 1,
                 total_bytes: file_size,
                 add_to_vault,
+                file_access: Some(FileAccess::Public(DataAddress::new(
+                    *datamap_chunk.0.name(),
+                ))),
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -736,6 +742,9 @@ pub async fn execute_public_single_file_upload(
 
     // Clone vault_secret_key for async closure
     let vault_secret_key = vault_secret_key.cloned();
+
+    // Clone data for completion event (public files use DataAddress)
+    let public_data_address = DataAddress::new(*datamap.0.name());
 
     // Spawn the actual upload work in background
     tokio::spawn(async move {
@@ -850,6 +859,7 @@ pub async fn execute_public_single_file_upload(
                         total_files: 1,
                         total_bytes: file_size,
                         add_to_vault,
+                        file_access: Some(FileAccess::Public(public_data_address)),
                     },
                 ) {
                     // Failed to emit completion
@@ -1067,6 +1077,7 @@ pub async fn start_private_archive_upload(
                 total_files: total_files,
                 total_bytes: total_size,
                 add_to_vault,
+                file_access: Some(FileAccess::Private(archive_datamap_chunk)),
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -1140,6 +1151,9 @@ pub async fn execute_private_archive_upload(
 
     // Clone vault_secret_key for async closure
     let vault_secret_key = vault_secret_key.cloned();
+
+    // Clone datamap for completion event
+    let completion_datamap = archive_datamap.clone();
 
     // Spawn the actual upload work in background
     tokio::spawn(async move {
@@ -1244,6 +1258,7 @@ pub async fn execute_private_archive_upload(
                         total_files: files.len(),
                         total_bytes: total_size,
                         add_to_vault,
+                        file_access: Some(FileAccess::Private(completion_datamap)),
                     },
                 ) {
                     // Failed to emit completion
@@ -1491,6 +1506,9 @@ pub async fn start_public_archive_upload(
                 total_files: total_files,
                 total_bytes: total_size,
                 add_to_vault,
+                file_access: Some(FileAccess::Public(DataAddress::new(
+                    *archive_datamap_chunk.0.name(),
+                ))),
             },
         )
         .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
@@ -1566,6 +1584,9 @@ pub async fn execute_public_archive_upload(
 
     // Clone vault_secret_key for async closure
     let vault_secret_key = vault_secret_key.cloned();
+
+    // Calculate archive address for completion event (public archives use DataAddress)
+    let public_archive_address = DataAddress::new(archive_datamap.0.name().to_owned());
 
     // Spawn the actual upload work in background
     tokio::spawn(async move {
@@ -1689,6 +1710,7 @@ pub async fn execute_public_archive_upload(
                         total_files: files.len(),
                         total_bytes: total_size,
                         add_to_vault,
+                        file_access: Some(FileAccess::Public(public_archive_address)),
                     },
                 ) {
                     // Failed to emit completion

@@ -16,6 +16,10 @@ export interface UploadItem {
   createdAt: Date;
   completedAt?: Date;
   addToVault?: boolean;
+  file_access?: {
+    Public?: string;
+    Private?: string;
+  };
 }
 
 // No longer need invoke since cancellation is frontend-only

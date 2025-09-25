@@ -254,7 +254,8 @@ const reset = () => {
           <p v-if="inputValue && !inputType" class="mt-2 text-sm text-red-500">
             Please enter a valid data address or data map hex
           </p>
-          <p v-else-if="inputType" class="mt-2 text-sm text-autonomi-text-secondary">
+          <p v-else-if="inputType"
+             class="mt-2 text-sm text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
             Detected type: {{ inputType === 'address' ? 'Data Address' : 'Data Map Hex' }}
           </p>
         </div>

@@ -1186,6 +1186,85 @@ const handleCopySecretKey = async (file: any) => {
   }
 };
 
+const handleCopyUploadDataAddress = async (upload: any) => {
+  try {
+    let dataAddress = '';
+
+    if (upload.fileAccess?.Public) {
+      dataAddress = upload.fileAccess.Public;
+    }
+
+    if (dataAddress) {
+      await navigator.clipboard.writeText(dataAddress);
+      toast.add({
+        severity: 'success',
+        summary: 'Copied',
+        detail: 'Data address copied to clipboard',
+        life: 2000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No data address available',
+        life: 3000,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to copy upload data address:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy to clipboard',
+      life: 3000,
+    });
+  }
+};
+
+const handleCopyUploadDataMap = async (upload: any) => {
+  try {
+    let dataMap = '';
+
+    if (upload.fileAccess?.Private) {
+      // Convert to hex string if it's an array (similar to existing pattern)
+      if (Array.isArray(upload.fileAccess.Private)) {
+        dataMap = upload.fileAccess.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        dataMap = upload.fileAccess.Private.startsWith('0x')
+            ? upload.fileAccess.Private.slice(2)
+            : upload.fileAccess.Private;
+      }
+    }
+
+    if (dataMap) {
+      await navigator.clipboard.writeText(dataMap);
+      toast.add({
+        severity: 'success',
+        summary: 'Copied',
+        detail: 'Data map copied to clipboard',
+        life: 2000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No data map available',
+        life: 3000,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to copy upload data map:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy to clipboard',
+      life: 3000,
+    });
+  }
+};
+
 const handleRemoveFromVault = async (file: any, isArchiveFile: boolean) => {
   // Determine what we're removing
   const fileName = file.name;
@@ -1755,7 +1834,7 @@ const handleDownloadArchive = async (archiveToDownload?: any) => {
       const appData = await invoke('app_data') as any;
       const downloadsPath = appData.download_path || await downloadDir();
       console.log('Archive downloads path:', downloadsPath);
-      
+
       // Create a unique folder name for the archive
       const uniquePath = await invoke('get_unique_download_path', {
         downloadsPath,
@@ -2185,7 +2264,8 @@ const setupEventListeners = async () => {
         updateUploadById({
           status: 'completed',
           progress: 100,
-          completedAt: new Date()
+          completedAt: new Date(),
+          fileAccess: payload.file_access
         });
 
         // Close modal only if this completed upload is the one the modal is open for
@@ -3089,13 +3169,13 @@ onMounted(async () => {
 
                         <!-- Name in blue -->
                         <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
-                        {{ upload.name }}
-                      </span>
+                          {{ upload.name }}
+                        </span>
 
                         <!-- Upload duration -->
                         <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
-                        {{ formatUploadDuration(upload.createdAt) }}
-                      </span>
+                          {{ formatUploadDuration(upload.createdAt) }}
+                        </span>
                       </div>
 
                       <!-- Menu icon -->
@@ -3142,7 +3222,7 @@ onMounted(async () => {
                       :key="upload.id"
                       class="py-2 flex items-center justify-between"
                   >
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1">
                       <!-- Icon -->
                       <i
                           class="pi text-green-600 dark:text-green-400"
@@ -3151,28 +3231,50 @@ onMounted(async () => {
 
                       <!-- Name -->
                       <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
-                      {{ upload.name }}
-                    </span>
+                        {{ upload.name }}
+                      </span>
 
                       <!-- Duration or completion message -->
                       <span class="text-sm text-gray-500 dark:text-gray-400">
-                      <template v-if="upload.completionMessage">
-                        {{ upload.completionMessage }}
-                      </template>
-                      <template v-else>
-                        took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
-                      </template>
-                    </span>
+                        <template v-if="upload.completionMessage">
+                          {{ upload.completionMessage }}
+                        </template>
+                        <template v-else>
+                          took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
+                        </template>
+                      </span>
                     </div>
 
-                    <!-- Menu icon -->
-                    <i
-                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        @click.stop="
-                        selectedUploadItem = upload;
-                        refUploadMenu.toggle($event);
-                      "
-                    />
+                    <div class="flex items-center gap-2">
+                      <!-- Copy Data Address Button (for public uploads) -->
+                      <button
+                          v-if="upload.fileAccess?.Public"
+                          @click="handleCopyUploadDataAddress(upload)"
+                          class="p-1 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-300 rounded transition-colors"
+                          v-tooltip.top="'Copy Data Address'"
+                      >
+                        <i class="pi pi-copy text-xs"/>
+                      </button>
+
+                      <!-- Copy Data Map Button (for private/vault uploads) -->
+                      <button
+                          v-if="upload.fileAccess?.Private"
+                          @click="handleCopyUploadDataMap(upload)"
+                          class="p-1 text-xs bg-purple-100 hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 text-purple-600 dark:text-purple-300 rounded transition-colors"
+                          v-tooltip.top="'Copy Data Map (HEX)'"
+                      >
+                        <i class="pi pi-key text-xs"/>
+                      </button>
+
+                      <!-- Menu icon -->
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
+                          selectedUploadItem = upload;
+                          refUploadMenu.toggle($event);
+                        "
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
