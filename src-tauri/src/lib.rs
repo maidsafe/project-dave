@@ -19,6 +19,7 @@ use std::collections::HashMap;
 // Removed unused rand import
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
+use tracing::{info, error};
 
 mod ant;
 pub mod logging;
@@ -196,7 +197,7 @@ impl Default for AppStateInner {
     fn default() -> Self {
         Self {
             app_data: AppData::load()
-                .inspect_err(|err| eprintln!("failed to load settings: {err:?}"))
+                .inspect_err(|err| error!("failed to load settings: {err:?}"))
                 .unwrap_or_default(),
         }
     }
@@ -215,7 +216,7 @@ async fn app_data(state: State<'_, AppState>) -> Result<AppData, ()> {
 async fn app_data_store(state: State<'_, AppState>, app_data: AppData) -> Result<(), ()> {
     let mut state = state.lock().await;
 
-    println!("updating app data: {app_data:?}");
+    info!("updating app data: {app_data:?}");
     state.app_data = app_data;
     state.app_data.store().map_err(|_err| ()) // TODO: Map to serializable error
 }
