@@ -237,16 +237,20 @@ pub async fn start_private_single_file_upload(
         .map_err(|_| UploadError::Read(file.path.clone()))?
         .len();
 
+    // Read and encrypt file to get chunks for quote
+    println!(">>> Reading and encrypting file: {:?}", file.path);
+    let bytes = read_file_to_bytes(file.path.clone()).await?;
+    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
+        println!(">>> Encryption failed: {}", err);
+        UploadError::Encryption(err.to_string())
+    })?;
+    println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
+
     // Check for cached payment first
     if let Ok(cache) = get_payment_cache() {
         println!(">>> Checking for cached payment for file: {:?}", file.path);
         if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
             println!(">>> Found cached payment, reusing it for upload");
-
-            // Read and encrypt file to get chunks and datamap for upload
-            let bytes = read_file_to_bytes(file.path.clone()).await?;
-            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
-                .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
             // Emit quote event with zero cost since we're using cached payment
             app.emit(
@@ -280,15 +284,6 @@ pub async fn start_private_single_file_upload(
             .await;
         }
     }
-
-    // Read and encrypt file to get chunks for quote
-    println!(">>> Reading and encrypting file: {:?}", file.path);
-    let bytes = read_file_to_bytes(file.path.clone()).await?;
-    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
-        println!(">>> Encryption failed: {}", err);
-        UploadError::Encryption(err.to_string())
-    })?;
-    println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
     let chunks_iter = chunks
         .iter()
@@ -588,6 +583,16 @@ pub async fn start_public_single_file_upload(
         .map_err(|_| UploadError::Read(file.path.clone()))?
         .len();
 
+    // Read and encrypt file to get chunks for quote (same as private files)
+    println!(">>> Reading and encrypting public file: {:?}", file.path);
+    let bytes = read_file_to_bytes(file.path.clone()).await?;
+    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
+        println!(">>> Encryption failed: {}", err);
+        UploadError::Encryption(err.to_string())
+    })?;
+    let datamap_chunk = DataMapChunk::from(datamap.clone());
+    println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
+
     // Check for cached payment first
     if let Ok(cache) = get_payment_cache() {
         println!(
@@ -596,11 +601,6 @@ pub async fn start_public_single_file_upload(
         );
         if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
             println!(">>> Found cached payment, reusing it for public upload");
-
-            // Read and encrypt file to get chunks and datamap for upload
-            let bytes = read_file_to_bytes(file.path.clone()).await?;
-            let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes)
-                .map_err(|err| UploadError::Encryption(err.to_string()))?;
 
             // Emit quote event with zero cost since we're using cached payment
             app.emit(
@@ -634,16 +634,6 @@ pub async fn start_public_single_file_upload(
             .await;
         }
     }
-
-    // Read and encrypt file to get chunks for quote (same as private files)
-    println!(">>> Reading and encrypting public file: {:?}", file.path);
-    let bytes = read_file_to_bytes(file.path.clone()).await?;
-    let (datamap, chunks) = autonomi::self_encryption::encrypt(bytes).map_err(|err| {
-        println!(">>> Encryption failed: {}", err);
-        UploadError::Encryption(err.to_string())
-    })?;
-    let datamap_chunk = DataMapChunk::from(datamap.clone());
-    println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
     let mut quote_iter = chunks
         .iter()
