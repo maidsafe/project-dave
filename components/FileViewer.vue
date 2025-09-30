@@ -2630,10 +2630,32 @@ const loadVault = async () => {
     await fileStore.getAllFiles();
   } catch (err) {
     console.log('>>> Error getting files: ', err);
-    // Show load vault button again if loading fails
+    // Reset state when vault loading fails (including signature cancellation)
+    hasAttemptedVaultLoad.value = false;
     showLoadVaultButton.value = true;
+
+    // Also reset the pending vault structure state in the file store
+    fileStore.$patch({
+      pendingVaultStructure: false
+    });
   }
 };
+
+// Watch for signature request cancellation
+watch(() => walletStore.pendingMessageSignature, (isSignaturePending, wasSignaturePending) => {
+  // If signature request was cancelled (went from true to false) and we're attempting to load vault
+  if (wasSignaturePending && !isSignaturePending && hasAttemptedVaultLoad.value && !walletStore.hasVaultSignature()) {
+    console.log('>>> Signature request cancelled, resetting vault loading state');
+    // Reset state when signature request is cancelled
+    hasAttemptedVaultLoad.value = false;
+    showLoadVaultButton.value = true;
+
+    // Also reset the pending vault structure state in the file store
+    fileStore.$patch({
+      pendingVaultStructure: false
+    });
+  }
+});
 
 onMounted(async () => {
   // Check if we have a vault signature available
@@ -2845,10 +2867,12 @@ onMounted(async () => {
                     <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                   </div>
                   <div v-else-if="showLoadVaultButton" class="flex justify-center">
-                    <CommonButton variant="secondary" size="medium" @click="loadVault">
-                      <i class="pi pi-globe mr-2"/>
-                      Load Vault
-                    </CommonButton>
+                    <button @click="loadVault"
+                            class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark hover:underline transition-all duration-200">
+                      <div class="flex items-center">
+                        <i class="pi pi-globe mr-1"/> Load Vault
+                      </div>
+                    </button>
                   </div>
                   <div v-else>No files found.</div>
                 </div>
@@ -2868,10 +2892,12 @@ onMounted(async () => {
                   <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                 </div>
                 <div v-else-if="showLoadVaultButton" class="flex justify-center">
-                  <CommonButton variant="secondary" size="medium" @click="loadVault">
-                    <i class="pi pi-globe mr-2"/>
-                    Load Vault
-                  </CommonButton>
+                  <button @click="loadVault"
+                          class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark hover:underline transition-all duration-200">
+                    <div class="flex items-center">
+                      <i class="pi pi-globe mr-1"/> Load Vault
+                    </div>
+                  </button>
                 </div>
                 <div v-else>No files found.</div>
               </div>
