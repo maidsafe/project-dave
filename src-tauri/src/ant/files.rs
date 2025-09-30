@@ -1,6 +1,7 @@
 use crate::ant::app_data;
 use crate::ant::cached_payments::PaymentCache;
 use crate::ant::client::SharedClient;
+use crate::ant::receipt_utils::{validate_receipt_coverage, validate_receipt_coverage_with_datamaps};
 use crate::ant::{local_storage, vault};
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::payment::{PaymentOption, Receipt};
@@ -247,56 +248,92 @@ pub async fn start_private_single_file_upload(
     println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
     // Check for cached payment first
+    let mut cached_receipt_opt = None;
+    let mut need_additional_payment = false;
+    let mut missing_chunks = Vec::new();
+    
     if let Ok(cache) = get_payment_cache() {
         println!(">>> Checking for cached payment for file: {:?}", file.path);
         if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
-            println!(">>> Found cached payment, reusing it for upload");
+            println!(">>> Found cached payment, validating coverage...");
+            
+            // Validate that cached receipt covers all required chunks
+            let validation = validate_receipt_coverage(&cached_receipt, &chunks);
+            
+            if validation.is_complete {
+                println!(">>> Cached receipt covers all chunks, reusing it for upload");
+                
+                // Emit quote event with zero cost since we're using cached payment
+                app.emit(
+                    "upload-quote",
+                    serde_json::json!({
+                        "upload_id": upload_id.clone(),
+                        "total_files": 1,
+                        "total_size": file_size,
+                        "total_cost_nano": "0",
+                        "total_cost_formatted": "0 ATTO",
+                        "payment_required": false,
+                        "payments": Vec::<serde_json::Value>::new(),
+                        "raw_payments": Vec::<serde_json::Value>::new()
+                    }),
+                )
+                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-            // Emit quote event with zero cost since we're using cached payment
-            app.emit(
-                "upload-quote",
-                serde_json::json!({
-                    "upload_id": upload_id.clone(),
-                    "total_files": 1,
-                    "total_size": file_size,
-                    "total_cost_nano": "0",
-                    "total_cost_formatted": "0 ATTO",
-                    "payment_required": false,
-                    "payments": Vec::<serde_json::Value>::new(),
-                    "raw_payments": Vec::<serde_json::Value>::new()
-                }),
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            // Execute upload immediately with cached receipt
-            return execute_private_single_file_upload(
-                app,
-                file,
-                DataMapChunk::from(datamap),
-                chunks,
-                cached_receipt,
-                Default::default(),
-                vault_secret_key,
-                upload_id,
-                add_to_vault,
-                shared_client,
-            )
-            .await;
+                // Execute upload immediately with cached receipt
+                return execute_private_single_file_upload(
+                    app,
+                    file,
+                    DataMapChunk::from(datamap),
+                    chunks,
+                    cached_receipt,
+                    Default::default(),
+                    vault_secret_key,
+                    upload_id,
+                    add_to_vault,
+                    shared_client,
+                )
+                .await;
+            } else {
+                println!(">>> Cached receipt is partial, missing {} chunks", validation.missing_chunks.len());
+                cached_receipt_opt = Some(cached_receipt);
+                need_additional_payment = true;
+                missing_chunks = validation.missing_chunks;
+            }
         }
     }
 
-    let chunks_iter = chunks
-        .iter()
-        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
-
-    println!(">>> Getting store quotes for {} chunks...", chunks.len());
-    let store_quote = client
-        .get_store_quotes(DataTypes::Chunk, chunks_iter)
-        .await
-        .map_err(|err| {
-            println!(">>> Failed to get store quotes: {}", err);
-            UploadError::StoreQuote(err.to_string())
-        })?;
+    // Get quotes only for missing chunks if we have a partial cached receipt
+    let store_quote = if need_additional_payment && !missing_chunks.is_empty() {
+        println!(">>> Getting store quotes for {} missing chunks...", missing_chunks.len());
+        
+        // Filter chunks to only include missing ones
+        let missing_chunks_iter = chunks
+            .iter()
+            .filter(|chunk| missing_chunks.contains(&chunk.name().to_vec()))
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+        
+        client
+            .get_store_quotes(DataTypes::Chunk, missing_chunks_iter)
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    } else {
+        println!(">>> Getting store quotes for {} chunks...", chunks.len());
+        let chunks_iter = chunks
+            .iter()
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+            
+        client
+            .get_store_quotes(DataTypes::Chunk, chunks_iter)
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    };
+    
     println!(">>> Got store {} {}", "quote", "successfully");
 
     // If add_to_vault is true, get vault quote and add to total
@@ -423,6 +460,7 @@ pub async fn start_private_single_file_upload(
             vault_update,
             vault_secret_key.cloned(),
             add_to_vault,
+            cached_receipt_opt,
         );
     }
     // If payment required, the execution will happen when confirm_upload_payment is called
@@ -529,7 +567,7 @@ pub async fn execute_private_single_file_upload(
         match result {
             Ok(()) => {
                 // Emit completion
-                if let Err(err) = app.emit(
+                if let Err(_err) = app.emit(
                     "upload-progress",
                     UploadProgress::Completed {
                         upload_id: upload_id.clone(),
@@ -594,66 +632,109 @@ pub async fn start_public_single_file_upload(
     println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
     // Check for cached payment first
+    let mut cached_receipt_opt = None;
+    let mut need_additional_payment = false;
+    let mut missing_chunks = Vec::new();
+    
     if let Ok(cache) = get_payment_cache() {
         println!(
             ">>> Checking for cached payment for public file: {:?}",
             file.path
         );
         if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
-            println!(">>> Found cached payment, reusing it for public upload");
+            println!(">>> Found cached payment, validating coverage...");
+            
+            // Validate that cached receipt covers all required chunks and datamap
+            let validation = validate_receipt_coverage_with_datamaps(&cached_receipt, &chunks, &[datamap_chunk.clone()]);
+            
+            if validation.is_complete {
+                println!(">>> Cached receipt covers all chunks and datamap, reusing it for public upload");
+                
+                // Emit quote event with zero cost since we're using cached payment
+                app.emit(
+                    "upload-quote",
+                    serde_json::json!({
+                        "upload_id": upload_id.clone(),
+                        "total_files": 1,
+                        "total_size": file_size,
+                        "total_cost_nano": "0",
+                        "total_cost_formatted": "0 ATTO",
+                        "payment_required": false,
+                        "payments": Vec::<serde_json::Value>::new(),
+                        "raw_payments": Vec::<serde_json::Value>::new()
+                    }),
+                )
+                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-            // Emit quote event with zero cost since we're using cached payment
-            app.emit(
-                "upload-quote",
-                serde_json::json!({
-                    "upload_id": upload_id.clone(),
-                    "total_files": 1,
-                    "total_size": file_size,
-                    "total_cost_nano": "0",
-                    "total_cost_formatted": "0 ATTO",
-                    "payment_required": false,
-                    "payments": Vec::<serde_json::Value>::new(),
-                    "raw_payments": Vec::<serde_json::Value>::new()
-                }),
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            // Execute upload immediately with cached receipt
-            return execute_public_single_file_upload(
-                app,
-                file,
-                DataMapChunk::from(datamap),
-                chunks,
-                cached_receipt,
-                Default::default(),
-                upload_id,
-                add_to_vault,
-                vault_secret_key,
-                shared_client,
-            )
-            .await;
+                // Execute upload immediately with cached receipt
+                return execute_public_single_file_upload(
+                    app,
+                    file,
+                    DataMapChunk::from(datamap),
+                    chunks,
+                    cached_receipt,
+                    Default::default(),
+                    upload_id,
+                    add_to_vault,
+                    vault_secret_key,
+                    shared_client,
+                )
+                .await;
+            } else {
+                println!(">>> Cached receipt is partial, missing {} chunks", validation.missing_chunks.len());
+                cached_receipt_opt = Some(cached_receipt);
+                need_additional_payment = true;
+                missing_chunks = validation.missing_chunks;
+            }
         }
     }
 
-    let mut quote_iter = chunks
-        .iter()
-        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
-        .collect::<Vec<_>>();
+    // Get quotes only for missing chunks if we have a partial cached receipt
+    let store_quote = if need_additional_payment && !missing_chunks.is_empty() {
+        println!(">>> Getting store quotes for {} missing chunks + datamap...", missing_chunks.len());
+        
+        // Filter chunks to only include missing ones
+        let mut quote_iter: Vec<_> = chunks
+            .iter()
+            .filter(|chunk| missing_chunks.contains(&chunk.name().to_vec()))
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
+            .collect();
+            
+        // Add datamap to quote calculation if it's missing
+        let datamap_name = datamap.name().0.to_vec();
+        if missing_chunks.contains(&datamap_name) {
+            quote_iter.push((datamap.name().to_owned(), datamap.size()));
+        }
+        
+        client
+            .get_store_quotes(DataTypes::Chunk, quote_iter.into_iter())
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    } else {
+        let mut quote_iter = chunks
+            .iter()
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
+            .collect::<Vec<_>>();
 
-    // Add datamap to quote calculation
-    quote_iter.push((datamap.name().to_owned(), datamap.size()));
+        // Add datamap to quote calculation
+        quote_iter.push((datamap.name().to_owned(), datamap.size()));
 
-    println!(
-        ">>> Getting store quotes for {} chunks + datamap...",
-        chunks.len()
-    );
-    let store_quote = client
-        .get_store_quotes(DataTypes::Chunk, quote_iter.into_iter())
-        .await
-        .map_err(|err| {
-            println!(">>> Failed to get store quotes: {}", err);
-            UploadError::StoreQuote(err.to_string())
-        })?;
+        println!(
+            ">>> Getting store quotes for {} chunks + datamap...",
+            chunks.len()
+        );
+        client
+            .get_store_quotes(DataTypes::Chunk, quote_iter.into_iter())
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    };
+    
     println!(">>> Got store {} {}", "quote", "successfully");
 
     // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
@@ -787,6 +868,7 @@ pub async fn start_public_single_file_upload(
             vault_update,
             add_to_vault,
             vault_secret_key.cloned(),
+            cached_receipt_opt,
         );
     }
 
@@ -952,7 +1034,7 @@ pub async fn execute_public_single_file_upload(
         match result {
             Ok(()) => {
                 // Emit completion
-                if let Err(err) = app.emit(
+                if let Err(_err) = app.emit(
                     "upload-progress",
                     UploadProgress::Completed {
                         upload_id: upload_id.clone(),
@@ -1051,65 +1133,99 @@ pub async fn start_private_archive_upload(
     let archive_datamap_chunk = DataMapChunk::from(archive_datamap.clone());
 
     // Check for cached payment first
+    let mut cached_receipt_opt = None;
+    let mut need_additional_payment = false;
+    let mut missing_chunks = Vec::new();
+    
     if let Ok(cache) = get_payment_cache() {
         println!(
             ">>> Checking for cached payment for private archive: {}",
             archive_name
         );
         if let Ok(Some(cached_receipt)) = cache.load_archive_payment(&files, &archive_name) {
-            println!(">>> Found cached payment, reusing it for private archive upload");
+            println!(">>> Found cached payment, validating coverage...");
+            
+            // Validate that cached receipt covers all required chunks
+            let validation = validate_receipt_coverage(&cached_receipt, &all_chunks);
+            
+            if validation.is_complete {
+                println!(">>> Cached receipt covers all chunks, reusing it for private archive upload");
+                
+                // Emit quote event with zero cost since we're using cached payment
+                app.emit(
+                    "upload-quote",
+                    serde_json::json!({
+                        "upload_id": upload_id.clone(),
+                        "total_files": total_files,
+                        "total_size": total_size,
+                        "total_cost_nano": "0",
+                        "total_cost_formatted": "0 ATTO",
+                        "payment_required": false,
+                        "payments": Vec::<serde_json::Value>::new(),
+                        "raw_payments": Vec::<serde_json::Value>::new()
+                    }),
+                )
+                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-            // Emit quote event with zero cost since we're using cached payment
-            app.emit(
-                "upload-quote",
-                serde_json::json!({
-                    "upload_id": upload_id.clone(),
-                    "total_files": total_files,
-                    "total_size": total_size,
-                    "total_cost_nano": "0",
-                    "total_cost_formatted": "0 ATTO",
-                    "payment_required": false,
-                    "payments": Vec::<serde_json::Value>::new(),
-                    "raw_payments": Vec::<serde_json::Value>::new()
-                }),
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            // Execute upload immediately with cached receipt
-            return execute_private_archive_upload(
-                app,
-                files,
-                archive_name,
-                archive_datamap_chunk,
-                all_chunks,
-                cached_receipt,
-                Default::default(),
-                upload_id,
-                add_to_vault,
-                vault_secret_key,
-                shared_client,
-            )
-            .await;
+                // Execute upload immediately with cached receipt
+                return execute_private_archive_upload(
+                    app,
+                    files,
+                    archive_name,
+                    archive_datamap_chunk,
+                    all_chunks,
+                    cached_receipt,
+                    Default::default(),
+                    upload_id,
+                    add_to_vault,
+                    vault_secret_key,
+                    shared_client,
+                )
+                .await;
+            } else {
+                println!(">>> Cached receipt is partial, missing {} chunks", validation.missing_chunks.len());
+                cached_receipt_opt = Some(cached_receipt);
+                need_additional_payment = true;
+                missing_chunks = validation.missing_chunks;
+            }
         }
     }
 
-    // Get store quote for all chunks (only file chunks, not archive datamap since it stays local)
-    let chunks_iter = all_chunks
-        .iter()
-        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+    // Get store quote for missing chunks if we have a partial cached receipt
+    let store_quote = if need_additional_payment && !missing_chunks.is_empty() {
+        println!(">>> Getting store quotes for {} missing chunks...", missing_chunks.len());
+        
+        // Filter chunks to only include missing ones
+        let missing_chunks_iter = all_chunks
+            .iter()
+            .filter(|chunk| missing_chunks.contains(&chunk.name().to_vec()))
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
+        
+        client
+            .get_store_quotes(DataTypes::Chunk, missing_chunks_iter)
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    } else {
+        let chunks_iter = all_chunks
+            .iter()
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()));
 
-    println!(
-        ">>> Getting store quotes for {} chunks...",
-        all_chunks.len()
-    );
+        println!(
+            ">>> Getting store quotes for {} chunks...",
+            all_chunks.len()
+        );
 
-    let store_quote = client
-        .get_store_quotes(DataTypes::Chunk, chunks_iter)
-        .await
-        .map_err(|err| {
-            println!(">>> Failed to get store quotes: {}", err);
-            UploadError::StoreQuote(err.to_string())
-        })?;
+        client
+            .get_store_quotes(DataTypes::Chunk, chunks_iter)
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    };
 
     println!(">>> Got store {} {}", "quote", "successfully");
 
@@ -1241,6 +1357,7 @@ pub async fn start_private_archive_upload(
             vault_update,
             add_to_vault,
             vault_secret_key.cloned(),
+            cached_receipt_opt,
         );
     }
 
@@ -1394,7 +1511,7 @@ pub async fn execute_private_archive_upload(
         match result {
             Ok(()) => {
                 // Emit completion
-                if let Err(err) = app.emit(
+                if let Err(_err) = app.emit(
                     "upload-progress",
                     UploadProgress::Completed {
                         upload_id: upload_id.clone(),
@@ -1502,78 +1619,131 @@ pub async fn start_public_archive_upload(
     let archive_datamap_chunk = DataMapChunk::from(archive_datamap.clone());
 
     // Check for cached payment first
+    let mut cached_receipt_opt = None;
+    let mut need_additional_payment = false;
+    let mut missing_chunks = Vec::new();
+    
     if let Ok(cache) = get_payment_cache() {
         println!(
             ">>> Checking for cached payment for public archive: {}",
             archive_name
         );
         if let Ok(Some(cached_receipt)) = cache.load_archive_payment(&files, &archive_name) {
-            println!(">>> Found cached payment, reusing it for public archive upload");
+            println!(">>> Found cached payment, validating coverage...");
+            
+            // Validate that cached receipt covers all required chunks and datamaps
+            let mut all_datamaps = file_datamaps.clone();
+            all_datamaps.push(archive_datamap_chunk.clone());
+            let validation = validate_receipt_coverage_with_datamaps(&cached_receipt, &all_chunks, &all_datamaps);
+            
+            if validation.is_complete {
+                println!(">>> Cached receipt covers all chunks and datamaps, reusing it for public archive upload");
+                
+                // Emit quote event with zero cost since we're using cached payment
+                app.emit(
+                    "upload-quote",
+                    serde_json::json!({
+                        "upload_id": upload_id.clone(),
+                        "total_files": total_files,
+                        "total_size": total_size,
+                        "total_cost_nano": "0",
+                        "total_cost_formatted": "0 ATTO",
+                        "payment_required": false,
+                        "payments": Vec::<serde_json::Value>::new(),
+                        "raw_payments": Vec::<serde_json::Value>::new()
+                    }),
+                )
+                .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
 
-            // Emit quote event with zero cost since we're using cached payment
-            app.emit(
-                "upload-quote",
-                serde_json::json!({
-                    "upload_id": upload_id.clone(),
-                    "total_files": total_files,
-                    "total_size": total_size,
-                    "total_cost_nano": "0",
-                    "total_cost_formatted": "0 ATTO",
-                    "payment_required": false,
-                    "payments": Vec::<serde_json::Value>::new(),
-                    "raw_payments": Vec::<serde_json::Value>::new()
-                }),
-            )
-            .map_err(|err| UploadError::EmitEvent(err.to_string()))?;
-
-            // Execute upload immediately with cached receipt
-            return execute_public_archive_upload(
-                app,
-                files,
-                archive_name,
-                archive_datamap_chunk,
-                file_datamaps,
-                all_chunks,
-                cached_receipt,
-                Default::default(),
-                upload_id,
-                add_to_vault,
-                vault_secret_key,
-                shared_client,
-            )
-            .await;
+                // Execute upload immediately with cached receipt
+                return execute_public_archive_upload(
+                    app,
+                    files,
+                    archive_name,
+                    archive_datamap_chunk,
+                    file_datamaps,
+                    all_chunks,
+                    cached_receipt,
+                    Default::default(),
+                    upload_id,
+                    add_to_vault,
+                    vault_secret_key,
+                    shared_client,
+                )
+                .await;
+            } else {
+                println!(">>> Cached receipt is partial, missing {} chunks", validation.missing_chunks.len());
+                cached_receipt_opt = Some(cached_receipt);
+                need_additional_payment = true;
+                missing_chunks = validation.missing_chunks;
+            }
         }
     }
 
-    // For public archives, we need quotes for:
-    // 1. All file chunks
-    // 2. All file datamaps (to upload them publicly)
-    // 3. Archive chunks
-    // 4. Archive datamap (to upload it publicly)
-    let mut chunks_iter = all_chunks
-        .iter()
-        .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
-        .collect::<Vec<_>>();
+    // Get store quote for missing chunks if we have a partial cached receipt
+    let store_quote = if need_additional_payment && !missing_chunks.is_empty() {
+        println!(">>> Getting store quotes for {} missing chunks + datamaps...", missing_chunks.len());
+        
+        // Filter chunks to only include missing ones
+        let mut chunks_iter: Vec<_> = all_chunks
+            .iter()
+            .filter(|chunk| missing_chunks.contains(&chunk.name().to_vec()))
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
+            .collect();
 
-    // Add all file datamaps to quote calculation
-    for file_datamap in &file_datamaps {
-        chunks_iter.push((file_datamap.0.name().to_owned(), file_datamap.0.size()));
-    }
+        // Add file datamaps to quote calculation if they're missing
+        for file_datamap in &file_datamaps {
+            let datamap_name = file_datamap.0.name().0.to_vec();
+            if missing_chunks.contains(&datamap_name) {
+                chunks_iter.push((file_datamap.0.name().to_owned(), file_datamap.0.size()));
+            }
+        }
 
-    chunks_iter.push((archive_datamap.name().to_owned(), archive_datamap.size()));
+        // Add archive datamap to quote calculation if it's missing
+        let archive_datamap_name = archive_datamap.name().0.to_vec();
+        if missing_chunks.contains(&archive_datamap_name) {
+            chunks_iter.push((archive_datamap.name().to_owned(), archive_datamap.size()));
+        }
+        
+        client
+            .get_store_quotes(DataTypes::Chunk, chunks_iter.into_iter())
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    } else {
+        // For public archives, we need quotes for:
+        // 1. All file chunks
+        // 2. All file datamaps (to upload them publicly)
+        // 3. Archive chunks
+        // 4. Archive datamap (to upload it publicly)
+        let mut chunks_iter = all_chunks
+            .iter()
+            .map(|chunk| (*chunk.address.xorname(), chunk.value.len()))
+            .collect::<Vec<_>>();
 
-    println!(
-        ">>> Getting store quotes for {} file chunks + {} file datamaps + archive datamap...",
-        all_chunks.len(),
-        file_datamaps.len()
-    );
-    let store_quote = client
-        .get_store_quotes(DataTypes::Chunk, chunks_iter.into_iter())
-        .await
-        .map_err(|err| {
-            println!(">>> Failed to get store quotes: {}", err);
-            UploadError::StoreQuote(err.to_string())
-        })?;
+        // Add all file datamaps to quote calculation
+        for file_datamap in &file_datamaps {
+            chunks_iter.push((file_datamap.0.name().to_owned(), file_datamap.0.size()));
+        }
+
+        chunks_iter.push((archive_datamap.name().to_owned(), archive_datamap.size()));
+
+        println!(
+            ">>> Getting store quotes for {} file chunks + {} file datamaps + archive datamap...",
+            all_chunks.len(),
+            file_datamaps.len()
+        );
+        client
+            .get_store_quotes(DataTypes::Chunk, chunks_iter.into_iter())
+            .await
+            .map_err(|err| {
+                println!(">>> Failed to get store quotes: {}", err);
+                UploadError::StoreQuote(err.to_string())
+            })?
+    };
+    
     println!(">>> Got store {} {}", "quote", "successfully");
 
     // If add_to_vault is true and vault_secret_key is provided, get vault quote and add to total
@@ -1711,6 +1881,7 @@ pub async fn start_public_archive_upload(
             vault_update,
             add_to_vault,
             vault_secret_key.cloned(),
+            cached_receipt_opt,
         );
     }
 
@@ -1884,7 +2055,7 @@ pub async fn execute_public_archive_upload(
         match result {
             Ok(()) => {
                 // Emit completion
-                if let Err(err) = app.emit(
+                if let Err(_err) = app.emit(
                     "upload-progress",
                     UploadProgress::Completed {
                         upload_id: upload_id.clone(),

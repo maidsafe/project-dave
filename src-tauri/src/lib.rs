@@ -11,6 +11,7 @@ use ant::{
 };
 use autonomi::chunk::DataMapChunk;
 use autonomi::client::data::DataAddress;
+use autonomi::client::payment::Receipt;
 use autonomi::client::quote::StoreQuote;
 use autonomi::client::vault::VaultSecretKey;
 use autonomi::Chunk;
@@ -33,6 +34,7 @@ pub enum PendingUploadData {
         vault_update: VaultUpdate,
         secret_key: Option<VaultSecretKey>,
         add_to_vault: bool,
+        cached_receipt: Option<Receipt>,
     },
     SingleFilePublic {
         file: File,
@@ -42,6 +44,7 @@ pub enum PendingUploadData {
         vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
+        cached_receipt: Option<Receipt>,
     },
     PrivateArchive {
         files: Vec<File>,
@@ -52,6 +55,7 @@ pub enum PendingUploadData {
         vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
+        cached_receipt: Option<Receipt>,
     },
     PublicArchive {
         files: Vec<File>,
@@ -63,6 +67,7 @@ pub enum PendingUploadData {
         vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
+        cached_receipt: Option<Receipt>,
     },
 }
 
@@ -82,6 +87,7 @@ impl PendingUploads {
         vault_update: VaultUpdate,
         secret_key: Option<VaultSecretKey>,
         add_to_vault: bool,
+        cached_receipt: Option<Receipt>,
     ) {
         self.uploads.insert(
             upload_id,
@@ -93,6 +99,7 @@ impl PendingUploads {
                 vault_update,
                 secret_key,
                 add_to_vault,
+                cached_receipt,
             },
         );
     }
@@ -107,6 +114,7 @@ impl PendingUploads {
         vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
+        cached_receipt: Option<Receipt>,
     ) {
         self.uploads.insert(
             upload_id,
@@ -118,6 +126,7 @@ impl PendingUploads {
                 vault_update,
                 add_to_vault,
                 vault_secret_key,
+                cached_receipt,
             },
         );
     }
@@ -134,6 +143,7 @@ impl PendingUploads {
         vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
+        cached_receipt: Option<Receipt>,
     ) {
         self.uploads.insert(
             upload_id,
@@ -147,6 +157,7 @@ impl PendingUploads {
                 vault_update,
                 add_to_vault,
                 vault_secret_key,
+                cached_receipt,
             },
         );
     }
@@ -162,6 +173,7 @@ impl PendingUploads {
         vault_update: VaultUpdate,
         add_to_vault: bool,
         vault_secret_key: Option<VaultSecretKey>,
+        cached_receipt: Option<Receipt>,
     ) {
         self.uploads.insert(
             upload_id,
@@ -174,6 +186,7 @@ impl PendingUploads {
                 vault_update,
                 add_to_vault,
                 vault_secret_key,
+                cached_receipt,
             },
         );
     }
@@ -353,15 +366,25 @@ async fn confirm_upload_payment(
                 vault_update,
                 secret_key,
                 add_to_vault,
+                cached_receipt,
             } => {
-                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                // Create receipt from store quote
+                let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
                 
-                // Cache the payment receipt immediately after creation
+                // Merge with cached receipt if we have one
+                let final_receipt = if let Some(cached) = cached_receipt {
+                    println!(">>> Merging new receipt with cached receipt");
+                    ant::receipt_utils::merge_receipts(vec![cached, new_receipt])
+                } else {
+                    new_receipt
+                };
+                
+                // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
-                    if let Err(e) = cache.save_payment(&file.path, &receipt) {
+                    if let Err(e) = cache.save_payment(&file.path, &final_receipt) {
                         println!(">>> Failed to cache payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached payment receipt for file: {:?}", file.path);
+                        println!(">>> Successfully cached merged payment receipt for file: {:?}", file.path);
                     }
                 }
 
@@ -370,7 +393,7 @@ async fn confirm_upload_payment(
                     file,
                     datamap,
                     chunks,
-                    receipt,
+                    final_receipt,
                     vault_update,
                     secret_key.as_ref(),
                     upload_id,
@@ -390,15 +413,25 @@ async fn confirm_upload_payment(
                 vault_update,
                 add_to_vault,
                 vault_secret_key,
+                cached_receipt,
             } => {
-                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                // Create receipt from store quote
+                let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
                 
-                // Cache the payment receipt immediately after creation
+                // Merge with cached receipt if we have one
+                let final_receipt = if let Some(cached) = cached_receipt {
+                    println!(">>> Merging new receipt with cached receipt");
+                    ant::receipt_utils::merge_receipts(vec![cached, new_receipt])
+                } else {
+                    new_receipt
+                };
+                
+                // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
-                    if let Err(e) = cache.save_payment(&file.path, &receipt) {
+                    if let Err(e) = cache.save_payment(&file.path, &final_receipt) {
                         println!(">>> Failed to cache payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached payment receipt for file: {:?}", file.path);
+                        println!(">>> Successfully cached merged payment receipt for file: {:?}", file.path);
                     }
                 }
 
@@ -407,7 +440,7 @@ async fn confirm_upload_payment(
                     file,
                     datamap,
                     chunks,
-                    receipt,
+                    final_receipt,
                     vault_update,
                     upload_id,
                     add_to_vault,
@@ -429,15 +462,25 @@ async fn confirm_upload_payment(
                 add_to_vault,
                 vault_update,
                 vault_secret_key,
+                cached_receipt,
             } => {
-                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                // Create receipt from store quote
+                let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
                 
-                // Cache the payment receipt immediately after creation
+                // Merge with cached receipt if we have one
+                let final_receipt = if let Some(cached) = cached_receipt {
+                    println!(">>> Merging new receipt with cached receipt for archive");
+                    ant::receipt_utils::merge_receipts(vec![cached, new_receipt])
+                } else {
+                    new_receipt
+                };
+                
+                // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
-                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &receipt) {
+                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &final_receipt) {
                         println!(">>> Failed to cache archive payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached archive payment receipt for: {}", archive_name);
+                        println!(">>> Successfully cached merged archive payment receipt for: {}", archive_name);
                     }
                 }
 
@@ -448,7 +491,7 @@ async fn confirm_upload_payment(
                     archive_datamap,
                     file_datamaps,
                     chunks,
-                    receipt,
+                    final_receipt,
                     vault_update,
                     upload_id,
                     add_to_vault,
@@ -469,15 +512,25 @@ async fn confirm_upload_payment(
                 vault_update,
                 add_to_vault,
                 vault_secret_key,
+                cached_receipt,
             } => {
-                let receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
+                // Create receipt from store quote
+                let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
                 
-                // Cache the payment receipt immediately after creation
+                // Merge with cached receipt if we have one
+                let final_receipt = if let Some(cached) = cached_receipt {
+                    println!(">>> Merging new receipt with cached receipt for archive");
+                    ant::receipt_utils::merge_receipts(vec![cached, new_receipt])
+                } else {
+                    new_receipt
+                };
+                
+                // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
-                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &receipt) {
+                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &final_receipt) {
                         println!(">>> Failed to cache archive payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached archive payment receipt for: {}", archive_name);
+                        println!(">>> Successfully cached merged archive payment receipt for: {}", archive_name);
                     }
                 }
 
@@ -487,7 +540,7 @@ async fn confirm_upload_payment(
                     archive_name,
                     archive_datamap,
                     chunks,
-                    receipt,
+                    final_receipt,
                     vault_update,
                     upload_id,
                     add_to_vault,
