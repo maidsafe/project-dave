@@ -220,12 +220,13 @@ pub async fn start_private_single_file_upload(
     vault_secret_key: Option<&VaultSecretKey>,
     upload_id: String,
     add_to_vault: bool,
+    use_cached_receipts: bool,
     shared_client: State<'_, SharedClient>,
     pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
 ) -> Result<(), UploadError> {
     println!(
-        ">>> start_single_file_upload called with upload_id: {}",
-        upload_id
+        ">>> start_single_file_upload called with upload_id: {}, use_cached_receipts: {}",
+        upload_id, use_cached_receipts
     );
     let client = shared_client.get_client().await.map_err(|e| {
         println!(">>> Failed to get client: {:?}", e);
@@ -247,13 +248,14 @@ pub async fn start_private_single_file_upload(
     })?;
     println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
-    // Check for cached payment first
+    // Check for cached payment first (only if user wants to use cached receipts)
     let mut cached_receipt_opt = None;
     let mut need_additional_payment = false;
     let mut missing_chunks = Vec::new();
     
-    if let Ok(cache) = get_payment_cache() {
-        println!(">>> Checking for cached payment for file: {:?}", file.path);
+    if use_cached_receipts {
+        if let Ok(cache) = get_payment_cache() {
+            println!(">>> Checking for cached payment for file: {:?}", file.path);
         if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
             println!(">>> Found cached payment, validating coverage...");
             
@@ -300,6 +302,9 @@ pub async fn start_private_single_file_upload(
                 missing_chunks = validation.missing_chunks;
             }
         }
+        }
+    } else {
+        println!(">>> User chose not to use cached receipts, will request full payment");
     }
 
     // Get quotes only for missing chunks if we have a partial cached receipt
@@ -602,13 +607,14 @@ pub async fn start_public_single_file_upload(
     file: File,
     upload_id: String,
     add_to_vault: bool,
+    use_cached_receipts: bool,
     vault_secret_key: Option<&VaultSecretKey>,
     shared_client: State<'_, SharedClient>,
     pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
 ) -> Result<(), UploadError> {
     println!(
-        ">>> start_single_file_upload_public called with upload_id: {}, add_to_vault: {}",
-        upload_id, add_to_vault
+        ">>> start_single_file_upload_public called with upload_id: {}, add_to_vault: {}, use_cached_receipts: {}",
+        upload_id, add_to_vault, use_cached_receipts
     );
     let client = shared_client.get_client().await.map_err(|e| {
         println!(">>> Failed to get client: {:?}", e);
@@ -631,16 +637,17 @@ pub async fn start_public_single_file_upload(
     let datamap_chunk = DataMapChunk::from(datamap.clone());
     println!(">>> File encrypted, got {} {}", chunks.len(), "chunks");
 
-    // Check for cached payment first
+    // Check for cached payment first (only if user wants to use cached receipts)
     let mut cached_receipt_opt = None;
     let mut need_additional_payment = false;
     let mut missing_chunks = Vec::new();
     
-    if let Ok(cache) = get_payment_cache() {
-        println!(
-            ">>> Checking for cached payment for public file: {:?}",
-            file.path
-        );
+    if use_cached_receipts {
+        if let Ok(cache) = get_payment_cache() {
+            println!(
+                ">>> Checking for cached payment for public file: {:?}",
+                file.path
+            );
         if let Ok(Some(cached_receipt)) = cache.load_payment_for_file(&file.path) {
             println!(">>> Found cached payment, validating coverage...");
             
@@ -687,6 +694,9 @@ pub async fn start_public_single_file_upload(
                 missing_chunks = validation.missing_chunks;
             }
         }
+        }
+    } else {
+        println!(">>> User chose not to use cached receipts, will request full payment");
     }
 
     // Get quotes only for missing chunks if we have a partial cached receipt
@@ -1070,13 +1080,14 @@ pub async fn start_private_archive_upload(
     archive_name: String,
     upload_id: String,
     add_to_vault: bool,
+    use_cached_receipts: bool,
     vault_secret_key: Option<&VaultSecretKey>,
     shared_client: State<'_, SharedClient>,
     pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
 ) -> Result<(), UploadError> {
     println!(
-        ">>> start_private_archive_upload called with upload_id: {}, add_to_vault: {}",
-        upload_id, add_to_vault
+        ">>> start_private_archive_upload called with upload_id: {}, add_to_vault: {}, use_cached_receipts: {}",
+        upload_id, add_to_vault, use_cached_receipts
     );
 
     let client = shared_client.get_client().await?;
@@ -1132,16 +1143,17 @@ pub async fn start_private_archive_upload(
     all_chunks.extend(archive_chunks);
     let archive_datamap_chunk = DataMapChunk::from(archive_datamap.clone());
 
-    // Check for cached payment first
+    // Check for cached payment first (only if user wants to use cached receipts)
     let mut cached_receipt_opt = None;
     let mut need_additional_payment = false;
     let mut missing_chunks = Vec::new();
     
-    if let Ok(cache) = get_payment_cache() {
-        println!(
-            ">>> Checking for cached payment for private archive: {}",
-            archive_name
-        );
+    if use_cached_receipts {
+        if let Ok(cache) = get_payment_cache() {
+            println!(
+                ">>> Checking for cached payment for private archive: {}",
+                archive_name
+            );
         if let Ok(Some(cached_receipt)) = cache.load_archive_payment(&files, &archive_name) {
             println!(">>> Found cached payment, validating coverage...");
             
@@ -1189,6 +1201,9 @@ pub async fn start_private_archive_upload(
                 missing_chunks = validation.missing_chunks;
             }
         }
+        }
+    } else {
+        println!(">>> User chose not to use cached receipts, will request full payment");
     }
 
     // Get store quote for missing chunks if we have a partial cached receipt
@@ -1549,13 +1564,14 @@ pub async fn start_public_archive_upload(
     archive_name: String,
     upload_id: String,
     add_to_vault: bool,
+    use_cached_receipts: bool,
     vault_secret_key: Option<&VaultSecretKey>,
     shared_client: State<'_, SharedClient>,
     pending_uploads: Option<&tokio::sync::Mutex<crate::PendingUploads>>,
 ) -> Result<(), UploadError> {
     println!(
-        ">>> start_public_archive_upload called with upload_id: {}, add_to_vault: {}",
-        upload_id, add_to_vault
+        ">>> start_public_archive_upload called with upload_id: {}, add_to_vault: {}, use_cached_receipts: {}",
+        upload_id, add_to_vault, use_cached_receipts
     );
 
     let client = shared_client.get_client().await?;
@@ -1618,16 +1634,17 @@ pub async fn start_public_archive_upload(
     all_chunks.extend(archive_chunks);
     let archive_datamap_chunk = DataMapChunk::from(archive_datamap.clone());
 
-    // Check for cached payment first
+    // Check for cached payment first (only if user wants to use cached receipts)
     let mut cached_receipt_opt = None;
     let mut need_additional_payment = false;
     let mut missing_chunks = Vec::new();
     
-    if let Ok(cache) = get_payment_cache() {
-        println!(
-            ">>> Checking for cached payment for public archive: {}",
-            archive_name
-        );
+    if use_cached_receipts {
+        if let Ok(cache) = get_payment_cache() {
+            println!(
+                ">>> Checking for cached payment for public archive: {}",
+                archive_name
+            );
         if let Ok(Some(cached_receipt)) = cache.load_archive_payment(&files, &archive_name) {
             println!(">>> Found cached payment, validating coverage...");
             
@@ -1678,6 +1695,9 @@ pub async fn start_public_archive_upload(
                 missing_chunks = validation.missing_chunks;
             }
         }
+        }
+    } else {
+        println!(">>> User chose not to use cached receipts, will request full payment");
     }
 
     // Get store quote for missing chunks if we have a partial cached receipt

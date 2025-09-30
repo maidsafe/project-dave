@@ -243,6 +243,7 @@ async fn start_upload(
     upload_id: String,  // Frontend provides the upload ID
     is_private: bool,   // New: privacy option
     add_to_vault: bool, // New: vault storage option
+    use_cached_receipts: bool, // New: whether to use cached receipts
     shared_client: State<'_, SharedClient>,
     pending_uploads: State<'_, PendingUploadsState>,
 ) -> Result<(), CommandError> {
@@ -282,6 +283,7 @@ async fn start_upload(
                 vault_secret_key.as_ref(),
                 upload_id.clone(),
                 add_to_vault,
+                use_cached_receipts,
                 shared_client,
                 Some(&*pending_uploads),
             )
@@ -296,6 +298,7 @@ async fn start_upload(
                 files.into_iter().next().unwrap(),
                 upload_id.clone(),
                 add_to_vault,
+                use_cached_receipts,
                 vault_secret_key.as_ref(),
                 shared_client,
                 Some(&*pending_uploads),
@@ -317,6 +320,7 @@ async fn start_upload(
                 archive_name,
                 upload_id.clone(),
                 add_to_vault,
+                use_cached_receipts,
                 vault_secret_key.as_ref(),
                 shared_client,
                 Some(&*pending_uploads),
@@ -333,6 +337,7 @@ async fn start_upload(
                 archive_name,
                 upload_id.clone(),
                 add_to_vault,
+                use_cached_receipts,
                 vault_secret_key.as_ref(),
                 shared_client,
                 Some(&*pending_uploads),

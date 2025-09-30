@@ -70,11 +70,13 @@ const uploadOptionsData = ref<{
   isFolder: boolean;
   isPrivate: boolean;
   addToVault: boolean;
+  useCachedReceipts: boolean;
 }>({
   files: [],
   isFolder: false,
   isPrivate: true, // Default to private
-  addToVault: true  // Default to adding to vault
+  addToVault: true,  // Default to adding to vault
+  useCachedReceipts: true  // Default to using cached receipts
 });
 const uploadSteps = ref<any[]>([]);
 const currentUploadStep = ref<string>('');
@@ -909,7 +911,8 @@ const openPickerAndUploadFiles = async () => {
     files,
     isFolder: false,
     isPrivate: true,
-    addToVault: true
+    addToVault: true,
+    useCachedReceipts: true
   };
   showUploadOptionsModal.value = true;
 };
@@ -925,7 +928,8 @@ const openFolderPickerAndUploadFiles = async () => {
     files,
     isFolder: true,
     isPrivate: true,
-    addToVault: true
+    addToVault: true,
+    useCachedReceipts: true
   };
   showUploadOptionsModal.value = true;
 };
@@ -934,11 +938,11 @@ const openFolderPickerAndUploadFiles = async () => {
 const handleConfirmUploadOptions = async () => {
   showUploadOptionsModal.value = false;
 
-  const {files, isFolder, isPrivate, addToVault} = uploadOptionsData.value;
+  const {files, isFolder, isPrivate, addToVault, useCachedReceipts} = uploadOptionsData.value;
 
   // All upload options are now fully supported!
 
-  await uploadFiles(files, isFolder, isPrivate, addToVault);
+  await uploadFiles(files, isFolder, isPrivate, addToVault, useCachedReceipts);
 };
 
 const handleCancelUploadOptions = () => {
@@ -947,14 +951,15 @@ const handleCancelUploadOptions = () => {
     files: [],
     isFolder: false,
     isPrivate: true,
-    addToVault: true
+    addToVault: true,
+    useCachedReceipts: true
   };
 };
 
 const uploadFiles = async (files: Array<{
   path: string,
   name: string
-}>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true) => {
+}>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true, useCachedReceipts: boolean = true) => {
   try {
     // Get vault key signature if needed (for private uploads or when adding to vault)
     let vaultKeySignature = "";
@@ -1007,6 +1012,7 @@ const uploadFiles = async (files: Array<{
       uploadId: frontendUploadId, // Pass our ID to backend
       isPrivate, // Use actual privacy option
       addToVault, // Use actual vault option
+      useCachedReceipts, // Use cached receipt option
     });
 
     console.log(">>> Upload started with ID:", frontendUploadId);
@@ -3672,6 +3678,36 @@ onMounted(async () => {
                 />
               </label>
             </div>
+          </div>
+        </div>
+
+        <!-- Cached Receipts Option -->
+        <div class="space-y-3">
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold">Payment Options</label>
+          </div>
+          <div class="flex items-center">
+            <Checkbox
+                v-model="uploadOptionsData.useCachedReceipts"
+                inputId="use-cached"
+                :binary="true"
+            />
+            <label for="use-cached" class="ml-2 flex items-center gap-2 cursor-pointer">
+              <i class="pi pi-clock text-autonomi-blue-500"></i>
+              <div class="flex-1">
+                <div class="font-medium">Use Cached Receipts</div>
+                <div class="text-xs text-gray-500">If available</div>
+              </div>
+              <i
+                  class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                  v-tooltip="{
+                  value: 'Use previously cached payment receipts when available. If partial coverage, only pay for missing chunks. When unchecked, always requests fresh payment.',
+                  showDelay: 300,
+                  hideDelay: 300,
+                  autoHide: false
+                }"
+              />
+            </label>
           </div>
         </div>
 
