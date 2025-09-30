@@ -3592,7 +3592,7 @@ onMounted(async () => {
                 <i
                     class="pi pi-info-circle text-xs text-gray-400 cursor-help"
                     v-tooltip="{
-                    value: 'Files will be uploaded to the network, but they will only be accessible with the data map file.\n\nThis data map file will be stored locally on your device.',
+                    value: 'Files will be uploaded to the network, but they will only be accessible with the data map file.\n\nThis data map file will be stored locally on your device and will be viewable in your local vault.',
                     showDelay: 300,
                     hideDelay: 300,
                     autoHide: false
@@ -3629,55 +3629,29 @@ onMounted(async () => {
         <!-- Vault Options -->
         <div class="space-y-3">
           <div class="flex items-center gap-2">
-            <label class="text-sm font-semibold">Storage</label>
+            <label class="text-sm font-semibold">Storage Options</label>
           </div>
-          <div class="space-y-3">
-            <div class="flex items-center">
-              <RadioButton
-                  v-model="uploadOptionsData.addToVault"
-                  inputId="vault"
-                  name="storage"
-                  :value="true"
+          <div class="flex items-center">
+            <Checkbox
+                v-model="uploadOptionsData.addToVault"
+                inputId="vault"
+                :binary="true"
+            />
+            <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
+              <i class="pi pi-database text-autonomi-blue-500"></i>
+              <div class="flex-1">
+                <div class="font-medium">Add to Personal Vault</div>
+              </div>
+              <i
+                  class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                  v-tooltip="{
+                  value: 'Store a reference to your files in your personal vault for easy access from anywhere. When unchecked, files are stored only on the network and referenced in your local vault.',
+                  showDelay: 300,
+                  hideDelay: 300,
+                  autoHide: false
+                }"
               />
-              <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
-                <i class="pi pi-database text-autonomi-blue-500"></i>
-                <div class="flex-1">
-                  <div class="font-medium">Add to Personal Vault</div>
-                </div>
-                <i
-                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
-                    v-tooltip="{
-                    value: 'Store a reference to your files in your personal vault.\n\nYour personal vault lives on the network and provides easy access to all your files from anywhere.',
-                    showDelay: 300,
-                    hideDelay: 300,
-                    autoHide: false
-                  }"
-                />
-              </label>
-            </div>
-            <div class="flex items-center">
-              <RadioButton
-                  v-model="uploadOptionsData.addToVault"
-                  inputId="network-only"
-                  name="storage"
-                  :value="false"
-              />
-              <label for="network-only" class="ml-2 flex items-center gap-2 cursor-pointer">
-                <i class="pi pi-cloud text-green-500"></i>
-                <div class="flex-1">
-                  <div class="font-medium">Network Only</div>
-                </div>
-                <i
-                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
-                    v-tooltip="{
-                    value: 'Files will be uploaded to the network and a reference to them will be stored in your local vault.\n\nYour local vault is only accessible on this device.',
-                    showDelay: 300,
-                    hideDelay: 300,
-                    autoHide: false
-                  }"
-                />
-              </label>
-            </div>
+            </label>
           </div>
         </div>
 
