@@ -1578,8 +1578,13 @@ const handleDeleteLocalFile = async (file: any) => {
     let isPublic = false;
     let address = '';
 
-    // Check if this is an archive
-    if (file.archive_access?.Private || file.archive_access?.Public) {
+    // Check if this is a failed archive (has address and is_private properties)
+    if (file.is_failed_archive && file.address) {
+      isArchive = true;
+      isPublic = !file.is_private;
+      address = file.address;
+    } else if (file.archive_access?.Private || file.archive_access?.Public) {
+      // Regular archive with archive_access
       isArchive = true;
       isPublic = !!file.archive_access.Public;
       address = file.archive_access.Private || file.archive_access.Public;
