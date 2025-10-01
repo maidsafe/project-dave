@@ -1059,6 +1059,29 @@ fn clear_payment_cache() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn get_logs_directory() -> Result<String, String> {
+    use directories::ProjectDirs;
+    
+    let qualifier = "com";
+    let organization = "autonomi";
+    let application = "dave";
+    
+    let proj_dirs = ProjectDirs::from(qualifier, organization, application)
+        .ok_or_else(|| "Could not get project directories".to_string())?;
+    
+    let mut logs_dir = proj_dirs.data_dir().to_owned();
+    logs_dir.push("logs");
+    
+    // Create logs directory if it doesn't exist
+    if !logs_dir.exists() {
+        std::fs::create_dir_all(&logs_dir)
+            .map_err(|e| format!("Failed to create logs directory: {}", e))?;
+    }
+    
+    Ok(logs_dir.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
@@ -1098,6 +1121,7 @@ pub async fn run() {
             app_data_store,
             clear_payment_cache,
             show_item_in_file_manager,
+            get_logs_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
