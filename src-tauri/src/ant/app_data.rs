@@ -9,6 +9,7 @@ use std::{fs, io::Read as _};
 use autonomi::Multiaddr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error as ThisError;
+use tracing::info;
 
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "autonomi";
@@ -68,7 +69,7 @@ impl AppData {
             .map_err(LoadError::Read)?;
 
         let data: AppData = toml::from_str(&contents).map_err(LoadError::Toml)?;
-        println!("loaded app data from: `{}`", filepath.display());
+        info!("loaded app data from: `{}`", filepath.display());
 
         Ok(data)
     }
@@ -95,7 +96,7 @@ impl AppData {
 
         let data = toml::to_string(&self).map_err(StoreError::Toml)?;
         file.write_all(data.as_bytes()).map_err(StoreError::Write)?;
-        println!("stored app data to: `{}`", filepath.display());
+        info!("stored app data to: `{}`", filepath.display());
 
         Ok(())
     }
@@ -153,4 +154,9 @@ fn filepath() -> Option<PathBuf> {
     filepath.push(FILENAME_SETTINGS);
 
     Some(filepath)
+}
+
+pub fn data_dir() -> Option<PathBuf> {
+    directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
+        .map(|dirs| dirs.data_dir().to_owned())
 }

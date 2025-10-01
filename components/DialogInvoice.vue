@@ -192,7 +192,7 @@ watchEffect(() => {
       :closable="false"
   >
     <template #header>
-      <div class="flex items-center justify-between w-full">
+      <div class="flex items-center justify-between w-full my-3">
         <div class="flex items-center gap-3">
           <IconLogo alt="Autonomi" class="h-6 filter dark:filter-none"/>
         </div>
@@ -298,15 +298,18 @@ watchEffect(() => {
           </h4>
           <div class="space-y-3">
             <div class="flex justify-between text-sm">
-              <span class="font-semibold text-gray-900 dark:text-autonomi-text-primary-dark">Total Cost:</span>
+              <span class="text-gray-600 dark:text-gray-400">Total Cost:</span>
               <div class="text-right">
-                <div class="font-bold text-blue-600 dark:text-blue-400">
+                <div class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
                   {{ formatANT(quoteData?.totalCostNano || '0') }} ANT
                 </div>
                 <div class="text-xs text-gray-600 dark:text-gray-400">
                   {{ quoteData?.totalCostFormatted || '0 ATTO' }}
                 </div>
               </div>
+            </div>
+            <div class="flex justify-center text-center text-xs text-gray-600 dark:text-gray-400">
+              <span>Gas costs (ETH) aren't shown here, check your wallet app for these fees</span>
             </div>
           </div>
         </div>
@@ -317,7 +320,7 @@ watchEffect(() => {
     </div>
 
     <template #footer>
-      <div class="flex justify-end items-center gap-3 py-3">
+      <div class="flex justify-end items-center gap-3 mt-5">
         <Button
             label="Cancel"
             severity="secondary"

@@ -70,11 +70,13 @@ const uploadOptionsData = ref<{
   isFolder: boolean;
   isPrivate: boolean;
   addToVault: boolean;
+  useCachedReceipts: boolean;
 }>({
   files: [],
   isFolder: false,
   isPrivate: true, // Default to private
-  addToVault: true  // Default to adding to vault
+  addToVault: true,  // Default to adding to vault
+  useCachedReceipts: true  // Default to using cached receipts
 });
 const uploadSteps = ref<any[]>([]);
 const currentUploadStep = ref<string>('');
@@ -95,6 +97,9 @@ const showLoadVaultButton = ref(false);
 const pendingVaultRemoval = ref(false);
 const vaultRemovalItem = ref<{ name: string, isArchive: boolean } | null>(null);
 
+// Collapsible state for datamap hex
+const isDataMapCollapsed = ref(true);
+
 // Upload modal functionality
 const initializeUploadSteps = () => {
   uploadSteps.value = [
@@ -102,7 +107,7 @@ const initializeUploadSteps = () => {
       key: 'quoting',
       label: 'Getting Quote',
       status: 'pending',
-      message: 'Calculating storage costs...'
+      message: 'Calculating storage costs... This might take a while.'
     },
     {
       key: 'payment-request',
@@ -496,6 +501,16 @@ const menuFiles = computed(() => {
         },
       });
 
+      // Add download option for archives
+      items.push({
+        label: 'Download',
+        icon: 'pi pi-download',
+        command: () => {
+          handleDownloadArchive(file);
+          refFilesMenu.value.hide();
+        },
+      });
+
       // Show data address for public archives
       if (file?.archive?.archive_access?.Public || file?.archive_access?.Public) {
         items.push({
@@ -503,6 +518,18 @@ const menuFiles = computed(() => {
           icon: 'pi pi-clipboard',
           command: () => {
             handleCopyDataAddress(file);
+            refFilesMenu.value.hide();
+          },
+        });
+      }
+
+      // Show data map hex for private archives
+      if (file?.archive?.archive_access?.Private || file?.archive_access?.Private) {
+        items.push({
+          label: 'Data Map (HEX)',
+          icon: 'pi pi-clipboard',
+          command: () => {
+            handleCopySecretKey(file);
             refFilesMenu.value.hide();
           },
         });
@@ -545,6 +572,16 @@ const menuFiles = computed(() => {
         },
       });
 
+      // Add download option for local archives
+      items.push({
+        label: 'Download',
+        icon: 'pi pi-download',
+        command: () => {
+          handleDownloadArchive(file);
+          refFilesMenu.value.hide();
+        },
+      });
+
       // Show data address for public local archives
       if (file?.archive?.archive_access?.Public || file?.archive_access?.Public) {
         items.push({
@@ -552,6 +589,18 @@ const menuFiles = computed(() => {
           icon: 'pi pi-clipboard',
           command: () => {
             handleCopyDataAddress(file);
+            refFilesMenu.value.hide();
+          },
+        });
+      }
+
+      // Show data map hex for private local archives
+      if (file?.archive?.archive_access?.Private || file?.archive_access?.Private) {
+        items.push({
+          label: 'Data Map (HEX)',
+          icon: 'pi pi-clipboard',
+          command: () => {
+            handleCopySecretKey(file);
             refFilesMenu.value.hide();
           },
         });
@@ -862,7 +911,8 @@ const openPickerAndUploadFiles = async () => {
     files,
     isFolder: false,
     isPrivate: true,
-    addToVault: true
+    addToVault: true,
+    useCachedReceipts: true
   };
   showUploadOptionsModal.value = true;
 };
@@ -878,7 +928,8 @@ const openFolderPickerAndUploadFiles = async () => {
     files,
     isFolder: true,
     isPrivate: true,
-    addToVault: true
+    addToVault: true,
+    useCachedReceipts: true
   };
   showUploadOptionsModal.value = true;
 };
@@ -887,11 +938,11 @@ const openFolderPickerAndUploadFiles = async () => {
 const handleConfirmUploadOptions = async () => {
   showUploadOptionsModal.value = false;
 
-  const {files, isFolder, isPrivate, addToVault} = uploadOptionsData.value;
+  const {files, isFolder, isPrivate, addToVault, useCachedReceipts} = uploadOptionsData.value;
 
   // All upload options are now fully supported!
 
-  await uploadFiles(files, isFolder, isPrivate, addToVault);
+  await uploadFiles(files, isFolder, isPrivate, addToVault, useCachedReceipts);
 };
 
 const handleCancelUploadOptions = () => {
@@ -900,14 +951,15 @@ const handleCancelUploadOptions = () => {
     files: [],
     isFolder: false,
     isPrivate: true,
-    addToVault: true
+    addToVault: true,
+    useCachedReceipts: true
   };
 };
 
 const uploadFiles = async (files: Array<{
   path: string,
   name: string
-}>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true) => {
+}>, isFolder: boolean = false, isPrivate: boolean = true, addToVault: boolean = true, useCachedReceipts: boolean = true) => {
   try {
     // Get vault key signature if needed (for private uploads or when adding to vault)
     let vaultKeySignature = "";
@@ -940,7 +992,7 @@ const uploadFiles = async (files: Array<{
     console.log(">>> FILEVIEWER STARTING UPLOAD WITH NEW SYSTEM");
 
     // Update step to show quoting in progress
-    updateStepStatus('quoting', 'processing', 'Getting storage cost estimate...');
+    updateStepStatus('quoting', 'processing', 'Getting storage cost estimate... This might take a while.');
 
     // Generate archive name
     let archiveName: string;
@@ -960,6 +1012,7 @@ const uploadFiles = async (files: Array<{
       uploadId: frontendUploadId, // Pass our ID to backend
       isPrivate, // Use actual privacy option
       addToVault, // Use actual vault option
+      useCachedReceipts, // Use cached receipt option
     });
 
     console.log(">>> Upload started with ID:", frontendUploadId);
@@ -1025,6 +1078,12 @@ const handleCopyDataAddress = async (file: any) => {
     } else if (file?.access_data?.Public) {
       // Alternative structure
       dataAddress = file.access_data.Public;
+    } else if (file?.archive_access?.Public) {
+      // For archives with archive_access
+      dataAddress = file.archive_access.Public;
+    } else if (file?.archive?.archive_access?.Public) {
+      // For archive items with nested archive_access
+      dataAddress = file.archive.archive_access.Public;
     } else if (file?.address) {
       // Fallback for local vault (may be deprecated)
       dataAddress = file.address;
@@ -1082,6 +1141,24 @@ const handleCopySecretKey = async (file: any) => {
       } else {
         secretKey = file.access_data.Private;
       }
+    } else if (file?.archive_access?.Private) {
+      // For archives with archive_access
+      if (Array.isArray(file.archive_access.Private)) {
+        secretKey = file.archive_access.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        secretKey = file.archive_access.Private;
+      }
+    } else if (file?.archive?.archive_access?.Private) {
+      // For archive items with nested archive_access
+      if (Array.isArray(file.archive.archive_access.Private)) {
+        secretKey = file.archive.archive_access.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        secretKey = file.archive.archive_access.Private;
+      }
     } else if (file?.address && (file?.type === 'private_file' || file?.type === 'private_archive')) {
       // Fallback for local private files (may be deprecated)
       secretKey = file.address;
@@ -1093,7 +1170,7 @@ const handleCopySecretKey = async (file: any) => {
       toast.add({
         severity: 'success',
         summary: 'Copied',
-        detail: 'Data access copied to clipboard',
+        detail: 'Data map copied to clipboard',
         life: 2000,
       });
     } else {
@@ -1106,6 +1183,85 @@ const handleCopySecretKey = async (file: any) => {
     }
   } catch (error) {
     console.error('Failed to copy secret key:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy to clipboard',
+      life: 3000,
+    });
+  }
+};
+
+const handleCopyUploadDataAddress = async (upload: any) => {
+  try {
+    let dataAddress = '';
+
+    if (upload.fileAccess?.Public) {
+      dataAddress = upload.fileAccess.Public;
+    }
+
+    if (dataAddress) {
+      await navigator.clipboard.writeText(dataAddress);
+      toast.add({
+        severity: 'success',
+        summary: 'Copied',
+        detail: 'Data address copied to clipboard',
+        life: 2000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No data address available',
+        life: 3000,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to copy upload data address:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy to clipboard',
+      life: 3000,
+    });
+  }
+};
+
+const handleCopyUploadDataMap = async (upload: any) => {
+  try {
+    let dataMap = '';
+
+    if (upload.fileAccess?.Private) {
+      // Convert to hex string if it's an array (similar to existing pattern)
+      if (Array.isArray(upload.fileAccess.Private)) {
+        dataMap = upload.fileAccess.Private.map((byte: number) =>
+            byte.toString(16).padStart(2, '0')
+        ).join('');
+      } else {
+        dataMap = upload.fileAccess.Private.startsWith('0x')
+            ? upload.fileAccess.Private.slice(2)
+            : upload.fileAccess.Private;
+      }
+    }
+
+    if (dataMap) {
+      await navigator.clipboard.writeText(dataMap);
+      toast.add({
+        severity: 'success',
+        summary: 'Copied',
+        detail: 'Data map copied to clipboard',
+        life: 2000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No data map available',
+        life: 3000,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to copy upload data map:', error);
     toast.add({
       severity: 'error',
       summary: 'Error',
@@ -1422,8 +1578,13 @@ const handleDeleteLocalFile = async (file: any) => {
     let isPublic = false;
     let address = '';
 
-    // Check if this is an archive
-    if (file.archive_access?.Private || file.archive_access?.Public) {
+    // Check if this is a failed archive (has address and is_private properties)
+    if (file.is_failed_archive && file.address) {
+      isArchive = true;
+      isPublic = !file.is_private;
+      address = file.address;
+    } else if (file.archive_access?.Private || file.archive_access?.Public) {
+      // Regular archive with archive_access
       isArchive = true;
       isPublic = !!file.archive_access.Public;
       address = file.archive_access.Private || file.archive_access.Public;
@@ -1649,6 +1810,111 @@ const handleDownloadFile = async (fileToDownload?: any) => {
     }
   } catch (error: any) {
     console.log('>>> Error in FileViewer.vue >> handleDownloadFile: ', error);
+  }
+};
+
+const handleDownloadArchive = async (archiveToDownload?: any) => {
+  try {
+    const archive = archiveToDownload || selectedFileItem.value;
+    const archiveName = archive.name || archive.archive?.name || 'downloaded_archive';
+
+    // Extract archive access from various possible locations
+    let archiveAccess = null;
+    if (archive.archive_access) {
+      archiveAccess = archive.archive_access;
+    } else if (archive.archive?.archive_access) {
+      archiveAccess = archive.archive.archive_access;
+    } else if (archive.access_data) {
+      archiveAccess = archive.access_data;
+    }
+
+    if (!archiveAccess) {
+      throw new Error('No archive access data available');
+    }
+
+    const downloadId = downloadsStore.createDownload({
+      ...archive,
+      name: archiveName,
+      isArchive: true
+    });
+
+    downloadsStore.updateDownload(downloadId, {status: 'downloading'});
+
+    try {
+      // Get custom download path from settings, fallback to default
+      const appData = await invoke('app_data') as any;
+      const downloadsPath = appData.download_path || await downloadDir();
+      console.log('Archive downloads path:', downloadsPath);
+
+      // Create a unique folder name for the archive
+      const uniquePath = await invoke('get_unique_download_path', {
+        downloadsPath,
+        filename: archiveName
+      }) as string;
+      console.log('Unique archive path:', uniquePath);
+
+      console.log('Downloading archive with access:', archiveAccess);
+
+      if (archiveAccess.Private) {
+        console.log('Downloading private archive with data_map_chunk:', archiveAccess.Private);
+        await invoke('download_private_file', {
+          dataMapChunk: archiveAccess.Private,
+          toDest: uniquePath,
+        });
+      } else if (archiveAccess.Public) {
+        console.log('Downloading public archive with addr:', archiveAccess.Public);
+        await invoke('download_public_file', {
+          addr: archiveAccess.Public,
+          toDest: uniquePath,
+        });
+      } else {
+        throw new Error('Archive access data is missing both Private and Public properties');
+      }
+
+      downloadsStore.updateDownload(downloadId, {
+        status: 'completed',
+        downloadPath: uniquePath,
+        progress: 100,
+        completedAt: new Date()
+      });
+
+      const finalArchiveName = uniquePath.split('/').pop() || archiveName;
+
+      // Show a toast notification with action button
+      console.log('>>> Adding download success toast for archive:', finalArchiveName, 'at path:', uniquePath);
+
+      toast.add({
+        severity: 'success',
+        summary: 'Download Complete',
+        detail: `Archive "${finalArchiveName}" has been downloaded successfully.`,
+        life: 10000,
+        group: 'download-success',
+        data: {
+          filePath: uniquePath
+        }
+      });
+    } catch (error: any) {
+      console.log('>>> Download archive error:', error);
+      downloadsStore.updateDownload(downloadId, {
+        status: 'failed',
+        error: error.message || 'Download failed',
+        completedAt: new Date()
+      });
+      toast.add({
+        severity: 'error',
+        summary: 'Download Failed',
+        detail: error.message || 'Failed to download archive.',
+        life: 3000,
+      });
+    }
+  } catch (error: any) {
+    console.log('>>> Error in FileViewer.vue >> handleDownloadArchive: ', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Download Error',
+      detail: error.message || 'Failed to start archive download.',
+      life: 3000,
+    });
   }
 };
 
@@ -2009,7 +2275,8 @@ const setupEventListeners = async () => {
         updateUploadById({
           status: 'completed',
           progress: 100,
-          completedAt: new Date()
+          completedAt: new Date(),
+          fileAccess: payload.file_access
         });
 
         // Close modal only if this completed upload is the one the modal is open for
@@ -2318,6 +2585,17 @@ const dataMapHex = computed(() => {
   return null;
 });
 
+const dataMapHexPreview = computed(() => {
+  const fullHex = dataMapHex.value;
+  if (!fullHex) return null;
+
+  // Show first 20 characters and last 20 characters with ellipsis in between
+  if (fullHex.length > 50) {
+    return `${fullHex.slice(0, 20)}...${fullHex.slice(-20)}`;
+  }
+  return fullHex;
+});
+
 // Handle local directory/file navigation (similar to vault files)
 const handleLocalChangeDirectory = (target: any) => {
   if (!target?.children) {
@@ -2357,10 +2635,32 @@ const loadVault = async () => {
     await fileStore.getAllFiles();
   } catch (err) {
     console.log('>>> Error getting files: ', err);
-    // Show load vault button again if loading fails
+    // Reset state when vault loading fails (including signature cancellation)
+    hasAttemptedVaultLoad.value = false;
     showLoadVaultButton.value = true;
+
+    // Also reset the pending vault structure state in the file store
+    fileStore.$patch({
+      pendingVaultStructure: false
+    });
   }
 };
+
+// Watch for signature request cancellation
+watch(() => walletStore.pendingMessageSignature, (isSignaturePending, wasSignaturePending) => {
+  // If signature request was cancelled (went from true to false) and we're attempting to load vault
+  if (wasSignaturePending && !isSignaturePending && hasAttemptedVaultLoad.value && !walletStore.hasVaultSignature()) {
+    console.log('>>> Signature request cancelled, resetting vault loading state');
+    // Reset state when signature request is cancelled
+    hasAttemptedVaultLoad.value = false;
+    showLoadVaultButton.value = true;
+
+    // Also reset the pending vault structure state in the file store
+    fileStore.$patch({
+      pendingVaultStructure: false
+    });
+  }
+});
 
 onMounted(async () => {
   // Check if we have a vault signature available
@@ -2572,10 +2872,12 @@ onMounted(async () => {
                     <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                   </div>
                   <div v-else-if="showLoadVaultButton" class="flex justify-center">
-                    <CommonButton variant="secondary" size="medium" @click="loadVault">
-                      <i class="pi pi-globe mr-2"/>
-                      Load Vault
-                    </CommonButton>
+                    <button @click="loadVault"
+                            class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark hover:underline transition-all duration-200">
+                      <div class="flex items-center">
+                        <i class="pi pi-globe mr-1"/> Load Vault
+                      </div>
+                    </button>
                   </div>
                   <div v-else>No files found.</div>
                 </div>
@@ -2595,10 +2897,12 @@ onMounted(async () => {
                   <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                 </div>
                 <div v-else-if="showLoadVaultButton" class="flex justify-center">
-                  <CommonButton variant="secondary" size="medium" @click="loadVault">
-                    <i class="pi pi-globe mr-2"/>
-                    Load Vault
-                  </CommonButton>
+                  <button @click="loadVault"
+                          class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark hover:underline transition-all duration-200">
+                    <div class="flex items-center">
+                      <i class="pi pi-globe mr-1"/> Load Vault
+                    </div>
+                  </button>
                 </div>
                 <div v-else>No files found.</div>
               </div>
@@ -2902,13 +3206,13 @@ onMounted(async () => {
 
                         <!-- Name in blue -->
                         <span class="text-autonomi-blue-600 dark:text-autonomi-blue-400 font-medium">
-                        {{ upload.name }}
-                      </span>
+                          {{ upload.name }}
+                        </span>
 
                         <!-- Upload duration -->
                         <span class="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-4">
-                        {{ formatUploadDuration(upload.createdAt) }}
-                      </span>
+                          {{ formatUploadDuration(upload.createdAt) }}
+                        </span>
                       </div>
 
                       <!-- Menu icon -->
@@ -2955,7 +3259,7 @@ onMounted(async () => {
                       :key="upload.id"
                       class="py-2 flex items-center justify-between"
                   >
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1">
                       <!-- Icon -->
                       <i
                           class="pi text-green-600 dark:text-green-400"
@@ -2964,28 +3268,50 @@ onMounted(async () => {
 
                       <!-- Name -->
                       <span class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark">
-                      {{ upload.name }}
-                    </span>
+                        {{ upload.name }}
+                      </span>
 
                       <!-- Duration or completion message -->
                       <span class="text-sm text-gray-500 dark:text-gray-400">
-                      <template v-if="upload.completionMessage">
-                        {{ upload.completionMessage }}
-                      </template>
-                      <template v-else>
-                        took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
-                      </template>
-                    </span>
+                        <template v-if="upload.completionMessage">
+                          {{ upload.completionMessage }}
+                        </template>
+                        <template v-else>
+                          took {{ formatUploadDuration(upload.createdAt, upload.completedAt) }}
+                        </template>
+                      </span>
                     </div>
 
-                    <!-- Menu icon -->
-                    <i
-                        class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        @click.stop="
-                        selectedUploadItem = upload;
-                        refUploadMenu.toggle($event);
-                      "
-                    />
+                    <div class="flex items-center gap-2">
+                      <!-- Copy Data Address Button (for public uploads) -->
+                      <button
+                          v-if="upload.fileAccess?.Public"
+                          @click="handleCopyUploadDataAddress(upload)"
+                          class="p-1 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-300 rounded transition-colors"
+                          v-tooltip.top="'Copy Data Address'"
+                      >
+                        <i class="pi pi-copy text-xs"/>
+                      </button>
+
+                      <!-- Copy Data Map Button (for private/vault uploads) -->
+                      <button
+                          v-if="upload.fileAccess?.Private"
+                          @click="handleCopyUploadDataMap(upload)"
+                          class="p-1 text-xs bg-purple-100 hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 text-purple-600 dark:text-purple-300 rounded transition-colors"
+                          v-tooltip.top="'Copy Data Map (HEX)'"
+                      >
+                        <i class="pi pi-key text-xs"/>
+                      </button>
+
+                      <!-- Menu icon -->
+                      <i
+                          class="pi pi-ellipsis-v cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          @click.stop="
+                          selectedUploadItem = upload;
+                          refUploadMenu.toggle($event);
+                        "
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3270,7 +3596,17 @@ onMounted(async () => {
 
         <!-- Privacy Options -->
         <div class="space-y-3">
-          <label class="text-sm font-semibold">Privacy</label>
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold">Privacy</label>
+            <i
+                class="pi pi-info-circle text-sm text-gray-500 cursor-help"
+                v-tooltip="{
+                value: 'Private files require a data map to access them. Public files can be accessed by anyone who has the data address.',
+                showDelay: 300,
+                hideDelay: 300
+              }"
+            />
+          </div>
           <div class="space-y-3">
             <div class="flex items-center">
               <RadioButton
@@ -3281,10 +3617,18 @@ onMounted(async () => {
               />
               <label for="private" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-lock text-autonomi-blue-500"></i>
-                <div>
+                <div class="flex-1">
                   <div class="font-medium">Private</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Only accessible with the data map</div>
                 </div>
+                <i
+                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                    v-tooltip="{
+                    value: 'Files will be uploaded to the network, but they will only be accessible with the data map file.\n\nThis data map file will be stored locally on your device and will be viewable in your local vault.',
+                    showDelay: 300,
+                    hideDelay: 300,
+                    autoHide: false
+                  }"
+                />
               </label>
             </div>
             <div class="flex items-center">
@@ -3296,10 +3640,18 @@ onMounted(async () => {
               />
               <label for="public" class="ml-2 flex items-center gap-2 cursor-pointer">
                 <i class="pi pi-globe text-green-500"></i>
-                <div>
+                <div class="flex-1">
                   <div class="font-medium">Public</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Accessible to anyone with the data address</div>
                 </div>
+                <i
+                    class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                    v-tooltip="{
+                    value: 'Files will be uploaded to the network and will be accessible to anyone with the data address.',
+                    showDelay: 300,
+                    hideDelay: 300,
+                    autoHide: false
+                  }"
+                />
               </label>
             </div>
           </div>
@@ -3307,40 +3659,60 @@ onMounted(async () => {
 
         <!-- Vault Options -->
         <div class="space-y-3">
-          <label class="text-sm font-semibold">Storage</label>
-          <div class="space-y-3">
-            <div class="flex items-center">
-              <RadioButton
-                  v-model="uploadOptionsData.addToVault"
-                  inputId="vault"
-                  name="storage"
-                  :value="true"
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold">Storage Options</label>
+          </div>
+          <div class="flex items-center">
+            <Checkbox
+                v-model="uploadOptionsData.addToVault"
+                inputId="vault"
+                :binary="true"
+            />
+            <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
+              <i class="pi pi-database text-autonomi-blue-500"></i>
+              <div class="flex-1">
+                <div class="font-medium">Add to Personal Vault</div>
+              </div>
+              <i
+                  class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                  v-tooltip="{
+                  value: 'Store a reference to your files in your personal vault for easy access from anywhere. When unchecked, files are stored only on the network and referenced in your local vault.',
+                  showDelay: 300,
+                  hideDelay: 300,
+                  autoHide: false
+                }"
               />
-              <label for="vault" class="ml-2 flex items-center gap-2 cursor-pointer">
-                <i class="pi pi-database text-autonomi-blue-500"></i>
-                <div>
-                  <div class="font-medium">Add to Personal Vault</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store in your personal vault on the network
-                  </div>
-                </div>
-              </label>
-            </div>
-            <div class="flex items-center">
-              <RadioButton
-                  v-model="uploadOptionsData.addToVault"
-                  inputId="network-only"
-                  name="storage"
-                  :value="false"
+            </label>
+          </div>
+        </div>
+
+        <!-- Cached Receipts Option -->
+        <div class="space-y-3">
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold">Payment Options</label>
+          </div>
+          <div class="flex items-center">
+            <Checkbox
+                v-model="uploadOptionsData.useCachedReceipts"
+                inputId="use-cached"
+                :binary="true"
+            />
+            <label for="use-cached" class="ml-2 flex items-center gap-2 cursor-pointer">
+              <i class="pi pi-clock text-autonomi-blue-500"></i>
+              <div class="flex-1">
+                <div class="font-medium">Use Cached Receipts</div>
+                <div class="text-xs text-gray-500">If available</div>
+              </div>
+              <i
+                  class="pi pi-info-circle text-xs text-gray-400 cursor-help"
+                  v-tooltip="{
+                  value: 'Use previously cached payment receipts when available. If partial coverage, only pay for missing chunks. When unchecked, always requests fresh payment.',
+                  showDelay: 300,
+                  hideDelay: 300,
+                  autoHide: false
+                }"
               />
-              <label for="network-only" class="ml-2 flex items-center gap-2 cursor-pointer">
-                <i class="pi pi-cloud text-gray-500"></i>
-                <div>
-                  <div class="font-medium">Network Only</div>
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Store only on network and local vault
-                  </div>
-                </div>
-              </label>
-            </div>
+            </label>
           </div>
         </div>
 
@@ -3495,6 +3867,7 @@ onMounted(async () => {
         v-model:visible="isVisibleFileInfo"
         header="Drawer"
         position="right"
+        class="file-details-drawer"
     >
       <template #header>
         <div class="flex items-center gap-3">
@@ -3510,119 +3883,142 @@ onMounted(async () => {
           </div>
         </div>
       </template>
-      <div class="p-5 flex-col flex text-sm font-semibold">
-        <div class="py-3">
-          <div>Name</div>
-          <div class="text-autonomi-text-primary break-words">
-            {{ selectedFileItem?.name }}
+      <div class="flex flex-col h-full">
+        <div class="flex-1 overflow-y-auto p-5 flex-col flex text-sm font-semibold">
+          <div class="py-3">
+            <div>Name</div>
+            <div class="text-autonomi-text-primary break-words">
+              {{ selectedFileItem?.name }}
+            </div>
+          </div>
+
+          <!-- Show type for all files (local vault and vault) -->
+          <div v-if="derivedFileType" class="py-3">
+            <div>Type</div>
+            <div class="text-autonomi-text-primary">
+              <template v-if="derivedFileType === 'public_archive'">
+                Public Archive
+              </template>
+              <template v-else-if="derivedFileType === 'private_archive'">
+                Private Archive
+              </template>
+              <template v-else-if="derivedFileType === 'public_file'">
+                Public File
+              </template>
+              <template v-else-if="derivedFileType === 'private_file'">
+                Private File
+              </template>
+            </div>
+          </div>
+
+          <!-- Show file count for archives -->
+          <div v-if="selectedFileItem?.isArchive && selectedFileItem?.archive?.files" class="py-3">
+            <div>Files in Archive</div>
+            <div class="text-autonomi-text-primary">
+              {{ selectedFileItem.archive.files.length }} files
+            </div>
+          </div>
+
+          <!-- Show data map hex for private files and archives -->
+          <div v-if="dataMapHex" class="py-3">
+            <div class="flex items-center gap-2">
+              <span>Data Map (HEX)</span>
+              <i
+                  class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                  @click="handleCopySecretKey(selectedFileItem)"
+                  v-tooltip.top="'Copy data map'"
+              />
+              <i
+                  :class="isDataMapCollapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
+                  class="text-xs cursor-pointer hover:text-autonomi-blue-500 ml-auto"
+                  @click="isDataMapCollapsed = !isDataMapCollapsed"
+                  v-tooltip.top="isDataMapCollapsed ? 'Expand' : 'Collapse'"
+              />
+            </div>
+            <div
+                class="text-autonomi-text-primary font-mono text-xs break-all transition-all duration-200 overflow-hidden">
+              <div v-if="isDataMapCollapsed" class="py-1">
+                {{ dataMapHexPreview }}
+              </div>
+              <div v-else class="py-1 max-h-64 overflow-y-auto">
+                {{ dataMapHex }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Show data address for public files and archives -->
+          <div
+              v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || selectedFileItem?.archive_access?.Public || selectedFileItem?.archive?.archive_access?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
+              class="py-3">
+            <div class="flex items-center gap-2">
+              <span>Data Address</span>
+              <i
+                  class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
+                  @click="handleCopyDataAddress(selectedFileItem)"
+                  v-tooltip.top="'Copy address'"
+              />
+            </div>
+            <div class="text-autonomi-text-primary font-mono text-xs break-all">
+              <template v-if="selectedFileItem?.file_access?.Public">
+                {{ selectedFileItem.file_access.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.access_data?.Public">
+                {{ selectedFileItem.access_data.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.archive_access?.Public">
+                {{ selectedFileItem.archive_access.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.archive?.archive_access?.Public">
+                {{ selectedFileItem.archive.archive_access.Public }}
+              </template>
+              <template v-else-if="selectedFileItem?.address">
+                {{ selectedFileItem.address }}
+              </template>
+            </div>
+          </div>
+
+          <div class="py-3">
+            <div>Size</div>
+            <div class="text-autonomi-text-primary">
+              {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : 'Unknown' }}
+            </div>
+          </div>
+
+          <div class="py-3">
+            <div>Modified</div>
+            <div class="text-autonomi-text-primary">
+              {{
+                selectedFileItem?.metadata?.modified
+                    ? secondsToDate(
+                        selectedFileItem.metadata.modified,
+                    ).toLocaleString()
+                    : 'Unknown'
+              }}
+            </div>
+          </div>
+
+          <div class="py-3">
+            <div>Created</div>
+            <div class="text-autonomi-text-primary">
+              {{
+                selectedFileItem?.metadata?.created
+                    ? secondsToDate(
+                        selectedFileItem.metadata.created,
+                    ).toLocaleString()
+                    : 'Unknown'
+              }}
+            </div>
           </div>
         </div>
 
-        <!-- Show type for all files (local vault and vault) -->
-        <div v-if="derivedFileType" class="py-3">
-          <div>Type</div>
-          <div class="text-autonomi-text-primary">
-            <template v-if="derivedFileType === 'public_archive'">
-              Public Archive
-            </template>
-            <template v-else-if="derivedFileType === 'private_archive'">
-              Private Archive
-            </template>
-            <template v-else-if="derivedFileType === 'public_file'">
-              Public File
-            </template>
-            <template v-else-if="derivedFileType === 'private_file'">
-              Private File
-            </template>
-          </div>
-        </div>
-
-        <!-- Show file count for archives -->
-        <div v-if="selectedFileItem?.isArchive && selectedFileItem?.archive?.files" class="py-3">
-          <div>Files in Archive</div>
-          <div class="text-autonomi-text-primary">
-            {{ selectedFileItem.archive.files.length }} files
-          </div>
-        </div>
-
-        <!-- Show data map hex for private files and archives -->
-        <div v-if="dataMapHex" class="py-3">
-          <div class="flex items-center gap-2">
-            <span>Data Map (HEX)</span>
-            <i
-                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
-                @click="handleCopySecretKey(selectedFileItem)"
-                v-tooltip.top="'Copy data map'"
-            />
-          </div>
-          <div class="text-autonomi-text-primary font-mono text-xs break-all">
-            {{ dataMapHex }}
-          </div>
-        </div>
-
-        <!-- Show data address for public files and archives -->
-        <div
-            v-if="selectedFileItem?.file_access?.Public || selectedFileItem?.access_data?.Public || selectedFileItem?.archive_access?.Public || selectedFileItem?.archive?.archive_access?.Public || (selectedFileItem?.address && (selectedFileItem?.type === 'public_file' || selectedFileItem?.type === 'public_archive'))"
-            class="py-3">
-          <div class="flex items-center gap-2">
-            <span>Data Address</span>
-            <i
-                class="pi pi-clipboard text-xs cursor-pointer hover:text-autonomi-blue-500"
-                @click="handleCopyDataAddress(selectedFileItem)"
-                v-tooltip.top="'Copy address'"
-            />
-          </div>
-          <div class="text-autonomi-text-primary font-mono text-xs break-all">
-            <template v-if="selectedFileItem?.file_access?.Public">
-              {{ selectedFileItem.file_access.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.access_data?.Public">
-              {{ selectedFileItem.access_data.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.archive_access?.Public">
-              {{ selectedFileItem.archive_access.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.archive?.archive_access?.Public">
-              {{ selectedFileItem.archive.archive_access.Public }}
-            </template>
-            <template v-else-if="selectedFileItem?.address">
-              {{ selectedFileItem.address }}
-            </template>
-          </div>
-        </div>
-
-        <div class="py-3">
-          <div>Size</div>
-          <div class="text-autonomi-text-primary">
-            {{ selectedFileItem?.metadata?.size ? formatBytes(selectedFileItem.metadata.size) : 'Unknown' }}
-          </div>
-        </div>
-
-        <div class="py-3">
-          <div>Modified</div>
-          <div class="text-autonomi-text-primary">
-            {{
-              selectedFileItem?.metadata?.modified
-                  ? secondsToDate(
-                      selectedFileItem.metadata.modified,
-                  ).toLocaleString()
-                  : 'Unknown'
-            }}
-          </div>
-        </div>
-
-        <div class="py-3">
-          <div>Created</div>
-          <div class="text-autonomi-text-primary">
-            {{
-              selectedFileItem?.metadata?.created
-                  ? secondsToDate(
-                      selectedFileItem.metadata.created,
-                  ).toLocaleString()
-                  : 'Unknown'
-            }}
-          </div>
-        </div>
+        <Button
+            v-if="selectedFileItem"
+            label="Download"
+            icon="pi pi-download"
+            class="w-full"
+            @click="selectedFileItem.isArchive ? handleDownloadArchive(selectedFileItem) : handleDownloadFile(selectedFileItem)"
+            :disabled="!selectedFileItem || pendingVaultRemoval"
+        />
       </div>
     </Drawer>
   </div>
@@ -3642,5 +4038,13 @@ onMounted(async () => {
 :deep(.p-confirm-dialog .p-confirm-dialog-message) {
   margin: 1.5rem 0;
   word-wrap: break-word;
+}
+
+/* File details drawer styling */
+:deep(.file-details-drawer .p-drawer-content) {
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 </style>

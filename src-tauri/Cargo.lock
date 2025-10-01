@@ -6333,9 +6333,10 @@ dependencies = [
 
 [[package]]
 name = "project-dave"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autonomi",
+ "chrono",
  "directories",
  "dirs-next",
  "fix-path-env",
@@ -6349,10 +6350,12 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-shell",
  "tauri-plugin-updater",
+ "tempfile",
  "thiserror 2.0.12",
  "tokio",
  "toml 0.8.23",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
  "walkdir",
 ]
