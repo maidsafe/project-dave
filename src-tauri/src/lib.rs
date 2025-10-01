@@ -1082,6 +1082,11 @@ fn get_logs_directory() -> Result<String, String> {
     Ok(logs_dir.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
@@ -1122,6 +1127,7 @@ pub async fn run() {
             clear_payment_cache,
             show_item_in_file_manager,
             get_logs_directory,
+            get_app_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

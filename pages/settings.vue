@@ -10,6 +10,7 @@ const toast = useToast();
 const downloadDirectory = ref<string>('');
 const isLoading = ref(false);
 const isSaving = ref(false);
+const appVersion = ref<string>('');
 
 // Load current settings
 const loadSettings = async () => {
@@ -105,8 +106,15 @@ const openLogsFolder = async () => {
 };
 
 
-onMounted(() => {
+onMounted(async () => {
   loadSettings();
+
+  // Get app version
+  try {
+    appVersion.value = await invoke('get_app_version');
+  } catch (error) {
+    console.error('Failed to get app version:', error);
+  }
 });
 </script>
 
@@ -179,6 +187,13 @@ onMounted(() => {
           </CommonButton>
         </div>
       </div>
+    </div>
+
+    <!-- Version info at the bottom -->
+    <div class="mt-8 text-center">
+      <p class="text-sm text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
+        Dave version {{ appVersion }}
+      </p>
     </div>
   </div>
 </template>
