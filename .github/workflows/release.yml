@@ -54,6 +54,7 @@ jobs:
         run: npm run tauri build -- ${{ matrix.args }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          MAX_CHUNK_SIZE: 4194304
 
       - name: Upload artifacts (macOS)
         if: matrix.platform == 'macos-latest'
