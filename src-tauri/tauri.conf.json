@@ -39,7 +39,7 @@
       "minimumSystemVersion": "10.13",
       "entitlements": null,
       "providerShortName": null,
-      "signingIdentity": null,
+      "signingIdentity": "-",
       "hardenedRuntime": true
     }
   },
