@@ -2872,12 +2872,12 @@ onMounted(async () => {
                     <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                   </div>
                   <div v-else-if="showLoadVaultButton" class="flex justify-center">
-                    <button @click="loadVault"
-                            class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark hover:underline transition-all duration-200">
-                      <div class="flex items-center">
-                        <i class="pi pi-globe mr-1"/> Load Vault
-                      </div>
-                    </button>
+                    <Button
+                        label="Load Vault"
+                        icon="pi pi-globe"
+                        @click="loadVault"
+                        class="mt-4"
+                    />
                   </div>
                   <div v-else>No files found.</div>
                 </div>
@@ -2897,12 +2897,12 @@ onMounted(async () => {
                   <i class="pi pi-spinner pi-spin mr-4"/>Loading vault...
                 </div>
                 <div v-else-if="showLoadVaultButton" class="flex justify-center">
-                  <button @click="loadVault"
-                          class="text-autonomi-text-primary dark:text-autonomi-text-primary-dark hover:underline transition-all duration-200">
-                    <div class="flex items-center">
-                      <i class="pi pi-globe mr-1"/> Load Vault
-                    </div>
-                  </button>
+                  <Button
+                      label="Load Vault"
+                      icon="pi pi-globe"
+                      @click="loadVault"
+                      class="mt-4"
+                  />
                 </div>
                 <div v-else>No files found.</div>
               </div>
