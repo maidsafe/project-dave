@@ -73,6 +73,14 @@ const downloadFile = async () => {
       filename: fileName
     }) as string;
 
+    // Show download started notification
+    toast.add({
+      severity: "info",
+      summary: "Download Started",
+      detail: `Downloading ${fileName}...`,
+      life: 3000
+    });
+
     if (inputType.value === "address") {
       let address = inputValue.value.trim();
       // Remove 0x prefix if present for addresses too

@@ -1735,6 +1735,14 @@ const handleDownloadFile = async (fileToDownload?: any) => {
 
     downloadsStore.updateDownload(downloadId, {status: 'downloading'});
 
+    // Show download started notification
+    toast.add({
+      severity: 'info',
+      summary: 'Download Started',
+      detail: `Downloading ${fileName}...`,
+      life: 3000,
+    });
+
     try {
       // Get custom download path from settings, fallback to default
       const appData = await invoke('app_data') as any;
@@ -1839,6 +1847,14 @@ const handleDownloadArchive = async (archiveToDownload?: any) => {
     });
 
     downloadsStore.updateDownload(downloadId, {status: 'downloading'});
+
+    // Show download started notification for archive
+    toast.add({
+      severity: 'info',
+      summary: 'Download Started',
+      detail: `Downloading archive "${archiveName}"...`,
+      life: 3000,
+    });
 
     try {
       // Get custom download path from settings, fallback to default
