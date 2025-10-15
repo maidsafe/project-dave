@@ -812,9 +812,9 @@ dependencies = [
 
 [[package]]
 name = "ant-bootstrap"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa3ec21d3e51643540d124763dcf1dcf3acc60213036b1fb9198d14d31dbe1b2"
+checksum = "e9fcc8926994650f50066d591ee60f6a19486189b7d92e7528180cb23b23bdce"
 dependencies = [
  "ant-logging",
  "ant-protocol",
@@ -1362,9 +1362,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "autonomi"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "088c260cd86ffe8495122246dc6bb795cf9a97f9815d561271d736db9e3a20d7"
+checksum = "4097e084c85e7ee5145bbfc968b1118b313a50d4fb9fe12b2dd9ea9b3b5688ad"
 dependencies = [
  "ant-bootstrap",
  "ant-evm",
