@@ -1,8 +1,12 @@
 pub mod app_data;
 pub mod cached_payments;
 pub mod client;
+mod encryption;
 pub mod files;
 pub mod local_storage;
 pub mod payments;
+mod quote;
 pub mod receipt_utils;
+mod stream;
+mod upload;
 pub mod vault;
