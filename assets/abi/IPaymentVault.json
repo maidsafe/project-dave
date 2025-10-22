@@ -1,5 +1,38 @@
 [
   {
+    "inputs": [
+      {
+        "internalType": "contract IERC20",
+        "name": "_antToken",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "target",
+        "type": "address"
+      }
+    ],
+    "name": "AddressEmptyCode",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "AddressInsufficientBalance",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "AntTokenNull",
     "type": "error"
@@ -11,7 +44,23 @@
   },
   {
     "inputs": [],
+    "name": "FailedInnerCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidInputLength",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "SafeERC20FailedOperation",
     "type": "error"
   },
   {
@@ -40,13 +89,90 @@
     "type": "event"
   },
   {
+    "inputs": [],
+    "name": "antToken",
+    "outputs": [
+      {
+        "internalType": "contract IERC20",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "batchLimit",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "completedPayments",
+    "outputs": [
+      {
+        "internalType": "bytes16",
+        "name": "rewardsAddress",
+        "type": "bytes16"
+      },
+      {
+        "internalType": "uint128",
+        "name": "amount",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "components": [
           {
+            "internalType": "enum IPaymentVault.DataType",
+            "name": "dataType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dataSize",
+            "type": "uint256"
+          },
+          {
             "internalType": "uint256",
             "name": "closeRecordsStored",
             "type": "uint256"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum IPaymentVault.DataType",
+                "name": "dataType",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "records",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct IPaymentVault.Record[]",
+            "name": "recordsPerType",
+            "type": "tuple[]"
           },
           {
             "internalType": "uint256",
@@ -87,7 +213,7 @@
         "type": "uint256[]"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -121,15 +247,55 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "requiredPaymentVerificationLength",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "components": [
           {
             "components": [
               {
+                "internalType": "enum IPaymentVault.DataType",
+                "name": "dataType",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "dataSize",
+                "type": "uint256"
+              },
+              {
                 "internalType": "uint256",
                 "name": "closeRecordsStored",
                 "type": "uint256"
+              },
+              {
+                "components": [
+                  {
+                    "internalType": "enum IPaymentVault.DataType",
+                    "name": "dataType",
+                    "type": "uint8"
+                  },
+                  {
+                    "internalType": "uint256",
+                    "name": "records",
+                    "type": "uint256"
+                  }
+                ],
+                "internalType": "struct IPaymentVault.Record[]",
+                "name": "recordsPerType",
+                "type": "tuple[]"
               },
               {
                 "internalType": "uint256",

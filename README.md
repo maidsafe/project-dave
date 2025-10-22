@@ -44,6 +44,63 @@ Dave uses Web3 wallets for secure Vault access and upload payments on the Arbitr
 4. Sign with your wallet when prompted
 5. Confirm payment if required
 
+## Developer Setup
+
+For developers who want to run Dave from source:
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18 or later)
+- [Rust](https://rustup.rs/) (latest stable)
+- [pnpm](https://pnpm.io/) or npm
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/maidsafe/project-dave.git
+   cd project-dave
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+
+4. Edit `.env` and configure the required variables:
+   ```bash
+   # Optional: Skip wallet signing during development
+   VITE_DEV_VAULT_SIGNATURE=0x...
+
+   # Required if using paymaster functionality
+   VITE_PIMLICO_API_KEY=your_pimlico_api_key_here
+   ```
+
+### Running the App
+
+```bash
+# Development mode (starts both frontend and Tauri backend)
+npm run tauri dev
+
+# Frontend only (for UI development)
+npm run dev
+```
+
+### Building
+
+```bash
+# Build the complete desktop application
+npm run tauri build
+
+# Build only the frontend
+npm run generate
+```
+
 ## Support
 
 - Learn more at [autonomi.com](https://autonomi.com/)

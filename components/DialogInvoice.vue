@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import {usePaymentStore} from "~/stores/payments";
 import {storeToRefs} from "pinia";
+import {invoke} from "@tauri-apps/api/core";
 
 interface UploadStep {
   key: string;
@@ -19,6 +20,8 @@ interface QuoteData {
   paymentOrderId?: string;
   totalCostNano?: string;
   costPerFileNano?: string;
+  payments?: any[];
+  rawPayments?: any[];
   rawQuoteData?: any;
 }
 
@@ -31,6 +34,39 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(["close-modal", "cancel-upload", "show-notify", "hide-notify", "pay-upload"]);
+
+// Paymaster toggle state
+const usePaymaster = ref<boolean>(false);
+const showPaymasterGuide = ref<boolean>(false);
+
+// Load paymaster setting from app data
+const loadPaymasterSetting = async () => {
+  try {
+    const appData = await invoke('app_data') as any;
+    usePaymaster.value = appData.use_paymaster ?? false;
+  } catch (error) {
+    console.error('Error loading paymaster setting:', error);
+  }
+};
+
+// Update paymaster setting
+const updatePaymasterSetting = async (value: boolean) => {
+  try {
+    const appData = await invoke('app_data') as any;
+    appData.use_paymaster = value;
+    await invoke('app_data_store', {appData: appData});
+    usePaymaster.value = value;
+  } catch (error) {
+    console.error('Error updating paymaster setting:', error);
+  }
+};
+
+// Load setting when modal becomes visible and quote is shown
+watchEffect(() => {
+  if (props.visible && showQuoteData.value) {
+    loadPaymasterSetting();
+  }
+});
 
 const paymentStore = usePaymentStore();
 const {
@@ -62,6 +98,35 @@ const handleCancel = () => {
     paymentStore.cancel(currentPayment.value.order.id);
   }
   emit("cancel-upload");
+};
+
+const handlePayClick = async () => {
+  // Check if paymaster is enabled
+  if (usePaymaster.value) {
+    console.log('[DialogInvoice] Opening paymaster guide with paymentsArray:', paymentsArray.value);
+    console.log('[DialogInvoice] paymentsArray length:', paymentsArray.value.length);
+    console.log('[DialogInvoice] currentPayment:', currentPayment.value);
+    console.log('[DialogInvoice] quoteData.rawQuoteData:', props.quoteData?.rawQuoteData);
+    // Show the guided paymaster flow
+    showPaymasterGuide.value = true;
+  } else {
+    // Use standard payment flow
+    emit("pay-upload");
+  }
+};
+
+const handlePaymasterGuideClose = () => {
+  showPaymasterGuide.value = false;
+};
+
+const handlePaymasterGuideProceed = () => {
+  showPaymasterGuide.value = false;
+  // Proceed with normal payment which will use paymaster
+  emit("pay-upload");
+};
+
+const handlePaymasterGuideCancel = () => {
+  showPaymasterGuide.value = false;
 };
 
 const canClose = computed(() => {
@@ -176,6 +241,37 @@ watchEffect(() => {
   } else {
     emit("hide-notify");
   }
+});
+
+// Convert quote data to the format needed for paymaster guide
+const paymentsArray = computed((): [string, string, string][] => {
+  // First try to use currentPayment if available
+  if (currentPayment.value?.order?.payments) {
+    return currentPayment.value.order.payments.map((payment: any) => [
+      payment.quoteHash,
+      payment.rewardsAddress,
+      payment.amount
+    ]);
+  }
+
+  // Fallback to rawPayments from quoteData (the actual field name from FileViewer)
+  // rawPayments is already in the correct format: [[quoteHash, rewardsAddress, amount], ...]
+  if (props.quoteData?.rawPayments && Array.isArray(props.quoteData.rawPayments)) {
+    console.log('[DialogInvoice] Using rawPayments:', props.quoteData.rawPayments);
+    // rawPayments is already an array of [quoteHash, rewardsAddress, amount] tuples
+    return props.quoteData.rawPayments as [string, string, string][];
+  }
+
+  // Final fallback to payments array (formatted version with objects)
+  if (props.quoteData?.payments && Array.isArray(props.quoteData.payments)) {
+    console.log('[DialogInvoice] Using formatted payments:', props.quoteData.payments);
+    // This needs to be converted - but we need the quote_hash and rewards_address
+    // which aren't in the formatted payments. This fallback won't work properly.
+    console.warn('[DialogInvoice] Formatted payments array does not contain required fields');
+  }
+
+  console.warn('[DialogInvoice] No valid payment data found');
+  return [];
 });
 </script>
 
@@ -308,8 +404,30 @@ watchEffect(() => {
                 </div>
               </div>
             </div>
+
+            <!-- Paymaster Toggle -->
+            <div class="border-t border-gray-200 dark:border-gray-600 pt-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex-1">
+                  <label for="paymaster-toggle"
+                         class="text-sm font-medium text-gray-900 dark:text-autonomi-text-primary-dark cursor-pointer">
+                    Use Gasless Payments
+                  </label>
+                  <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Pay gas cost in ANT
+                  </p>
+                </div>
+                <InputSwitch
+                    id="paymaster-toggle"
+                    v-model="usePaymaster"
+                    @change="updatePaymasterSetting(usePaymaster)"
+                    class="flex-shrink-0"
+                />
+              </div>
+            </div>
+
             <div class="flex justify-center text-center text-xs text-gray-600 dark:text-gray-400">
-              <span>Gas costs (ETH) aren't shown here, check your wallet app for these fees</span>
+              <span>Gas costs aren't shown here, check your wallet app for these fees</span>
             </div>
           </div>
         </div>
@@ -333,9 +451,18 @@ watchEffect(() => {
             :icon="isPaymentProcessing ? 'pi pi-spinner pi-spin' : 'pi pi-wallet'"
             severity="primary"
             :disabled="isPaymentProcessing"
-            @click="$emit('pay-upload')"
+            @click="handlePayClick"
         />
       </div>
     </template>
   </Dialog>
+
+  <!-- Paymaster Guide Dialog -->
+  <DialogPaymasterGuide
+    :visible="showPaymasterGuide"
+    :payments="paymentsArray"
+    @close="handlePaymasterGuideClose"
+    @proceed-with-paymaster="handlePaymasterGuideProceed"
+    @cancel="handlePaymasterGuideCancel"
+  />
 </template>

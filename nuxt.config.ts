@@ -101,7 +101,8 @@ export default defineNuxtConfig({
     },
     runtimeConfig: {
         public: {
-            devVaultSignature: process.env.VITE_DEV_VAULT_SIGNATURE || ''
+            devVaultSignature: process.env.VITE_DEV_VAULT_SIGNATURE || '',
+            pimlicoApiKey: process.env.VITE_PIMLICO_API_KEY || ''
         }
     },
     modules: ["@primevue/nuxt-module", "@pinia/nuxt"],

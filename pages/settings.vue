@@ -11,6 +11,7 @@ const downloadDirectory = ref<string>('');
 const isLoading = ref(false);
 const isSaving = ref(false);
 const appVersion = ref<string>('');
+const usePaymaster = ref<boolean>(false);
 
 // Load current settings
 const loadSettings = async () => {
@@ -18,6 +19,7 @@ const loadSettings = async () => {
     isLoading.value = true;
     const appData = await invoke('app_data') as any;
     downloadDirectory.value = appData.download_path || '';
+    usePaymaster.value = appData.use_paymaster ?? false;
   } catch (error) {
     console.error('Failed to load settings:', error);
     toast.add({
@@ -105,6 +107,45 @@ const openLogsFolder = async () => {
   }
 };
 
+// Auto-save paymaster settings when toggled
+const onPaymasterToggle = async () => {
+  const previousValue = !usePaymaster.value; // Store the opposite of current value
+
+  try {
+    isSaving.value = true;
+    const currentAppData = await invoke('app_data') as any;
+    const updatedAppData = {
+      ...currentAppData,
+      use_paymaster: usePaymaster.value
+    };
+
+    await invoke('app_data_store', {
+      appData: updatedAppData
+    });
+
+    toast.add({
+      severity: 'success',
+      summary: 'Success',
+      detail: usePaymaster.value
+        ? 'Paymaster enabled - gas-free transactions active'
+        : 'Paymaster disabled - standard payments active',
+      life: 3000
+    });
+  } catch (error) {
+    // Revert on error
+    usePaymaster.value = previousValue;
+    console.error('Failed to save paymaster settings:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to update paymaster settings',
+      life: 3000
+    });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
 
 onMounted(async () => {
   loadSettings();
@@ -166,6 +207,29 @@ onMounted(async () => {
             <p class="text-sm text-autonomi-text-secondary dark:text-autonomi-text-secondary-dark">
               Current: {{ downloadDirectory }}
             </p>
+          </div>
+        </div>
+
+        <!-- Paymaster Settings Section -->
+        <div class="border-t border-white/10 pt-6">
+          <h2 class="text-xl font-semibold text-autonomi-header-text dark:text-autonomi-text-primary-dark mb-4">
+            Paymaster Settings
+          </h2>
+          <p class="text-sm text-autonomi-text-primary mb-4">
+            Enable paymaster to pay for transactions using only ANT tokens without needing ETH for gas fees.
+          </p>
+
+          <div class="flex items-center gap-3">
+            <Checkbox
+              v-model="usePaymaster"
+              inputId="usePaymaster"
+              binary
+              @change="onPaymasterToggle"
+              :disabled="isSaving"
+            />
+            <label for="usePaymaster" class="text-sm text-autonomi-text-primary cursor-pointer">
+              Enable Paymaster (Gas-free transactions)
+            </label>
           </div>
         </div>
 
