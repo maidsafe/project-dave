@@ -26,7 +26,7 @@ import paymentVaultAbi from "~/assets/abi/IPaymentVault.json";
 import paymasterAbi from "~/assets/abi/AutonomiPaymaster.json";
 import permitAbi from "~/assets/abi/Permit.json";
 import {wagmiAdapter} from "~/config";
-import {PAYMASTER_ADDRESS} from "~/config/paymaster";
+import {PAYMASTER_ADDRESS, PIMLICO_API_KEY} from "~/config/paymaster";
 import {
     createPimlicoSmartAccountClient,
     getSmartAccount,
@@ -528,12 +528,12 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const payForQuotesWithPaymaster = async (payments: [string, string, string][]): Promise<string[]> => {
-        // Get Pimlico API key from runtime config
+        // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
-        const pimlicoApiKey = config.public.pimlicoApiKey;
+        const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
 
         if (!pimlicoApiKey) {
-            throw new Error("Pimlico API key not configured. Please set VITE_PIMLICO_API_KEY in your .env file");
+            throw new Error("Pimlico API key not configured");
         }
 
         // Get wallet client for signing
@@ -920,8 +920,9 @@ export const useWalletStore = defineStore("wallet", () => {
 
     // Paymaster guided flow helper functions
     const getSmartAccountInfo = async (): Promise<SmartAccountInfo> => {
+        // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
-        const pimlicoApiKey = config.public.pimlicoApiKey;
+        const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
 
         if (!pimlicoApiKey) {
             throw new Error("Pimlico API key not configured");
@@ -964,8 +965,9 @@ export const useWalletStore = defineStore("wallet", () => {
     ): Promise<PaymasterCostEstimate> => {
         console.log('[estimatePaymasterCosts] Starting cost estimation...');
 
+        // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
-        const pimlicoApiKey = config.public.pimlicoApiKey;
+        const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
 
         if (!pimlicoApiKey) {
             throw new Error("Pimlico API key not configured");
@@ -1191,8 +1193,9 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const fundSmartAccount = async (amount: bigint): Promise<void> => {
+        // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
-        const pimlicoApiKey = config.public.pimlicoApiKey;
+        const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
 
         if (!pimlicoApiKey) {
             throw new Error("Pimlico API key not configured");
