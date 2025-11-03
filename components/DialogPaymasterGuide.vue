@@ -348,7 +348,7 @@ const belowMinimum = computed(() => {
               <div class="flex justify-between text-sm">
                 <span class="text-gray-600 dark:text-gray-400">Total Cost:</span>
                 <span class="font-medium text-gray-900 dark:text-autonomi-text-primary-dark">
-                  {{ formattedANT(costEstimate?.requiredInSmartAccount || 0n) }} ANT
+                  {{ formattedANT((costEstimate?.totalPaymentAmount || 0n) + (costEstimate?.totalGasCost || 0n)) }} ANT
                 </span>
               </div>
               <div class="flex justify-between text-sm mt-1">
