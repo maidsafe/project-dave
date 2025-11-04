@@ -113,7 +113,8 @@ const initializeFlow = async () => {
     }
   } catch (err: any) {
     console.error('[PaymasterGuide] Error initializing flow:', err);
-    error.value = err.message || 'Failed to initialize paymaster flow';
+    // Show user-friendly message, log raw error to console
+    error.value = 'Something went wrong. Please try again.';
     currentStep.value = 'error';
   } finally {
     isProcessing.value = false;
@@ -196,7 +197,9 @@ const createAndFundSmartAccount = async () => {
       currentStep.value = 'executing-payments';
     }
   } catch (err: any) {
-    error.value = err.message || 'Failed to create/fund smart account';
+    console.error('[PaymasterGuide] Error funding smart account:', err);
+    // Show user-friendly message, log raw error to console
+    error.value = 'Something went wrong. Please try again.';
     currentStep.value = 'error';
   } finally {
     isProcessing.value = false;

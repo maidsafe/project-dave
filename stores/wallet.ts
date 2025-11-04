@@ -253,7 +253,8 @@ export const useWalletStore = defineStore("wallet", () => {
             }
         } catch (error) {
             console.error("Error paying for quotes:", error);
-            throw new Error("Failed to pay for quotes");
+            // User-friendly error message
+            throw new Error("Something went wrong. Please try again.");
         }
     }
 
@@ -539,7 +540,8 @@ export const useWalletStore = defineStore("wallet", () => {
         // Get wallet client for signing
         const walletClient = await getWalletClient(wagmiAdapter.wagmiConfig);
         if (!walletClient) {
-            throw new Error("Wallet client not available");
+            console.error("Wallet client not available");
+            throw new Error("Something went wrong. Please try again.");
         }
 
         // Create smart account
@@ -930,7 +932,8 @@ export const useWalletStore = defineStore("wallet", () => {
 
         const walletClient = await getWalletClient(wagmiAdapter.wagmiConfig);
         if (!walletClient) {
-            throw new Error("Wallet client not available");
+            console.error("Wallet client not available");
+            throw new Error("Something went wrong. Please try again.");
         }
 
         const smartAccount = await getSmartAccount(walletClient, arbitrum);
@@ -976,7 +979,8 @@ export const useWalletStore = defineStore("wallet", () => {
         console.log('[estimatePaymasterCosts] Getting wallet client...');
         const walletClient = await getWalletClient(wagmiAdapter.wagmiConfig);
         if (!walletClient) {
-            throw new Error("Wallet client not available");
+            console.error("Wallet client not available");
+            throw new Error("Something went wrong. Please try again.");
         }
         console.log('[estimatePaymasterCosts] Wallet client obtained');
 
@@ -1203,7 +1207,8 @@ export const useWalletStore = defineStore("wallet", () => {
 
         const walletClient = await getWalletClient(wagmiAdapter.wagmiConfig);
         if (!walletClient) {
-            throw new Error("Wallet client not available");
+            console.error("Wallet client not available");
+            throw new Error("Something went wrong. Please try again.");
         }
 
         const smartAccount = await getSmartAccount(walletClient, arbitrum);

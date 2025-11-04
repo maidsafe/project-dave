@@ -20,7 +20,8 @@ export async function getSmartAccount(
     // Get the wallet account (EOA)
     const account = walletClient.account;
     if (!account) {
-        throw new Error("Wallet client has no account");
+        console.error("Wallet client has no account");
+        throw new Error("Something went wrong. Please try again.");
     }
 
     const smartAccount = await toSafeSmartAccount({
