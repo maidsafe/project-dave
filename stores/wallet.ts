@@ -41,7 +41,6 @@ const tokenContractAddress = "0xa78d8321B20c4Ef90eCd72f2588AA985A4BDb684";
 const paymentVaultContractAddress = "0xB1b5219f8Aaa18037A2506626Dd0406a46f70BcC";
 const VAULT_SECRET_KEY_SEED = "Massive Array of Internet Disks Secure Access For Everyone";
 const MAX_PAYMENTS_PER_TRANSACTION = 256;
-const MIN_SMART_ACCOUNT_BALANCE = 1000000000000000000n; // 1 ANT in wei (18 decimals)
 
 let isSetWalletModalListener = false;
 

@@ -73,9 +73,9 @@ const initializeFlow = async () => {
     // Step 2: If smart account doesn't exist, skip cost estimation
     if (!smartAccount.value.exists) {
       // Smart account doesn't exist - needs to be created/funded for first time
-      // Suggest 1 ANT as a starting amount (user can change it)
+      // Suggest 5 ANT as a starting amount (user can change it)
       console.log('[PaymasterGuide] Smart account does not exist, showing setup');
-      userFundingAmount.value = '1';
+      userFundingAmount.value = '5';
       currentStep.value = 'smart-account-setup';
       return;
     }
