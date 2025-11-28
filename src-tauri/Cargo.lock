@@ -806,8 +806,9 @@ dependencies = [
 
 [[package]]
 name = "ant-bootstrap"
-version = "0.2.10"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+version = "0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbfaecaf75e497cbed73f3251917df879b8736cc3003709a181f3aa9c01a82ae"
 dependencies = [
  "ant-logging",
  "ant-protocol",
@@ -831,7 +832,8 @@ dependencies = [
 [[package]]
 name = "ant-build-info"
 version = "0.1.29"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b6954a9d1c42c19ff90fd59ace0e89e966b06d901d45a5a7f0e66a37b083e2b"
 dependencies = [
  "chrono",
  "tracing",
@@ -841,7 +843,8 @@ dependencies = [
 [[package]]
 name = "ant-evm"
 version = "0.1.17"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75d8dbfe2dcb023fdbd030a0847ea2e76fd879279bd5bfead4ee7d1e9b230c6a"
 dependencies = [
  "custom_debug",
  "evmlib",
@@ -861,8 +864,9 @@ dependencies = [
 
 [[package]]
 name = "ant-logging"
-version = "0.2.52"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2efdf98eb19e81959464b67c68e57a061124bbb743443bf3364616ab60c922c7"
 dependencies = [
  "chrono",
  "dirs-next",
@@ -879,7 +883,8 @@ dependencies = [
 [[package]]
 name = "ant-protocol"
 version = "1.0.9"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c96d94bc69237e25ce91dc930b423a149b2eaa7f911665bdd98adbd5700e999"
 dependencies = [
  "ant-build-info",
  "ant-evm",
@@ -1419,8 +1424,9 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autonomi"
-version = "0.6.3"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fe6b70d883fd7729adc7d50e842bd786af075899b584e0c3de7030f0258c56f"
 dependencies = [
  "ant-bootstrap",
  "ant-evm",
@@ -1443,7 +1449,7 @@ dependencies = [
  "rayon",
  "rmp-serde",
  "self_encryption 0.30.0",
- "self_encryption 0.34.2",
+ "self_encryption 0.34.3",
  "serde",
  "sha2",
  "thiserror 1.0.69",
@@ -3032,7 +3038,8 @@ dependencies = [
 [[package]]
 name = "evmlib"
 version = "0.4.5"
-source = "git+https://github.com/mickvandijke/autonomi?branch=feat-pub-stream-encryption-methods#f4af8b8dc8161f5b96e3cb2a0dadb0fb8b60b3aa"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19c3b7976496b986a46cd38235968b60fa025b869e53d7d85db0693e606703b2"
 dependencies = [
  "alloy",
  "rand 0.8.5",
@@ -7515,9 +7522,9 @@ dependencies = [
 
 [[package]]
 name = "self_encryption"
-version = "0.34.2"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b64f0a0beeb7e5e98c76a53af19519f552c1b2fcd7c781c5b839063d34e6604"
+checksum = "45480c8fa045f158ab05f445ce7d0b6dfcb6e3028d91b78013271b48daa435b2"
 dependencies = [
  "aes",
  "bincode",
