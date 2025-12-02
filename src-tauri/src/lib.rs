@@ -14,13 +14,13 @@ use autonomi::client::data::DataAddress;
 use autonomi::client::payment::Receipt;
 use autonomi::client::quote::StoreQuote;
 use autonomi::client::vault::VaultSecretKey;
-use autonomi::Chunk;
+use autonomi::files::{PrivateArchive, PublicArchive};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 // Removed unused rand import
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
-use tracing::{info, error};
+use tracing::{error, info};
 
 mod ant;
 pub mod logging;
@@ -29,7 +29,6 @@ pub enum PendingUploadData {
     SingleFile {
         file: File,
         datamap: DataMapChunk,
-        chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         secret_key: Option<VaultSecretKey>,
@@ -39,7 +38,6 @@ pub enum PendingUploadData {
     SingleFilePublic {
         file: File,
         datamap: DataMapChunk,
-        chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         add_to_vault: bool,
@@ -50,7 +48,7 @@ pub enum PendingUploadData {
         files: Vec<File>,
         archive_name: String,
         archive_datamap: DataMapChunk,
-        chunks: Vec<Chunk>,
+        archive: PrivateArchive,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         add_to_vault: bool,
@@ -60,9 +58,7 @@ pub enum PendingUploadData {
     PublicArchive {
         files: Vec<File>,
         archive_name: String,
-        archive_datamap: DataMapChunk,
-        file_datamaps: Vec<DataMapChunk>,
-        chunks: Vec<Chunk>,
+        archive: PublicArchive,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         add_to_vault: bool,
@@ -82,7 +78,6 @@ impl PendingUploads {
         upload_id: String,
         file: File,
         datamap: DataMapChunk,
-        chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         secret_key: Option<VaultSecretKey>,
@@ -94,7 +89,6 @@ impl PendingUploads {
             PendingUploadData::SingleFile {
                 file,
                 datamap,
-                chunks,
                 store_quote,
                 vault_update,
                 secret_key,
@@ -109,7 +103,6 @@ impl PendingUploads {
         upload_id: String,
         file: File,
         datamap: DataMapChunk,
-        chunks: Vec<Chunk>,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         add_to_vault: bool,
@@ -121,7 +114,6 @@ impl PendingUploads {
             PendingUploadData::SingleFilePublic {
                 file,
                 datamap,
-                chunks,
                 store_quote,
                 vault_update,
                 add_to_vault,
@@ -136,9 +128,7 @@ impl PendingUploads {
         upload_id: String,
         files: Vec<File>,
         archive_name: String,
-        archive_datamap: DataMapChunk,
-        file_datamaps: Vec<DataMapChunk>,
-        chunks: Vec<Chunk>,
+        archive: PublicArchive,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         add_to_vault: bool,
@@ -150,9 +140,7 @@ impl PendingUploads {
             PendingUploadData::PublicArchive {
                 files,
                 archive_name,
-                archive_datamap,
-                file_datamaps,
-                chunks,
+                archive,
                 store_quote,
                 vault_update,
                 add_to_vault,
@@ -168,7 +156,7 @@ impl PendingUploads {
         files: Vec<File>,
         archive_name: String,
         archive_datamap: DataMapChunk,
-        chunks: Vec<Chunk>,
+        archive: PrivateArchive,
         store_quote: StoreQuote,
         vault_update: VaultUpdate,
         add_to_vault: bool,
@@ -181,7 +169,7 @@ impl PendingUploads {
                 files,
                 archive_name,
                 archive_datamap,
-                chunks,
+                archive,
                 store_quote,
                 vault_update,
                 add_to_vault,
@@ -240,9 +228,9 @@ async fn start_upload(
     files: Vec<File>,
     archive_name: Option<String>,
     vault_key_signature: String,
-    upload_id: String,  // Frontend provides the upload ID
-    is_private: bool,   // New: privacy option
-    add_to_vault: bool, // New: vault storage option
+    upload_id: String,         // Frontend provides the upload ID
+    is_private: bool,          // New: privacy option
+    add_to_vault: bool,        // New: vault storage option
     use_cached_receipts: bool, // New: whether to use cached receipts
     shared_client: State<'_, SharedClient>,
     pending_uploads: State<'_, PendingUploadsState>,
@@ -366,7 +354,6 @@ async fn confirm_upload_payment(
             PendingUploadData::SingleFile {
                 file,
                 datamap,
-                chunks,
                 store_quote,
                 vault_update,
                 secret_key,
@@ -375,21 +362,24 @@ async fn confirm_upload_payment(
             } => {
                 // Create receipt from store quote
                 let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-                
+
                 // Merge with cached receipt if we have one
                 let final_receipt = if let Some(cached) = cached_receipt {
-                    println!(">>> Merging new receipt with cached receipt");
+                    info!(">>> Merging new receipt with cached receipt");
                     ant::receipt_utils::merge_receipts(vec![cached, new_receipt])
                 } else {
                     new_receipt
                 };
-                
+
                 // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
                     if let Err(e) = cache.save_payment(&file.path, &final_receipt) {
-                        println!(">>> Failed to cache payment receipt: {}", e);
+                        error!(">>> Failed to cache payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached merged payment receipt for file: {:?}", file.path);
+                        info!(
+                            ">>> Successfully cached merged payment receipt for file: {:?}",
+                            file.path
+                        );
                     }
                 }
 
@@ -397,7 +387,6 @@ async fn confirm_upload_payment(
                     app,
                     file,
                     datamap,
-                    chunks,
                     final_receipt,
                     vault_update,
                     secret_key.as_ref(),
@@ -413,7 +402,6 @@ async fn confirm_upload_payment(
             PendingUploadData::SingleFilePublic {
                 file,
                 datamap,
-                chunks,
                 store_quote,
                 vault_update,
                 add_to_vault,
@@ -422,7 +410,7 @@ async fn confirm_upload_payment(
             } => {
                 // Create receipt from store quote
                 let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-                
+
                 // Merge with cached receipt if we have one
                 let final_receipt = if let Some(cached) = cached_receipt {
                     println!(">>> Merging new receipt with cached receipt");
@@ -430,13 +418,16 @@ async fn confirm_upload_payment(
                 } else {
                     new_receipt
                 };
-                
+
                 // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
                     if let Err(e) = cache.save_payment(&file.path, &final_receipt) {
                         println!(">>> Failed to cache payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached merged payment receipt for file: {:?}", file.path);
+                        println!(
+                            ">>> Successfully cached merged payment receipt for file: {:?}",
+                            file.path
+                        );
                     }
                 }
 
@@ -444,7 +435,6 @@ async fn confirm_upload_payment(
                     app,
                     file,
                     datamap,
-                    chunks,
                     final_receipt,
                     vault_update,
                     upload_id,
@@ -460,9 +450,7 @@ async fn confirm_upload_payment(
             PendingUploadData::PublicArchive {
                 files,
                 archive_name,
-                archive_datamap,
-                file_datamaps,
-                chunks,
+                archive,
                 store_quote,
                 add_to_vault,
                 vault_update,
@@ -471,7 +459,7 @@ async fn confirm_upload_payment(
             } => {
                 // Create receipt from store quote
                 let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-                
+
                 // Merge with cached receipt if we have one
                 let final_receipt = if let Some(cached) = cached_receipt {
                     println!(">>> Merging new receipt with cached receipt for archive");
@@ -479,13 +467,18 @@ async fn confirm_upload_payment(
                 } else {
                     new_receipt
                 };
-                
+
                 // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
-                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &final_receipt) {
+                    if let Err(e) =
+                        cache.save_archive_payment(&files, &archive_name, &final_receipt)
+                    {
                         println!(">>> Failed to cache archive payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached merged archive payment receipt for: {}", archive_name);
+                        println!(
+                            ">>> Successfully cached merged archive payment receipt for: {}",
+                            archive_name
+                        );
                     }
                 }
 
@@ -493,9 +486,7 @@ async fn confirm_upload_payment(
                     app,
                     files,
                     archive_name,
-                    archive_datamap,
-                    file_datamaps,
-                    chunks,
+                    archive,
                     final_receipt,
                     vault_update,
                     upload_id,
@@ -512,7 +503,7 @@ async fn confirm_upload_payment(
                 files,
                 archive_name,
                 archive_datamap,
-                chunks,
+                archive,
                 store_quote,
                 vault_update,
                 add_to_vault,
@@ -521,7 +512,7 @@ async fn confirm_upload_payment(
             } => {
                 // Create receipt from store quote
                 let new_receipt = autonomi::client::payment::receipt_from_store_quotes(store_quote);
-                
+
                 // Merge with cached receipt if we have one
                 let final_receipt = if let Some(cached) = cached_receipt {
                     println!(">>> Merging new receipt with cached receipt for archive");
@@ -529,13 +520,18 @@ async fn confirm_upload_payment(
                 } else {
                     new_receipt
                 };
-                
+
                 // Cache the merged payment receipt
                 if let Ok(cache) = ant::files::get_payment_cache() {
-                    if let Err(e) = cache.save_archive_payment(&files, &archive_name, &final_receipt) {
+                    if let Err(e) =
+                        cache.save_archive_payment(&files, &archive_name, &final_receipt)
+                    {
                         println!(">>> Failed to cache archive payment receipt: {}", e);
                     } else {
-                        println!(">>> Successfully cached merged archive payment receipt for: {}", archive_name);
+                        println!(
+                            ">>> Successfully cached merged archive payment receipt for: {}",
+                            archive_name
+                        );
                     }
                 }
 
@@ -544,7 +540,7 @@ async fn confirm_upload_payment(
                     files,
                     archive_name,
                     archive_datamap,
-                    chunks,
+                    archive,
                     final_receipt,
                     vault_update,
                     upload_id,
@@ -752,15 +748,18 @@ async fn add_to_vault_with_analysis(
         }
     };
 
-    let client = shared_client.get_client().await.map_err(|err| CommandError {
-        message: err.to_string(),
-    })?;
+    let client = shared_client
+        .get_client()
+        .await
+        .map_err(|err| CommandError {
+            message: err.to_string(),
+        })?;
 
     // Analyze the data type to determine if it's a file or archive
     let result = match &file_access {
         FileAccess::Public(addr) => {
             let hex_addr = addr.to_hex();
-            
+
             match client.analyze_address(&hex_addr, false).await {
                 Ok(autonomi::client::analyze::Analysis::PublicArchive { .. }) => {
                     eprintln!("Detected public archive, adding as archive");
@@ -769,17 +768,24 @@ async fn add_to_vault_with_analysis(
                         FileAccess::Public(*addr),
                         &file_name,
                         shared_client,
-                    ).await
+                    )
+                    .await
                 }
                 _ => {
                     eprintln!("Detected public file, adding as file");
-                    ant::files::add_local_file_to_vault(&secret_key, file_access, &file_name, shared_client).await
+                    ant::files::add_local_file_to_vault(
+                        &secret_key,
+                        file_access,
+                        &file_name,
+                        shared_client,
+                    )
+                    .await
                 }
             }
         }
         FileAccess::Private(data_map) => {
             let hex_addr = data_map.to_hex();
-            
+
             match client.analyze_address(&hex_addr, true).await {
                 Ok(autonomi::client::analyze::Analysis::PrivateArchive { .. }) => {
                     eprintln!("Detected private archive, adding as archive");
@@ -788,11 +794,18 @@ async fn add_to_vault_with_analysis(
                         FileAccess::Private(data_map.clone()),
                         &file_name,
                         shared_client,
-                    ).await
+                    )
+                    .await
                 }
                 _ => {
                     eprintln!("Detected private file, adding as file");
-                    ant::files::add_local_file_to_vault(&secret_key, file_access, &file_name, shared_client).await
+                    ant::files::add_local_file_to_vault(
+                        &secret_key,
+                        file_access,
+                        &file_name,
+                        shared_client,
+                    )
+                    .await
                 }
             }
         }
@@ -1046,39 +1059,40 @@ async fn get_unique_download_path(downloads_path: String, filename: String) -> R
 #[tauri::command]
 fn clear_payment_cache() -> Result<(), String> {
     use crate::ant::{app_data, cached_payments::PaymentCache};
-    
-    let data_dir = app_data::data_dir()
-        .ok_or_else(|| "Could not get app data directory".to_string())?;
-    
+
+    let data_dir =
+        app_data::data_dir().ok_or_else(|| "Could not get app data directory".to_string())?;
+
     let cache = PaymentCache::new(&data_dir)
         .map_err(|e| format!("Failed to create payment cache: {}", e))?;
-    
-    cache.clear_cache()
+
+    cache
+        .clear_cache()
         .map_err(|e| format!("Failed to clear payment cache: {}", e))?;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 fn get_logs_directory() -> Result<String, String> {
     use directories::ProjectDirs;
-    
+
     let qualifier = "com";
     let organization = "autonomi";
     let application = "dave";
-    
+
     let proj_dirs = ProjectDirs::from(qualifier, organization, application)
         .ok_or_else(|| "Could not get project directories".to_string())?;
-    
+
     let mut logs_dir = proj_dirs.data_dir().to_owned();
     logs_dir.push("logs");
-    
+
     // Create logs directory if it doesn't exist
     if !logs_dir.exists() {
         std::fs::create_dir_all(&logs_dir)
             .map_err(|e| format!("Failed to create logs directory: {}", e))?;
     }
-    
+
     Ok(logs_dir.to_string_lossy().to_string())
 }
 

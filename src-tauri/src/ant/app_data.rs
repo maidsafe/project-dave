@@ -46,6 +46,7 @@ pub enum StoreError {
 pub struct AppData {
     pub download_path: Option<PathBuf>,
     pub peers: Option<Vec<Multiaddr>>,
+    pub use_paymaster: Option<bool>,
 }
 
 impl Default for AppData {
@@ -54,6 +55,7 @@ impl Default for AppData {
             download_path: directories::UserDirs::new()
                 .and_then(|d| d.download_dir().map(|d| d.to_owned())),
             peers: None,
+            use_paymaster: Some(false),
         }
     }
 }

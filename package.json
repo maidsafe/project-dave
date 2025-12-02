@@ -1,7 +1,7 @@
 {
   "name": "project-dave",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.1",
   "type": "module",
   "scripts": {
     "build": "nuxt build",
@@ -25,6 +25,7 @@
     "@tauri-apps/plugin-updater": "^2.3.0",
     "@wagmi/vue": "^0.1.22",
     "nuxt": "^3.14.1592",
+    "permissionless": "^0.2.57",
     "primeicons": "^7.0.0",
     "primevue": "^4.1.0",
     "tailwindcss-primeui": "^0.3.4",
