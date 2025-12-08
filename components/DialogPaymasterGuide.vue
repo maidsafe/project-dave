@@ -57,6 +57,62 @@ const formattedANT = (attoAmount: bigint): string => {
   }
 };
 
+const formattedANTRoundedUp = (attoAmount: bigint): string => {
+  try {
+    const formatted = formatUnits(attoAmount, 18);
+    const parts = formatted.split('.');
+
+    if (parts.length === 2) {
+      // Remove trailing zeros first
+      let decimals = parts[1].replace(/0+$/, '');
+
+      if (decimals.length === 0) {
+        return parts[0];
+      }
+
+      // Truncate to 6 decimals max
+      if (decimals.length > 6) {
+        decimals = decimals.substring(0, 6);
+        // Round up the last digit
+        const lastDigit = parseInt(decimals[5]);
+        const roundedUp = lastDigit === 9 ? '0' : (lastDigit + 1).toString();
+        decimals = decimals.substring(0, 5) + roundedUp;
+
+        // Handle carry-over if needed (e.g., 0.999999 -> 1.0)
+        if (roundedUp === '0') {
+          // Need to carry over - simplified approach: just increment last digit to 9
+          decimals = decimals.substring(0, 5) + '9';
+        }
+      } else {
+        // Round up the last digit
+        const lastDigit = parseInt(decimals[decimals.length - 1]);
+        const roundedUp = lastDigit === 9 ? '0' : (lastDigit + 1).toString();
+
+        if (roundedUp === '0') {
+          // Carry over case - just use 9 to keep it simple
+          decimals = decimals.substring(0, decimals.length - 1) + '9';
+        } else {
+          decimals = decimals.substring(0, decimals.length - 1) + roundedUp;
+        }
+      }
+
+      // Remove any trailing zeros after rounding
+      decimals = decimals.replace(/0+$/, '');
+
+      if (decimals.length === 0) {
+        return parts[0];
+      }
+
+      return `${parts[0]}.${decimals}`;
+    }
+
+    return formatted;
+  } catch (error) {
+    console.error('Error formatting ANT amount with rounding:', error);
+    return '0';
+  }
+};
+
 // Initialize flow
 const initializeFlow = async () => {
   try {
@@ -102,9 +158,9 @@ const initializeFlow = async () => {
 
     // Step 4: Determine next step based on funding requirements
     if (costEstimate.value.fundingRequired) {
-      // Smart account exists but needs more funding - use calculated minimum
+      // Smart account exists but needs more funding - use calculated minimum (rounded up)
       console.log('[PaymasterGuide] Additional funding required');
-      userFundingAmount.value = formattedANT(costEstimate.value.fundingAmount);
+      userFundingAmount.value = formattedANTRoundedUp(costEstimate.value.fundingAmount);
       currentStep.value = 'smart-account-setup';
     } else {
       // All good - smart account exists and has sufficient funds
@@ -191,7 +247,7 @@ const createAndFundSmartAccount = async () => {
 
     // Check if we need more funding or if we're ready
     if (costEstimate.value.fundingRequired) {
-      userFundingAmount.value = formattedANT(costEstimate.value.fundingAmount);
+      userFundingAmount.value = formattedANTRoundedUp(costEstimate.value.fundingAmount);
       currentStep.value = 'smart-account-setup';
     } else {
       currentStep.value = 'executing-payments';
