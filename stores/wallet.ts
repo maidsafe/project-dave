@@ -1,11 +1,9 @@
 import {useAppKit, useAppKitAccount, useDisconnect} from "@reown/appkit/vue";
 import {
     getBalance,
-    getChainId,
     getWalletClient,
     readContract,
     signMessage,
-    switchChain,
     waitForTransactionReceipt,
     writeContract
 } from "@wagmi/core";
@@ -160,7 +158,7 @@ export const useWalletStore = defineStore("wallet", () => {
     const balanceRefreshInterval = ref<NodeJS.Timeout | null>(null);
 
     const wallet = useAppKitAccount();
-    const {open, switchNetwork} = useAppKit();
+    const {open} = useAppKit();
     const {disconnect} = useDisconnect();
 
     const connectWallet = async () => {
@@ -241,11 +239,6 @@ export const useWalletStore = defineStore("wallet", () => {
 
     const payForQuotes = async (payments: [string, string, string][]): Promise<string[]> => {
         try {
-            // Check wallet chain BEFORE doing anything else
-            console.log('[payForQuotes] Pre-flight chain check...');
-            await ensureCorrectChain();
-            console.log('[payForQuotes] Pre-flight chain check passed');
-
             // Check if paymaster is enabled
             const appData = await invoke('app_data') as any;
             const usePaymaster = appData.use_paymaster ?? false;
@@ -257,25 +250,14 @@ export const useWalletStore = defineStore("wallet", () => {
                 console.log("Using standard payment (requires ETH for gas)");
                 return await payForQuotesStandard(payments);
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error paying for quotes:", error);
-
-            // Check if this is a chain mismatch error from Wagmi
-            if (error.message?.includes('does not match') || error.message?.includes('chain')) {
-                const currentChainId = getChainId(wagmiAdapter.wagmiConfig);
-                throw new Error(`Wrong network detected. Please switch your wallet from chain ${currentChainId} to Arbitrum One (chain 42161)`);
-            }
-
-            throw error;
+            // User-friendly error message
+            throw new Error("Something went wrong. Please try again.");
         }
     }
 
     const payForQuotesStandard = async (payments: [string, string, string][]): Promise<string[]> => {
-        // Ensure we're on the correct chain first
-        console.log('[payForQuotesStandard] About to check chain...');
-        await ensureCorrectChain();
-        console.log('[payForQuotesStandard] Chain check completed');
-
         let totalAmount: bigint = payments.reduce((total, [_, __, amountStr]) => total + BigInt(amountStr), 0n);
 
         console.log("Payments:", payments);
@@ -546,9 +528,6 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const payForQuotesWithPaymaster = async (payments: [string, string, string][]): Promise<string[]> => {
-        // Ensure we're on the correct chain first
-        await ensureCorrectChain();
-
         // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
         const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
@@ -940,77 +919,8 @@ export const useWalletStore = defineStore("wallet", () => {
         }
     }, {immediate: true});
 
-    // Ensure wallet is on the correct chain (Arbitrum One)
-    const ensureCorrectChain = async (): Promise<void> => {
-        console.log('[ensureCorrectChain] Checking wallet chain...');
-
-        // Check if wallet is connected
-        if (!wallet.value.address) {
-            throw new Error("Wallet not connected");
-        }
-
-        // Check current chain ID using Wagmi's getChainId
-        const currentChainId = getChainId(wagmiAdapter.wagmiConfig);
-        const expectedChainId = arbitrum.id; // 42161 for Arbitrum One
-
-        console.log('[ensureCorrectChain] Current chain ID:', currentChainId, `(0x${currentChainId.toString(16)})`);
-        console.log('[ensureCorrectChain] Expected chain ID:', expectedChainId, `(0x${expectedChainId.toString(16)})`);
-
-        if (currentChainId !== expectedChainId) {
-            console.log('[ensureCorrectChain] Chain mismatch detected, switching to Arbitrum One...');
-
-            try {
-                // Try AppKit's switchNetwork first (works better with the wallet modal)
-                console.log('[ensureCorrectChain] Attempting switch via AppKit.switchNetwork...');
-                try {
-                    await switchNetwork(arbitrum);
-                    console.log('[ensureCorrectChain] Successfully switched via AppKit');
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    return;
-                } catch (appKitError) {
-                    console.warn('[ensureCorrectChain] AppKit switch failed, trying Wagmi switchChain...', appKitError);
-                }
-
-                // Fallback to Wagmi's switchChain
-                console.log('[ensureCorrectChain] Calling Wagmi switchChain with chainId:', expectedChainId);
-                const result = await switchChain(wagmiAdapter.wagmiConfig, {
-                    chainId: expectedChainId
-                });
-                console.log('[ensureCorrectChain] switchChain result:', result);
-                console.log('[ensureCorrectChain] Successfully switched to Arbitrum One');
-
-                // Wait a bit for the chain to fully switch
-                await new Promise(resolve => setTimeout(resolve, 500));
-            } catch (error: any) {
-                console.error('[ensureCorrectChain] Error switching chain:', error);
-                console.error('[ensureCorrectChain] Error details:', {
-                    code: error.code,
-                    message: error.message,
-                    details: error.details,
-                    shortMessage: error.shortMessage
-                });
-
-                // Provide a user-friendly error message
-                if (error.code === 4902) {
-                    throw new Error('Please add Arbitrum One network to your wallet');
-                } else if (error.code === 4001) {
-                    throw new Error('Please approve the network switch in your wallet');
-                } else if (error.message?.includes('chainId')) {
-                    throw new Error('Please switch your wallet to Arbitrum One network manually');
-                } else {
-                    throw new Error(`Failed to switch to Arbitrum One: ${error.shortMessage || error.message}`);
-                }
-            }
-        } else {
-            console.log('[ensureCorrectChain] Already on correct chain');
-        }
-    };
-
     // Paymaster guided flow helper functions
     const getSmartAccountInfo = async (): Promise<SmartAccountInfo> => {
-        // Ensure we're on the correct chain first
-        await ensureCorrectChain();
-
         // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
         const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
@@ -1056,9 +966,6 @@ export const useWalletStore = defineStore("wallet", () => {
         options?: PaymasterCostEstimateOptions
     ): Promise<PaymasterCostEstimate> => {
         console.log('[estimatePaymasterCosts] Starting cost estimation...');
-
-        // Ensure we're on the correct chain first
-        await ensureCorrectChain();
 
         // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
@@ -1289,9 +1196,6 @@ export const useWalletStore = defineStore("wallet", () => {
     };
 
     const fundSmartAccount = async (amount: bigint): Promise<void> => {
-        // Ensure we're on the correct chain first
-        await ensureCorrectChain();
-
         // Get Pimlico API key - use hardcoded constant or fallback to env var
         const config = useRuntimeConfig();
         const pimlicoApiKey = PIMLICO_API_KEY || config.public.pimlicoApiKey;
@@ -1425,8 +1329,6 @@ export const useWalletStore = defineStore("wallet", () => {
         fetchEthBalance,
         fetchAntBalance,
         refreshBalances,
-        // Chain management
-        ensureCorrectChain,
         // Paymaster guided flow
         getSmartAccountInfo,
         estimatePaymasterCosts,

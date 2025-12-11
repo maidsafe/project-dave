@@ -383,9 +383,6 @@ const handlePayUpload = async () => {
       } else if (error.message.includes('insufficient')) {
         errorSummary = 'Insufficient Funds';
         errorMessage = 'Insufficient tokens to complete payment.';
-      } else if (error.message.includes('Expected Chain ID')) {
-        errorSummary = 'Wrong Network';
-        errorMessage = 'Please switch your wallet network to Arbitrum One and try again.';
       } else {
         errorMessage = error.message;
       }
