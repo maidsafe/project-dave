@@ -172,7 +172,7 @@ const initializeFlow = async () => {
     // Show the actual error message if available
     error.value = err.message || 'Something went wrong. Please try again.';
 
-    if (error.value.includes('Expected Chain ID')) {
+    if (error.value.includes('Expected Chain ID') || error.value.includes('active chainId is different')) {
       error.value = 'Please switch your wallet network to Arbitrum One and try again.';
     }
 
