@@ -171,6 +171,11 @@ const initializeFlow = async () => {
     console.error('[PaymasterGuide] Error initializing flow:', err);
     // Show the actual error message if available
     error.value = err.message || 'Something went wrong. Please try again.';
+
+    if (error.value.includes('Expected Chain ID')) {
+      error.value = 'Please switch your wallet network to Arbitrum One and try again.';
+    }
+
     currentStep.value = 'error';
   } finally {
     isProcessing.value = false;
