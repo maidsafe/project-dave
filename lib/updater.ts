@@ -1,8 +1,7 @@
 import { check } from '@tauri-apps/plugin-updater';
-import { useToast } from 'primevue/usetoast';
+import type { ToastServiceMethods } from 'primevue/toastservice';
 
-export async function updater() {
-  const toast = useToast();
+export async function checkForUpdates(toast: ToastServiceMethods) {
   try {
     console.log('checking for updates...');
     const update = await check();

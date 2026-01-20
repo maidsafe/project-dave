@@ -24,7 +24,7 @@
     }
   },
   "bundle": {
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "active": true,
     "targets": "all",
     "icon": [
@@ -43,5 +43,12 @@
       "hardenedRuntime": true
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyQkRENzAxMEQ3OTU4RUQKUldUdFdIa05BZGU5NHR4cDFqbDd3S3llY0FTaE9EbmJmUFBORk9saVQwYzlkUlFpdXdNbE9JT3MK",
+      "endpoints": [
+        "https://github.com/mickvandijke/project-dave/releases/latest/download/latest.json"
+      ]
+    }
+  }
 }

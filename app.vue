@@ -4,6 +4,8 @@ import {networks, projectId, wagmiAdapter} from '~/config';
 import {useFileStore} from '~/stores/files';
 import {storeToRefs} from 'pinia';
 import {reconnect} from '@wagmi/core';
+import {checkForUpdates} from '~/lib/updater';
+import {useToast} from 'primevue/usetoast';
 
 createAppKit({
   adapters: [wagmiAdapter],
@@ -22,6 +24,9 @@ createAppKit({
 });
 
 const classesLinks = `w-full h-[64px] text-lg flex items-center justify-start text-autonomi-text-primary hover:text-autonomi-text-secondary dark:text-autonomi-text-primary-dark gap-3 transition-all duration-300 cursor-pointer dark:hover:text-white`;
+
+// Toast for notifications (including updater)
+const toast = useToast();
 
 // State
 const walletStore = useWalletStore();
@@ -81,6 +86,15 @@ onMounted(async () => {
       console.error('Failed to reconnect wallet:', error);
     }
   }, 100);
+
+  // Check for updates after splash screen is done
+  setTimeout(async () => {
+    try {
+      await checkForUpdates(toast);
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+    }
+  }, 3000);
 
   setTimeout(() => {
     isFadeOut.value = true;
