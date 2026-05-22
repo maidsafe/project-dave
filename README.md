@@ -1,5 +1,13 @@
 # Dave
 
+> [!IMPORTANT]
+> **This repository is archived.**
+>
+> Development has moved to
+> [**WithAutonomi/ant-ui**](https://github.com/WithAutonomi/ant-ui).
+> Please refer there for the current source, issues, and releases.
+
+
 Dave is a client app for managing your Vault on the Autonomi network.
 
 ## Features
